@@ -4,7 +4,7 @@
    This change alone forces the browser to reinstall the worker 
    and trigger the cleanup of the old 'v1' cache. 
 */
-const CACHE_NAME = 'quickshop-cache-v2';
+const CACHE_NAME = 'quickshop-cache-v16';
 
 const URLS_TO_CACHE = [
   '/',
@@ -13,7 +13,7 @@ const URLS_TO_CACHE = [
   '/app.js',
   '/report.js',
   '/indexeddb_sync.js',
-  '/firebase-config.js',
+  '/supabase-config.js',
   '/manifest.json',
   /* [FIX]: Added these external libraries to the cache. 
      Previously, if the internet cut out, the scanner and charts 

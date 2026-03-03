@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-title" content="QuickShop">
 
   <title>QuickShop — Inventory + Sales (Notes)</title>
-  <link rel="stylesheet" href="style.css"> 
+  <link rel="stylesheet" href="styless.css"> 
   <script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   
@@ -125,11 +125,7 @@
         <div class="dash-card"><div class="dash-small">Top seller</div><div class="dash-large" id="dashTop">—</div></div>
       </div>
 
-      <div id="aiCard" class="ai-card" aria-live="polite" style="display:none;">
-        <div class="ai-row" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <div style="font-weight:700">AI Insights</div>
-          <div><button id="refreshInsights" class="save-btn">Refresh</button></div>
-        </div>
+      <div id="aiCard" class="ai-card" aria-live="polite">
         <div id="aiContent"></div>
       </div>
 
@@ -140,120 +136,91 @@
       <div class="sticky-header-wrapper">
         <div style="font-weight:700; font-size: 18px; color: white;">Inventory</div>
         <div style="display:flex; gap: 8px;">
-          <button id="primaryScanBtn" class="save-btn" type="button" style="background: var(--accent-2);">📷 Scan</button>
+          <button id="primaryScanBtn" class="save-btn" type="button" style="background: var(--accent-cyan);">📷 Scan</button>
           <button id="insightBtn" class="save-btn" type="button">💡 Insight</button>
-          <button id="toggleAddFormBtn" class="save-btn">+ Add New</button>
+          <button id="toggleAddFormBtn" class="save-btn" type="button">+ Add</button>
         </div>
       </div>
 
-      <div id="inventoryInsightView" class="insight-overlay">
-        <button id="closeInventoryInsightBtn" class="close-btn">&times;</button>
-        <h3>QuickStock AI Insight</h3>
+      <div id="addForm" class="add-card" style="display:none;flex-direction:column;gap:12px;">
+        <div class="add-row">
+          <input id="invId" type="hidden" />
+          <input id="invName" type="text" placeholder="Product name *" style="flex:1;" />
+        </div>
+        <div class="add-row">
+          <input id="invBarcode" type="text" placeholder="Barcode (optional)" style="flex:1;" />
+          <button id="scanBarcodeBtn" class="save-btn" type="button" style="white-space:nowrap;">📷 Scan</button>
+        </div>
+        <div class="add-row">
+          <input id="invPrice" type="number" placeholder="Price *" min="0" step="0.01" style="flex:1;" />
+          <input id="invCost" type="number" placeholder="Cost" min="0" step="0.01" style="flex:1;" />
+          <input id="invQty" type="number" placeholder="Stock" min="0" style="flex:1;" />
+        </div>
+        <div class="add-row">
+          <select id="invCategory" style="flex:1;"></select>
+        </div>
+        <div class="add-row">
+          <input id="invImg" type="file" accept="image/*" style="flex:1;" />
+        </div>
+        <div id="invImgPreview" class="img-preview">
+          <img id="invImgPreviewImg" src="" alt="Preview" />
+          <button id="invImgClear" class="btn-undo" type="button">Remove</button>
+        </div>
+        <div class="add-row">
+          <button id="addProductBtn" class="save-btn" style="flex:1;">Save Product</button>
+          <button id="cancelProductBtn" class="btn-undo" style="display:none;">Cancel</button>
+        </div>
+      </div>
+
+      <div id="inventoryInsightView" class="insight-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="inventoryInsightTitle">
+        <button id="closeInventoryInsightBtn" class="close-btn" aria-label="Close insights">✕</button>
+        <h3 id="inventoryInsightTitle">💡 Inventory Insights</h3>
         <div id="inventoryInsightsContent"></div>
       </div>
-      
-      <div id="addForm" class="add-card" style="display:none;">
-        <input id="invId" type="hidden" value="" /> 
-        <div class="add-row">
-          <input id="invName" type="text" placeholder="Product name" aria-label="Product name" style="flex:1" />
-        </div>
-        <div class="add-row">
-          <input id="invBarcode" type="text" placeholder="Barcode (optional)" aria-label="Barcode" style="flex:1;background:#f8f9fa" />
-          <button id="scanBarcodeBtn" class="save-btn" type="button" style="white-space:nowrap">📷 Scan</button>
-        </div>
-        <div class="add-row">
-          <input id="invPrice" type="number" placeholder="Price" aria-label="Price" style="width:120px" />
-          <input id="invCost" type="number" placeholder="Cost" aria-label="Cost" style="width:120px" />
-          <input id="invQty" type="number" placeholder="Stock" aria-label="Stock" style="width:120px" />
-        </div>
-        <div class="add-row" style="align-items:center">
-          <input id="invImg" type="file" accept="image/*" aria-label="Product image" />
-          <div id="invImgPreview" class="img-preview" style="display:none">
-            <img id="invImgPreviewImg" alt="preview" />
-            <button id="invImgClear" class="btn-undo" type="button">Remove</button>
-          </div>
-          <div class="small" style="margin-left:auto;color:var(--muted)">Image auto-compressed.</div>
-        </div>
-        <div class="add-row">
-          <label for="invCategory" class="small" style="font-weight: 600; color: var(--text-dark); padding-left: 4px;">Category</label>
-          <select id="invCategory" class="auth-input" style="width: 100%; background: #fff; border: 1px solid #e6eef7; color: var(--text-dark);"></select>
-        </div>
-        
-        <div style="display:flex;justify-content:flex-end; gap: 8px; margin-top: 8px;">
-          <button id="cancelProductBtn" class="btn-undo" type="button" style="display:none; margin-right: auto;">Cancel</button>
-          <button id="addProductBtn" class="save-btn">Save Product</button>
-        </div>
-      </div>
 
-      <div id="inventoryList" class="list" aria-label="Inventory list"></div>
+      <div id="inventoryList" class="list" aria-label="Inventory items"></div>
     </div>
 
     <div id="reportsPanel" class="panel">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <div style="font-weight:700; font-size: 18px; color: white;">Reports</div>
-      </div>
-      
-      <div style="background:var(--card-bg);padding:12px;border-radius:12px;border:1px solid rgba(7,18,43,0.04)" class="small">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
-          <div>
-            <div class="small">Report Range</div>
-            <div class="report-controls" style="margin-top:8px">
-              <button type="button" class="report-range-btn" data-range="daily">Daily</button>
-              <button type="button" class="report-range-btn" data-range="weekly">Weekly</button>
-              <button type="button" class="report-range-btn" data-range="monthly">Monthly</button>
-            </div>
-          </div>
-          <div style="display:flex;gap:12px;align-items:center">
-            <div style="text-align:right"><div class="small">Revenue</div><div id="reportMini" style="font-weight:700;margin-top:6px">—</div></div>
-            <div style="display:flex;flex-direction:column;gap:8px">
-              <button id="exportReport" class="save-btn">Export All</button>
-              <button id="exportCurrentReport" class="save-btn">Export View</button>
-            </div>
-          </div>
+      <div style="font-weight:700; font-size:18px; color:white; margin-bottom:12px;">Reports</div>
+
+      <div id="reportSummary"></div>
+
+      <div id="reportChartCard" style="margin-top:12px;">
+        <div style="padding:12px;">
+          <canvas id="reportChart" height="220"></canvas>
+          <div id="reportChartUpdated"></div>
         </div>
       </div>
 
-      <div id="reportSummary" style="margin-top:12px"></div>
-      <div id="reportBreakdown" style="margin-top:12px"></div>
-      <div id="reportChartCard" style="margin-top:12px">
-        <div style="background:var(--card-bg);padding:12px;border-radius:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6);background:transparent;padding:12px;border-radius:12px">
-          <div style="font-weight:700;margin-bottom:8px;color:var(--muted)">Daily Sales Overview</div>
-          <div style="height:220px;min-height:160px"><canvas id="reportChart" style="width:100%;height:100%"></canvas></div>
-          <div id="reportChartUpdated" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
-        </div>
+      <div class="report-controls" id="reportControls">
+        <button class="report-range-btn active" data-range="daily">7 Days</button>
+        <button class="report-range-btn" data-range="weekly">4 Weeks</button>
+        <button class="report-range-btn" data-range="monthly">6 Months</button>
+        <button id="exportReport" class="save-btn" style="background:var(--accent-cyan);">📥 Export CSV</button>
       </div>
+
+      <div id="reportBreakdown" style="margin-top:12px;"></div>
     </div>
 
     <div id="notesPanel" class="panel">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div style="font-weight:700; font-size: 18px; color: white;">Notes</div>
-        <div><div class="small" style="color: rgba(255,255,255,0.7)">Quick notes & reminders</div></div>
-      </div>
-
+      <div style="font-weight:700; font-size:18px; color:white; margin-bottom:12px;">Notes</div>
       <div class="notes-panel">
         <div class="note-form">
-          <input id="noteTitle" type="text" placeholder="Title (optional)" />
-          <div style="height:8px"></div>
-          <textarea id="noteContent" rows="4" placeholder="Write your note..." style="resize:vertical;padding:8px;border-radius:8px;border:1px solid #e6eef7;background:white;color:#000"></textarea>
-          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
-            <button id="noteCancelBtn" class="btn-undo" type="button">Cancel</button>
-            <button id="noteSaveBtn" class="save-btn" type="button">Save Note</button>
+          <input id="noteTitleInput" type="text" placeholder="Title (optional)" />
+          <textarea id="noteContentInput" placeholder="Write a note..." rows="3" style="resize:vertical;"></textarea>
+          <div style="display:flex;gap:8px;">
+            <button id="noteSaveBtn" class="save-btn" style="flex:1;">Save Note</button>
+            <button id="noteCancelBtn" class="btn-undo">Cancel</button>
           </div>
         </div>
-        <div id="notesList" class="note-list" aria-live="polite"></div>
+        <div id="notesList"></div>
       </div>
     </div>
 
     <div id="settingsPanel" class="panel">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
         <div style="font-weight:700; font-size: 18px; color: white;">Settings</div>
-      </div>
-      <div style="background:var(--card-bg);padding:12px;border-radius:12px;border:1px solid rgba(7,18,43,0.04);margin-bottom:12px">
-        <div style="font-weight:700;margin-bottom:10px">Account</div>
-        <div class="small" style="margin-bottom:4px">Logged in as:</div>
-        <div style="font-weight:700;margin-bottom:4px" id="userEmail">—</div>
-        <div class="small" style="margin-bottom:12px" id="userDisplayName"></div>
-        <button id="btnLogout" class="save-btn" style="width:100%;background:#ef4444">Sign Out</button>
       </div>
       <div style="background:var(--card-bg);padding:12px;border-radius:12px;border:1px solid rgba(7,18,43,0.04);margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom: 12px;">
@@ -282,11 +249,11 @@
     <div class="full-screen-header">
       <div style="display:flex; align-items:center; gap:10px;">
         <button id="closeAuditModalBtn" class="btn-undo" style="border:0; padding:0; font-size:24px;">←</button>
-        <h2 style="color: var(--text-dark); margin:0; font-size: 18px;">Audit Report</h2>
+        <h2 style="color: var(--text-primary); margin:0; font-size: 18px;">Audit Report</h2>
       </div>
-      <button id="exportAuditLogBtn" class="save-btn" style="background: var(--accent-2);">📥 CSV</button>
+      <button id="exportAuditLogBtn" class="save-btn" style="background: var(--accent-cyan);">📥 CSV</button>
     </div>
-    <div class="small" style="padding: 12px 16px; color: var(--muted); background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+    <div class="small" style="padding: 12px 16px; color: var(--text-muted); background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--border-glass);">
       Full history of all actions performed in this store.
     </div>
     <div id="fullAuditLogList" class="full-log-list"></div>
@@ -314,9 +281,9 @@
         <video id="barcodeVideo" style="width:100%; height: 300px; object-fit: cover;"></video>
         <div id="barcodeScanLine" style="position:absolute;top:0;left:0;right:0;height:4px;background:rgba(18,183,106,0.8);box-shadow: 0 0 10px rgba(18,183,106,1);animation:scanLine 2s linear infinite;"></div>
       </div>
-      <div id="barcodeResult" style="padding:12px;background:#f0fdf4;border-radius:8px;margin-bottom:12px;display:none">
-        <div style="font-weight:700;color:#15803d;margin-bottom:4px">Barcode Detected:</div>
-        <div id="barcodeValue" style="font-size:18px;font-weight:700;color:#000"></div>
+      <div id="barcodeResult" style="padding:12px;background:rgba(16,185,129,0.15);border-radius:8px;margin-bottom:12px;display:none;border:1px solid rgba(16,185,129,0.3);">
+        <div style="font-weight:700;color:var(--accent-emerald);margin-bottom:4px">Barcode Detected:</div>
+        <div id="barcodeValue" style="font-size:18px;font-weight:700;color:var(--text-primary)"></div>
       </div>
       <div class="actions" style="display:flex;gap:8px;justify-content:flex-end">
         <button id="barcodeCancelBtn" class="btn-undo">Cancel</button>
@@ -332,7 +299,7 @@
       <div id="smartModalStock" class="small" style="font-size: 14px;">X in stock</div>
       <div class="row" style="margin-top:16px; display:flex; flex-direction:column; gap: 10px;">
         <button id="smartModalSellBtn" class="save-btn" style="width:100%;">Sell</button>
-        <button id="smartModalRestockBtn" class="save-btn" style="width:100%; background: var(--accent-2);">Restock</button>
+        <button id="smartModalRestockBtn" class="save-btn" style="width:100%; background: var(--accent-cyan);">Restock</button>
       </div>
       <div class="actions">
         <button id="smartModalCancel" class="btn-undo" style="margin-top:10px">Cancel</button>
@@ -343,10 +310,10 @@
   <div id="confirmModalBackdrop" class="modal-backdrop" style="display:none; z-index: 99999;">
     <div class="modal" role="alertdialog" aria-labelledby="confirmModalTitle">
       <h3 id="confirmModalTitle">Are you sure?</h3>
-      <p id="confirmModalMessage" class="small" style="margin-top: 8px; line-height: 1.6; color: var(--text-dark);">This action cannot be undone.</p>
+      <p id="confirmModalMessage" class="small" style="margin-top: 8px; line-height: 1.6; color: var(--text-secondary);">This action cannot be undone.</p>
       <div class="actions" style="display:flex; gap: 8px; justify-content:flex-end; margin-top: 16px;">
         <button id="confirmModalCancel" class="btn-undo">Cancel</button>
-        <button id="confirmModalOK" class="save-btn" style="background: var(--danger);">OK</button>
+        <button id="confirmModalOK" class="save-btn">OK</button>
       </div>
     </div>
   </div>
@@ -361,29 +328,36 @@
     </div>
   </div>
 
-  <!-- Service Worker Registration -->
   <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js')
-          .then((reg) => console.log('Service worker registered:', reg))
-          .catch((err) => console.error('Service worker registration failed:', err));
-      });
-    }
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js')
+        .then((reg) => {
+          console.log('SW Registered');
+          reg.onupdatefound = () => {
+            const installingWorker = reg.installing;
+            installingWorker.onstatechange = () => {
+              if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                console.log('New version available, reload when ready.');
+              }
+            };
+          };
+        })
+        .catch((err) => console.error('SW Error:', err));
+    });
+  }
   </script>
 
-  <!-- ============================================
-       SUPABASE SCRIPTS (Replaces Firebase)
-       ============================================ -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase-config.js"></script>
 
-  <!-- PWA Install Prompt Handler -->
+  <!-- FIX: was e3sh.preventDefault() — crashed silently on every page load -->
   <script>window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); });</script>
 
-  <!-- App Scripts -->
   <script src="indexeddb_sync.js"></script>
-  <script src="app.js" defer></script>
-  <script src="report.js"></script>
+  <script src="share-catalog.js"></script>
+  <script src="appss.js" defer></script>
+  <!-- report.js removed: dead code. window.renderReportsChart in report.js is never
+       called. appss.js has its own closure-scoped renderReportsChart. -->
 </body>
 </html>
