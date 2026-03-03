@@ -1927,7 +1927,7 @@ function handleTouchEnd() {
           const id = editBtn.dataset.editNote;
           const note = state.notes.find(n=>n.id===id);
           if (!note) return;
-          const noteTitle = $('noteTitle');
+          const noteTitle = $('noteTitleInput');
           const noteContent = $('noteContentInput');  // FIX: was 'noteContent', DOM id is noteContentInput
           const noteSaveBtn = $('noteSaveBtn');
           if (noteTitle) noteTitle.value = note.title || '';
@@ -1964,7 +1964,7 @@ function handleTouchEnd() {
         if (_noteSaving) return; // debounce guard
 
         // FIX: resolve to the correct DOM id 'noteContentInput'
-        const noteTitle = $('noteTitle');
+        const noteTitle = $('noteTitleInput');
         const noteContent = $('noteContentInput');  // FIX: was 'noteContent'
 
         const title = (noteTitle ? noteTitle.value : '').trim();
@@ -2000,7 +2000,7 @@ function handleTouchEnd() {
     const noteCancelBtn = $('noteCancelBtn');
     if (noteCancelBtn) {
       noteCancelBtn.addEventListener('click', function () {
-        const noteTitle = $('noteTitle');
+        const noteTitle = $('noteTitleInput');
         const noteContent = $('noteContentInput');  // FIX: was 'noteContent'
         const noteSaveBtn = $('noteSaveBtn');
         editingNoteId = null;
@@ -3370,7 +3370,7 @@ async function initPublicCatalog(storeId) {
   try {
     const { data, error } = await supabase
       .from('products')
-      .select('id, name, price, qty, category, image, icon, barcode')
+      .select('id, name, price, qty, category, icon, barcode')
       .eq('user_id', storeId)
       .order('name', { ascending: true });
     if (error) throw error;
