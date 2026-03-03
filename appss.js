@@ -1927,14 +1927,19 @@ function handleTouchEnd() {
           const id = editBtn.dataset.editNote;
           const note = state.notes.find(n=>n.id===id);
           if (!note) return;
-          const noteTitle = $('noteTitle');
+          const noteTitle = $('noteTitleInput');
           const noteContent = $('noteContentInput');  // FIX: was 'noteContent', DOM id is noteContentInput
           const noteSaveBtn = $('noteSaveBtn');
           if (noteTitle) noteTitle.value = note.title || '';
           if (noteContent) noteContent.value = note.content || '';  // FIX: was null-ref crash when element not found
-          editingNoteId = note.id;
-          if (noteSaveBtn) noteSaveBtn.textContent = 'Update Note';
           setActiveView('notes', true);
+          // MUST be after setActiveView — cleanupViewState() inside it wipes editingNoteId
+          editingNoteId = note.id;
+          if ($('noteSaveBtn')) $('noteSaveBtn').textContent = 'Update Note';
+          const nt2 = $('noteTitleInput'), nc2 = $('noteContentInput');
+          if (nt2) nt2.value = note.title || '';
+          if (nc2) nc2.value = note.content || '';
+          setTimeout(() => { try { $('noteContentInput') && $('noteContentInput').focus(); } catch(e){} }, 100);
           return;
         }
         const delBtn = e.target.closest('[data-delete-note]');
@@ -1964,7 +1969,7 @@ function handleTouchEnd() {
         if (_noteSaving) return; // debounce guard
 
         // FIX: resolve to the correct DOM id 'noteContentInput'
-        const noteTitle = $('noteTitle');
+        const noteTitle = $('noteTitleInput');
         const noteContent = $('noteContentInput');  // FIX: was 'noteContent'
 
         const title = (noteTitle ? noteTitle.value : '').trim();
@@ -1981,15 +1986,15 @@ function handleTouchEnd() {
             if (note) { note.title = title; note.content = content; note.ts = Date.now(); }
             editingNoteId = null;
             noteSaveBtn.textContent = 'Save Note';
-            toast('Note updated');
+            toast('✓ Note updated', 'info');
           } else {
             state.notes.push({ id: uid(), title, content, ts: Date.now() });
             toast('Note saved');
           }
           if (noteTitle) noteTitle.value = '';
           if (noteContent) noteContent.value = '';
+          renderNotes(); // immediate — don't block UI on network sync
           await saveState();
-          renderNotes();
         } finally {
           _noteSaving = false;
           noteSaveBtn.disabled = false;
@@ -2000,7 +2005,7 @@ function handleTouchEnd() {
     const noteCancelBtn = $('noteCancelBtn');
     if (noteCancelBtn) {
       noteCancelBtn.addEventListener('click', function () {
-        const noteTitle = $('noteTitle');
+        const noteTitle = $('noteTitleInput');
         const noteContent = $('noteContentInput');  // FIX: was 'noteContent'
         const noteSaveBtn = $('noteSaveBtn');
         editingNoteId = null;
@@ -3176,13 +3181,14 @@ function generateAdvancedInsights(returnHtml = false) {
         <div id="activityLogArea"></div>
       </div>
 
-      <div style="background:var(--card-glass);padding:12px;border-radius:12px;border:1px solid var(--border-glass);margin-bottom:12px">
-        <div style="font-weight:700">About</div>
-        <div class="small" style="margin-top:6px">QuickShop — offline-first inventory & sales. v2.5 (Supabase)</div>
-      </div>
+      
 
       <div style="background:var(--card-glass);padding:12px;border-radius:12px;border:1px solid var(--border-glass);margin-bottom:16px">
         <button id="btnLogout" class="save-btn" style="width:100%;background:#ef4444">Sign Out</button>
+      </div>
+      <div style="background:var(--card-glass);padding:12px;border-radius:12px;border:1px solid var(--border-glass);margin-bottom:12px">
+        <div style="font-weight:700">About</div>
+        <div class="small" style="margin-top:6px">QuickShop — offline-first inventory & sales</div>
       </div>
     `;
 
@@ -3310,241 +3316,319 @@ async function initPublicCatalog(storeId) {
 
   const $  = id => document.getElementById(id);
   const qs = new URLSearchParams(window.location.search);
-  // Phone embedded in URL by share-catalog.js when vendor shares
   const urlPhone = (qs.get('phone') || '').replace(/\D/g, '');
 
   function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function fmt(v) { return '₦' + Number(v||0).toLocaleString('en-NG'); }
-  function initials(name) { return (name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
+  function initials(name) {
+    return (name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  }
 
-  // ── Inject full storefront shell ─────────────────────────────────
+  // Detect system dark preference (catalog has its own theme, independent of app)
+  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+
   document.body.innerHTML = `
-    <style>
-      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-      body {
-        font-family: Inter, system-ui, -apple-system, sans-serif;
-        background: #f4f6f8;
-        color: #1a1a2e;
-        min-height: 100vh;
-        -webkit-font-smoothing: antialiased;
-      }
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-      /* ── STORE HEADER ── */
-      #catHeader {
-        background: linear-gradient(135deg, #0d0d2b 0%, #1a1a4e 60%, #0d2b3e 100%);
-        padding: 28px 20px 24px;
-        position: sticky; top: 0; z-index: 100;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-      }
-      #catHeaderInner {
-        max-width: 640px; margin: 0 auto;
-        display: flex; align-items: center; gap: 16px;
-      }
-      #catAvatar {
-        width: 56px; height: 56px; border-radius: 14px;
-        background: linear-gradient(135deg, #10b981, #059669);
-        display: flex; align-items: center; justify-content: center;
-        font-size: 20px; font-weight: 800; color: #fff;
-        flex-shrink: 0; box-shadow: 0 4px 12px rgba(16,185,129,0.4);
-        letter-spacing: -0.5px;
-      }
-      #catBusinessName {
-        font-size: 22px; font-weight: 800; color: #fff;
-        letter-spacing: -0.02em; line-height: 1.2;
-      }
-      #catTagline {
-        font-size: 13px; color: rgba(255,255,255,0.6);
-        margin-top: 3px; display: flex; align-items: center; gap: 6px;
-      }
-      #catTagline::before {
-        content: ''; display: inline-block;
-        width: 8px; height: 8px; border-radius: 50%;
-        background: #10b981;
-        box-shadow: 0 0 0 3px rgba(16,185,129,0.25);
-      }
+    :root {
+      --bg:        ${prefersDark ? '#0e0e14' : '#f5f5f7'};
+      --surface:   ${prefersDark ? '#1c1c26' : '#ffffff'};
+      --surface2:  ${prefersDark ? '#252530' : '#f0f0f5'};
+      --border:    ${prefersDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.08)'};
+      --border-hi: ${prefersDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.15)'};
+      --text:      ${prefersDark ? '#f0f0f6' : '#0d0d14'};
+      --text2:     ${prefersDark ? 'rgba(240,240,246,0.55)' : 'rgba(13,13,20,0.5)'};
+      --accent:    #7c3aed;
+      --accent-hi: #6d28d9;
+      --wa:        #22c55e;
+      --wa-hi:     #16a34a;
+      --danger:    #ef4444;
+      --warn:      #f59e0b;
+      --card-glow: ${prefersDark ? '0 0 0 1px rgba(124,58,237,0.15), 0 8px 32px rgba(0,0,0,0.5)' : '0 2px 12px rgba(0,0,0,0.08)'};
+    }
 
-      /* ── SEARCH BAR ── */
-      #catSearchWrap {
-        background: #0d0d2b; padding: 12px 20px 14px;
-        position: sticky; top: 108px; z-index: 99;
-        border-bottom: 1px solid rgba(255,255,255,0.06);
-      }
-      #catSearchInner { max-width: 640px; margin: 0 auto; }
-      #catSearch {
-        width: 100%; padding: 11px 16px 11px 42px;
-        border-radius: 12px; border: 1.5px solid rgba(255,255,255,0.12);
-        background: rgba(255,255,255,0.07); color: #fff;
-        font-size: 14px; font-family: inherit; outline: none;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.4)' stroke-width='2.5'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
-        background-repeat: no-repeat; background-position: 14px center;
-        transition: border-color 0.2s;
-      }
-      #catSearch::placeholder { color: rgba(255,255,255,0.35); }
-      #catSearch:focus { border-color: #10b981; }
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+    }
 
-      /* ── CATEGORY CHIPS ── */
-      #catChipsWrap {
-        background: #f4f6f8; padding: 14px 20px 10px;
-        overflow-x: auto; white-space: nowrap;
-        scrollbar-width: none;
-        border-bottom: 1px solid #e5e7eb;
-      }
-      #catChipsWrap::-webkit-scrollbar { display: none; }
-      #catChipsInner { max-width: 640px; margin: 0 auto; display: flex; gap: 8px; }
-      .cat-chip {
-        display: inline-flex; align-items: center;
-        padding: 7px 16px; border-radius: 20px;
-        border: 1.5px solid #d1d5db; background: #fff;
-        font-size: 13px; font-weight: 600; color: #6b7280;
-        cursor: pointer; white-space: nowrap;
-        transition: all 0.18s; user-select: none;
-      }
-      .cat-chip.active {
-        background: #0d0d2b; border-color: #0d0d2b;
-        color: #fff; box-shadow: 0 2px 8px rgba(13,13,43,0.25);
-      }
-      .cat-chip:hover:not(.active) { border-color: #9ca3af; color: #374151; }
+    /* ── STORE HEADER ──────────────────────────────────────── */
+    #catHeader {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 20px 18px;
+      position: sticky; top: 0; z-index: 100;
+      /* Tight, sophisticated gradient — just a hint */
+      background-image: ${prefersDark
+        ? 'radial-gradient(ellipse 70% 80% at 0% 0%, rgba(124,58,237,0.12) 0%, transparent 60%)'
+        : 'radial-gradient(ellipse 70% 80% at 0% 0%, rgba(124,58,237,0.05) 0%, transparent 60%)'};
+    }
+    #catHeaderInner {
+      max-width: 640px; margin: 0 auto;
+      display: flex; align-items: center; gap: 14px;
+    }
+    #catAvatar {
+      width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0;
+      background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px; font-weight: 800; color: #fff; letter-spacing: -0.5px;
+      box-shadow: 0 2px 10px rgba(124,58,237,0.35);
+    }
+    #catBusinessName {
+      font-size: 19px; font-weight: 700; color: var(--text);
+      letter-spacing: -0.03em; line-height: 1.25;
+    }
+    #catTagline {
+      font-size: 12px; color: var(--text2);
+      margin-top: 2px; display: flex; align-items: center; gap: 5px;
+    }
+    .live-dot {
+      display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+      background: var(--wa); flex-shrink: 0;
+      box-shadow: 0 0 0 2.5px rgba(34,197,94,0.2);
+      animation: pulse 2.2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 2.5px rgba(34,197,94,0.2); }
+      50%       { box-shadow: 0 0 0 5px rgba(34,197,94,0.08); }
+    }
 
-      /* ── PRODUCT GRID ── */
-      #catBody { max-width: 640px; margin: 0 auto; padding: 16px 16px 80px; }
-      #catGrid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 14px;
-      }
-      @media (min-width: 480px) { #catGrid { grid-template-columns: repeat(3, 1fr); } }
+    /* ── SEARCH ─────────────────────────────────────────────── */
+    #catSearchWrap {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 20px 12px;
+      position: sticky; top: 89px; z-index: 99;
+    }
+    #catSearchInner { max-width: 640px; margin: 0 auto; position: relative; }
+    #catSearch {
+      width: 100%;
+      padding: 10px 16px 10px 38px;
+      border-radius: 10px;
+      border: 1.5px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      font-size: 14px; font-family: inherit; outline: none;
+      transition: border-color 0.18s;
+    }
+    #catSearch::placeholder { color: var(--text2); }
+    #catSearch:focus { border-color: var(--accent); }
+    #catSearchIcon {
+      position: absolute; left: 12px; top: 50%;
+      transform: translateY(-50%); pointer-events: none;
+      color: var(--text2);
+    }
 
-      /* ── PRODUCT CARD ── */
-      .cat-card {
-        background: #fff; border-radius: 16px;
-        border: 1.5px solid #e5e7eb;
-        overflow: hidden; display: flex; flex-direction: column;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-        transition: transform 0.18s, box-shadow 0.18s;
-      }
-      .cat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
-      .cat-thumb {
-        width: 100%; aspect-ratio: 1;
-        background: linear-gradient(135deg, #f0fdf4, #d1fae5);
-        display: flex; align-items: center; justify-content: center;
-        font-size: 44px; position: relative; overflow: hidden;
-      }
-      .cat-thumb img {
-        width: 100%; height: 100%; object-fit: cover;
-        position: absolute; inset: 0;
-      }
-      .cat-badge-oos {
-        position: absolute; top: 8px; right: 8px;
-        background: rgba(239,68,68,0.9); color: #fff;
-        font-size: 10px; font-weight: 700; padding: 3px 7px;
-        border-radius: 20px; letter-spacing: 0.3px;
-      }
-      .cat-badge-low {
-        position: absolute; top: 8px; right: 8px;
-        background: rgba(245,158,11,0.9); color: #fff;
-        font-size: 10px; font-weight: 700; padding: 3px 7px;
-        border-radius: 20px;
-      }
-      .cat-info { padding: 12px 12px 0; flex: 1; }
-      .cat-name {
-        font-size: 14px; font-weight: 700; color: #111827;
-        line-height: 1.3; margin-bottom: 4px;
-        display: -webkit-box; -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical; overflow: hidden;
-      }
-      .cat-cat {
-        font-size: 11px; color: #9ca3af; font-weight: 500;
-        text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;
-      }
-      .cat-price {
-        font-size: 18px; font-weight: 800; color: #059669;
-        letter-spacing: -0.5px;
-      }
-      .cat-footer { padding: 10px 12px 12px; }
-      .cat-wa-btn {
-        display: flex; align-items: center; justify-content: center; gap: 7px;
-        width: 100%; padding: 11px 8px;
-        background: #25d366; color: #fff;
-        border: none; border-radius: 10px;
-        font-size: 13px; font-weight: 700;
-        text-decoration: none; cursor: pointer;
-        transition: background 0.18s, transform 0.12s;
-        box-shadow: 0 2px 8px rgba(37,211,102,0.35);
-      }
-      .cat-wa-btn:hover { background: #1da851; transform: scale(1.02); }
-      .cat-wa-btn:active { transform: scale(0.98); }
-      .cat-wa-btn.disabled {
-        background: #d1d5db; color: #9ca3af;
-        box-shadow: none; cursor: not-allowed; pointer-events: none;
-      }
+    /* ── CHIPS ──────────────────────────────────────────────── */
+    #catChipsWrap {
+      background: var(--bg);
+      padding: 12px 20px 8px;
+      overflow-x: auto; white-space: nowrap;
+      scrollbar-width: none; border-bottom: 1px solid var(--border);
+    }
+    #catChipsWrap::-webkit-scrollbar { display: none; }
+    #catChipsInner { max-width: 640px; margin: 0 auto; display: flex; gap: 7px; }
+    .cat-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 6px 14px; border-radius: 20px;
+      border: 1.5px solid var(--border);
+      background: var(--surface);
+      font-size: 12.5px; font-weight: 600; color: var(--text2);
+      cursor: pointer; white-space: nowrap;
+      transition: all 0.15s; user-select: none;
+    }
+    .cat-chip.active {
+      background: var(--accent); border-color: var(--accent);
+      color: #fff; box-shadow: 0 2px 8px rgba(124,58,237,0.3);
+    }
+    .cat-chip:hover:not(.active) { border-color: var(--border-hi); color: var(--text); }
 
-      /* ── EMPTY / ERROR STATE ── */
-      #catEmpty {
-        grid-column: 1 / -1; text-align: center;
-        padding: 60px 20px; color: #9ca3af;
-      }
-      #catEmpty .empty-icon { font-size: 56px; margin-bottom: 12px; }
-      #catEmpty p { font-size: 16px; font-weight: 600; color: #6b7280; }
-      #catEmpty small { font-size: 13px; margin-top: 6px; display: block; }
+    /* ── GRID ───────────────────────────────────────────────── */
+    #catBody { max-width: 640px; margin: 0 auto; padding: 16px 16px 80px; }
+    #catMeta {
+      font-size: 12px; color: var(--text2); margin-bottom: 12px;
+      font-weight: 500; letter-spacing: 0.02em;
+    }
+    #catGrid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    @media (min-width: 460px) { #catGrid { grid-template-columns: repeat(3, 1fr); } }
 
-      /* ── SKELETON LOADING ── */
-      .skel {
-        background: linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%);
-        background-size: 200% 100%;
-        animation: skelShimmer 1.4s infinite;
-        border-radius: 8px;
-      }
-      @keyframes skelShimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+    /* ── PRODUCT CARD ───────────────────────────────────────── */
+    .cat-card {
+      background: var(--surface);
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      display: flex; flex-direction: column;
+      box-shadow: var(--card-glow);
+      transition: transform 0.18s, box-shadow 0.18s, border-color 0.18s;
+      cursor: pointer;
+    }
+    .cat-card:hover {
+      transform: translateY(-3px);
+      border-color: var(--border-hi);
+      box-shadow: ${prefersDark
+        ? '0 0 0 1px rgba(124,58,237,0.25), 0 16px 40px rgba(0,0,0,0.6)'
+        : '0 8px 28px rgba(0,0,0,0.14)'};
+    }
 
-      /* ── FOOTER ── */
-      #catFooter {
-        text-align: center; padding: 20px;
-        font-size: 12px; color: #9ca3af;
-      }
-      #catFooter a { color: #10b981; text-decoration: none; font-weight: 600; }
-    </style>
+    /* Thumb — no image */
+    .cat-thumb {
+      width: 100%; aspect-ratio: 1; position: relative; overflow: hidden;
+      background: var(--surface2);
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 4px;
+    }
+    /* Monogram placeholder — dark, typographic, not green */
+    .cat-monogram {
+      font-size: 28px; font-weight: 800;
+      color: ${prefersDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)'};
+      letter-spacing: -1px; line-height: 1; user-select: none;
+    }
+    .cat-emoji-placeholder {
+      font-size: 40px; line-height: 1;
+    }
+    .cat-thumb img {
+      width: 100%; height: 100%; object-fit: cover;
+      position: absolute; inset: 0;
+    }
 
-    <!-- HEADER -->
-    <div id="catHeader">
-      <div id="catHeaderInner">
-        <div id="catAvatar">??</div>
-        <div>
-          <div id="catBusinessName">Loading…</div>
-          <div id="catTagline">Store • Browse &amp; order via WhatsApp</div>
-        </div>
+    /* Stock badge */
+    .cat-badge {
+      position: absolute; top: 8px; left: 8px;
+      font-size: 10px; font-weight: 700; padding: 3px 8px;
+      border-radius: 20px; letter-spacing: 0.2px;
+      backdrop-filter: blur(6px);
+    }
+    .cat-badge-oos { background: rgba(239,68,68,0.88); color: #fff; }
+    .cat-badge-low { background: rgba(245,158,11,0.88); color: #fff; }
+
+    /* Info */
+    .cat-info { padding: 11px 12px 8px; flex: 1; }
+    .cat-cat {
+      font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--accent); margin-bottom: 4px;
+    }
+    .cat-name {
+      font-size: 13.5px; font-weight: 650; color: var(--text);
+      line-height: 1.35; margin-bottom: 7px;
+      display: -webkit-box; -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .cat-price {
+      font-size: 17px; font-weight: 800; color: var(--text);
+      letter-spacing: -0.04em;
+    }
+    .cat-price-label {
+      font-size: 10px; font-weight: 500; color: var(--text2);
+      margin-bottom: 1px;
+    }
+
+    /* CTA — refined, not shouty */
+    .cat-footer { padding: 8px 12px 12px; }
+    .cat-wa-btn {
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+      width: 100%; padding: 10px 8px;
+      background: transparent;
+      border: 1.5px solid var(--wa);
+      color: var(--wa);
+      border-radius: 9px;
+      font-size: 12.5px; font-weight: 700;
+      text-decoration: none; cursor: pointer;
+      transition: all 0.16s;
+      letter-spacing: 0.01em;
+    }
+    .cat-wa-btn:hover {
+      background: var(--wa); color: #fff;
+      box-shadow: 0 4px 16px rgba(34,197,94,0.3);
+      transform: scale(1.01);
+    }
+    .cat-wa-btn:active { transform: scale(0.98); }
+    .cat-wa-btn.sold-out {
+      border-color: var(--border); color: var(--text2);
+      pointer-events: none; opacity: 0.5;
+    }
+
+    /* ── EMPTY ──────────────────────────────────────────────── */
+    #catEmpty {
+      grid-column: 1 / -1; text-align: center;
+      padding: 56px 20px; color: var(--text2);
+    }
+    #catEmpty .ei { font-size: 48px; margin-bottom: 14px; }
+    #catEmpty strong { display: block; font-size: 15px; color: var(--text); margin-bottom: 6px; }
+    #catEmpty span { font-size: 13px; }
+
+    /* ── SKELETON ───────────────────────────────────────────── */
+    .skel {
+      background: linear-gradient(90deg, var(--surface2) 25%, var(--border-hi) 50%, var(--surface2) 75%);
+      background-size: 200% 100%;
+      animation: sk 1.5s infinite;
+      border-radius: 6px;
+    }
+    @keyframes sk { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+    /* ── FOOTER ─────────────────────────────────────────────── */
+    #catFooter {
+      text-align: center; padding: 16px 20px 28px;
+      font-size: 11.5px; color: var(--text2);
+    }
+    #catFooter strong { color: var(--accent); font-weight: 700; }
+  </style>
+
+  <!-- HEADER -->
+  <div id="catHeader">
+    <div id="catHeaderInner">
+      <div id="catAvatar">??</div>
+      <div>
+        <div id="catBusinessName">Loading…</div>
+        <div id="catTagline"><span class="live-dot"></span>Open now · Order via WhatsApp</div>
       </div>
     </div>
+  </div>
 
-    <!-- SEARCH -->
-    <div id="catSearchWrap">
-      <div id="catSearchInner">
-        <input id="catSearch" type="search" placeholder="Search products…" autocomplete="off" />
-      </div>
+  <!-- SEARCH -->
+  <div id="catSearchWrap">
+    <div id="catSearchInner">
+      <svg id="catSearchIcon" width="15" height="15" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input id="catSearch" type="search" placeholder="Search products…" autocomplete="off"/>
     </div>
+  </div>
 
-    <!-- CATEGORY CHIPS -->
-    <div id="catChipsWrap"><div id="catChipsInner"></div></div>
+  <!-- CHIPS -->
+  <div id="catChipsWrap"><div id="catChipsInner"></div></div>
 
-    <!-- PRODUCT GRID -->
-    <div id="catBody">
-      <div id="catGrid">
-        ${[1,2,3,4].map(() => `
-          <div class="cat-card">
-            <div class="cat-thumb skel" style="aspect-ratio:1;font-size:0;"></div>
-            <div class="cat-info">
-              <div class="skel" style="height:14px;width:80%;margin-bottom:6px;"></div>
-              <div class="skel" style="height:12px;width:50%;margin-bottom:8px;"></div>
-              <div class="skel" style="height:20px;width:60%;"></div>
-            </div>
-            <div class="cat-footer"><div class="skel" style="height:40px;border-radius:10px;"></div></div>
+  <!-- BODY -->
+  <div id="catBody">
+    <div id="catMeta"></div>
+    <div id="catGrid">
+      ${[1,2,3,4].map(()=>`
+        <div class="cat-card">
+          <div class="cat-thumb skel" style="font-size:0;"></div>
+          <div class="cat-info">
+            <div class="skel" style="height:10px;width:55%;margin-bottom:7px;"></div>
+            <div class="skel" style="height:13px;width:85%;margin-bottom:5px;"></div>
+            <div class="skel" style="height:13px;width:65%;margin-bottom:10px;"></div>
+            <div class="skel" style="height:20px;width:50%;"></div>
           </div>
-        `).join('')}
-      </div>
+          <div class="cat-footer"><div class="skel" style="height:38px;border-radius:9px;"></div></div>
+        </div>
+      `).join('')}
     </div>
-    <div id="catFooter">Powered by <a href="/">QuickShop</a></div>
+  </div>
+  <div id="catFooter">Powered by <strong>QuickShop</strong></div>
   `;
 
-  // ── Connect to Supabase ──────────────────────────────────────────
+  // ── Supabase ─────────────────────────────────────────────────────
   let supabase;
   try {
     await waitForSupabaseReady(5000);
@@ -3552,12 +3636,12 @@ async function initPublicCatalog(storeId) {
     if (!supabase) throw new Error('no client');
   } catch(e) {
     document.getElementById('catGrid').innerHTML =
-      `<div id="catEmpty"><div class="empty-icon">⚠️</div><p>Could not connect to store</p><small>Please try again later</small></div>`;
+      `<div id="catEmpty"><div class="ei">⚠️</div><strong>Could not connect</strong><span>Please try again later</span></div>`;
     return;
   }
 
-  // ── Fetch profile ────────────────────────────────────────────────
-  let businessName = 'Store', sellerPhone = urlPhone;
+  // ── Profile ──────────────────────────────────────────────────────
+  let businessName = '', sellerPhone = urlPhone;
   try {
     const { data: prof } = await supabase
       .from('profiles')
@@ -3565,19 +3649,22 @@ async function initPublicCatalog(storeId) {
       .eq('id', storeId)
       .single();
     if (prof) {
-      businessName = prof.business_name || prof.name || 'Store';
+      businessName = prof.business_name || prof.name || '';
     }
   } catch(_) {}
 
-  // Update header
-  document.getElementById('catBusinessName').textContent = businessName;
-  document.getElementById('catAvatar').textContent = initials(businessName);
-  document.getElementById('catTagline').innerHTML =
-    `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#10b981;box-shadow:0 0 0 3px rgba(16,185,129,0.25);margin-right:6px;"></span>` +
-    `${esc(businessName)} · Browse &amp; order via WhatsApp`;
-  document.title = businessName + ' — QuickShop Store';
+  // Format: "Olayinka's Store" if name present, fallback to "Store"
+  const displayName = businessName
+    ? (businessName.endsWith('s') || businessName.endsWith('S')
+        ? `${businessName}' Store`
+        : `${businessName}'s Store`)
+    : 'Store';
 
-  // ── Fetch products ───────────────────────────────────────────────
+  document.getElementById('catBusinessName').textContent = displayName;
+  document.getElementById('catAvatar').textContent = initials(displayName);
+  document.title = displayName;
+
+  // ── Products ─────────────────────────────────────────────────────
   let allProducts = [];
   try {
     const { data, error } = await supabase
@@ -3589,12 +3676,12 @@ async function initPublicCatalog(storeId) {
     allProducts = data || [];
   } catch(e) {
     document.getElementById('catGrid').innerHTML =
-      `<div id="catEmpty"><div class="empty-icon">😕</div><p>Failed to load products</p><small>${esc(e.message)}</small></div>`;
+      `<div id="catEmpty"><div class="ei">😕</div><strong>Failed to load products</strong><span>${esc(e.message)}</span></div>`;
     return;
   }
 
-  // ── Build category chips ─────────────────────────────────────────
-  const categories = ['All', ...new Set(allProducts.map(p => p.category || 'Other').filter(Boolean))];
+  // ── Category chips ───────────────────────────────────────────────
+  const categories = ['All', ...new Set(allProducts.map(p => p.category || 'General'))];
   let activeCategory = 'All';
   let searchQuery = '';
 
@@ -3602,7 +3689,7 @@ async function initPublicCatalog(storeId) {
   categories.forEach(cat => {
     const chip = document.createElement('button');
     chip.className = 'cat-chip' + (cat === 'All' ? ' active' : '');
-    chip.textContent = cat;
+    chip.textContent = cat === 'All' ? `All (${allProducts.length})` : cat;
     chip.addEventListener('click', () => {
       activeCategory = cat;
       chipsEl.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
@@ -3612,26 +3699,35 @@ async function initPublicCatalog(storeId) {
     chipsEl.appendChild(chip);
   });
 
-  // ── Search handler ───────────────────────────────────────────────
+  // ── Search ───────────────────────────────────────────────────────
   document.getElementById('catSearch').addEventListener('input', function() {
     searchQuery = this.value.toLowerCase().trim();
     renderGrid();
   });
 
-  // ── Render grid ──────────────────────────────────────────────────
+  // ── Render ───────────────────────────────────────────────────────
+  const WA_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+  </svg>`;
+
   function renderGrid() {
     const grid = document.getElementById('catGrid');
+    const meta = document.getElementById('catMeta');
     const filtered = allProducts.filter(p => {
-      if (activeCategory !== 'All' && (p.category || 'Other') !== activeCategory) return false;
+      if (activeCategory !== 'All' && (p.category||'General') !== activeCategory) return false;
       if (searchQuery && !(p.name||'').toLowerCase().includes(searchQuery)) return false;
       return true;
     });
 
+    if (meta) meta.textContent = filtered.length
+      ? `${filtered.length} product${filtered.length !== 1 ? 's' : ''}`
+      : '';
+
     if (!filtered.length) {
       grid.innerHTML = `<div id="catEmpty">
-        <div class="empty-icon">🔍</div>
-        <p>No products found</p>
-        <small>Try a different category or search term</small>
+        <div class="ei">🔍</div>
+        <strong>Nothing found</strong>
+        <span>Try a different search or category</span>
       </div>`;
       return;
     }
@@ -3639,47 +3735,50 @@ async function initPublicCatalog(storeId) {
     grid.innerHTML = '';
     filtered.forEach(p => {
       const inStock = typeof p.qty !== 'number' || p.qty > 0;
-      const lowStock = typeof p.qty === 'number' && p.qty > 0 && p.qty <= 3;
+      const lowStock = inStock && typeof p.qty === 'number' && p.qty <= 3;
 
-      const card = document.createElement('div');
-      card.className = 'cat-card';
-
-      // Thumb
-      let thumbContent = '';
+      // Thumbnail
+      let thumbInner = '';
       if (p.image_url) {
-        thumbContent = `<img src="${esc(p.image_url)}" alt="${esc(p.name)}" loading="lazy" />`;
+        thumbInner = `<img src="${esc(p.image_url)}" alt="${esc(p.name||'')}" loading="lazy"/>`;
+      } else if (p.icon && p.icon.trim().length) {
+        // Emoji: centered, no competing colour
+        thumbInner = `<span class="cat-emoji-placeholder">${esc(p.icon)}</span>`;
       } else {
-        const emoji = p.icon && p.icon.length ? esc(p.icon)
-          : (p.name||'').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
-        thumbContent = `<span style="font-size:${p.icon ? '44' : '22'}px;font-weight:800;color:#059669;">${emoji}</span>`;
+        // Text monogram — typographic, muted, like Depop
+        const mono = (p.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+        thumbInner = `<span class="cat-monogram">${esc(mono)}</span>`;
       }
+
       const badge = !inStock
-        ? `<span class="cat-badge-oos">Sold Out</span>`
+        ? `<span class="cat-badge cat-badge-oos">Sold out</span>`
         : lowStock
-        ? `<span class="cat-badge-low">Only ${p.qty} left</span>`
+        ? `<span class="cat-badge cat-badge-low">Last ${p.qty}</span>`
         : '';
 
-      // WhatsApp link — goes direct to vendor's number
-      const waText = encodeURIComponent(`Hi! I'd like to order *${p.name}* — ${fmt(p.price || 0)}`);
+      // WhatsApp — opens vendor's number directly
+      const waText = encodeURIComponent(`Hi! I'd like to order *${p.name}* — ${fmt(p.price||0)}`);
       const waHref = sellerPhone
         ? `https://wa.me/${sellerPhone}?text=${waText}`
         : `https://wa.me/?text=${waText}`;
 
-      const waIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>`;
-
+      const card = document.createElement('div');
+      card.className = 'cat-card';
       card.innerHTML = `
-        <div class="cat-thumb">${thumbContent}${badge}</div>
+        <div class="cat-thumb">${thumbInner}${badge}</div>
         <div class="cat-info">
-          <div class="cat-cat">${esc(p.category || 'General')}</div>
-          <div class="cat-name">${esc(p.name || 'Product')}</div>
-          <div class="cat-price">${fmt(p.price || 0)}</div>
+          <div class="cat-cat">${esc(p.category||'General')}</div>
+          <div class="cat-name">${esc(p.name||'Product')}</div>
+          <div class="cat-price-label">Price</div>
+          <div class="cat-price">${fmt(p.price||0)}</div>
         </div>
         <div class="cat-footer">
-          <a href="${inStock ? waHref : '#'}"
-             class="cat-wa-btn${inStock ? '' : ' disabled'}"
-             ${inStock ? 'target="_blank" rel="noopener noreferrer"' : ''}>
-            ${waIcon} ${inStock ? 'Order on WhatsApp' : 'Out of Stock'}
-          </a>
+          ${inStock
+            ? `<a href="${waHref}" class="cat-wa-btn" target="_blank" rel="noopener noreferrer">
+                ${WA_ICON} Order on WhatsApp
+               </a>`
+            : `<span class="cat-wa-btn sold-out">Out of stock</span>`
+          }
         </div>
       `;
       grid.appendChild(card);
@@ -3688,4 +3787,3 @@ async function initPublicCatalog(storeId) {
 
   renderGrid();
 }
-
