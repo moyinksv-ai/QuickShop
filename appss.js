@@ -1269,9 +1269,9 @@ function handleTouchEnd() {
       card.className = 'product-card';
       const thumb = document.createElement('div');
       thumb.className = 'p-thumb';
-      if (p.image) {
+      if (p.image_url) {
         const img = document.createElement('img');
-        img.src = p.image;
+        img.src = p.image_url;
         img.alt = p.name || 'thumb';
         img.crossOrigin = 'anonymous';
         thumb.appendChild(img);
@@ -3370,7 +3370,7 @@ async function initPublicCatalog(storeId) {
   try {
     const { data, error } = await supabase
       .from('products')
-      .select('id, name, price, qty, category, icon, barcode')
+      .select('id, name, price, qty, category, image_url, icon, barcode')
       .eq('user_id', storeId)
       .order('name', { ascending: true });
     if (error) throw error;
