@@ -103,8 +103,13 @@
       // The edge function returns { share_url, business_name }
       // Fall back to a locally-constructed catalog URL if the shape differs
       var appOrigin = window.location.origin;
-      var fallbackUrl = appOrigin + '/?view=catalog&store=' + encodeURIComponent(userId);
+      var fallbackUrl = appOrigin + '/?view=catalog&store=' + encodeURIComponent(userId)
+        + '&phone=' + encodeURIComponent(phone);
       var shareUrl = (data && (data.share_url || data.url || data.link)) || fallbackUrl;
+      // Always inject phone into share_url so the catalog page can open WhatsApp directly
+      if (shareUrl && phone && !shareUrl.includes('phone=')) {
+        shareUrl += (shareUrl.includes('?') ? '&' : '?') + 'phone=' + encodeURIComponent(phone);
+      }
 
       var message = '\uD83D\uDED2 Check out my product catalog:\n' + shareUrl;
       openShare(message);

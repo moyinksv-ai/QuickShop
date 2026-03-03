@@ -1269,9 +1269,9 @@ function handleTouchEnd() {
       card.className = 'product-card';
       const thumb = document.createElement('div');
       thumb.className = 'p-thumb';
-      if (p.image_url) {
+      if (p.image) {
         const img = document.createElement('img');
-        img.src = p.image_url;
+        img.src = p.image;
         img.alt = p.name || 'thumb';
         img.crossOrigin = 'anonymous';
         thumb.appendChild(img);
@@ -1927,7 +1927,7 @@ function handleTouchEnd() {
           const id = editBtn.dataset.editNote;
           const note = state.notes.find(n=>n.id===id);
           if (!note) return;
-          const noteTitle = $('noteTitleInput');
+          const noteTitle = $('noteTitle');
           const noteContent = $('noteContentInput');  // FIX: was 'noteContent', DOM id is noteContentInput
           const noteSaveBtn = $('noteSaveBtn');
           if (noteTitle) noteTitle.value = note.title || '';
@@ -1964,7 +1964,7 @@ function handleTouchEnd() {
         if (_noteSaving) return; // debounce guard
 
         // FIX: resolve to the correct DOM id 'noteContentInput'
-        const noteTitle = $('noteTitleInput');
+        const noteTitle = $('noteTitle');
         const noteContent = $('noteContentInput');  // FIX: was 'noteContent'
 
         const title = (noteTitle ? noteTitle.value : '').trim();
@@ -2000,7 +2000,7 @@ function handleTouchEnd() {
     const noteCancelBtn = $('noteCancelBtn');
     if (noteCancelBtn) {
       noteCancelBtn.addEventListener('click', function () {
-        const noteTitle = $('noteTitleInput');
+        const noteTitle = $('noteTitle');
         const noteContent = $('noteContentInput');  // FIX: was 'noteContent'
         const noteSaveBtn = $('noteSaveBtn');
         editingNoteId = null;
@@ -3308,65 +3308,277 @@ if (document.readyState === 'loading') {
 async function initPublicCatalog(storeId) {
   'use strict';
 
-  // ── Minimal helpers ──────────────────────────────────────────────
-  const $ = id => document.getElementById(id);
-  function escapeHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  const $  = id => document.getElementById(id);
+  const qs = new URLSearchParams(window.location.search);
+  // Phone embedded in URL by share-catalog.js when vendor shares
+  const urlPhone = (qs.get('phone') || '').replace(/\D/g, '');
+
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function fmt(v) { return '₦' + Number(v||0).toLocaleString('en-NG'); }
+  function initials(name) { return (name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
 
-  function setStatus(html) {
-    const el = $('catalogStatus');
-    if (el) el.innerHTML = html;
-  }
-
-  // ── Inject the catalog shell into <body> ─────────────────────────
-  // Replaces whatever admin HTML was in body — catalog is fully separate.
+  // ── Inject full storefront shell ─────────────────────────────────
   document.body.innerHTML = `
-    <div id="catalogApp" style="max-width:600px;margin:0 auto;padding:16px 16px calc(env(safe-area-inset-bottom) + 80px);">
-      <div id="catalogHeader" style="margin-bottom:20px;">
-        <div id="catalogBusiness" class="title" style="font-size:22px;font-weight:800;color:var(--text-primary);">Loading store…</div>
-        <div id="catalogSubtitle" class="subtitle"></div>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: Inter, system-ui, -apple-system, sans-serif;
+        background: #f4f6f8;
+        color: #1a1a2e;
+        min-height: 100vh;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ── STORE HEADER ── */
+      #catHeader {
+        background: linear-gradient(135deg, #0d0d2b 0%, #1a1a4e 60%, #0d2b3e 100%);
+        padding: 28px 20px 24px;
+        position: sticky; top: 0; z-index: 100;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+      }
+      #catHeaderInner {
+        max-width: 640px; margin: 0 auto;
+        display: flex; align-items: center; gap: 16px;
+      }
+      #catAvatar {
+        width: 56px; height: 56px; border-radius: 14px;
+        background: linear-gradient(135deg, #10b981, #059669);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 20px; font-weight: 800; color: #fff;
+        flex-shrink: 0; box-shadow: 0 4px 12px rgba(16,185,129,0.4);
+        letter-spacing: -0.5px;
+      }
+      #catBusinessName {
+        font-size: 22px; font-weight: 800; color: #fff;
+        letter-spacing: -0.02em; line-height: 1.2;
+      }
+      #catTagline {
+        font-size: 13px; color: rgba(255,255,255,0.6);
+        margin-top: 3px; display: flex; align-items: center; gap: 6px;
+      }
+      #catTagline::before {
+        content: ''; display: inline-block;
+        width: 8px; height: 8px; border-radius: 50%;
+        background: #10b981;
+        box-shadow: 0 0 0 3px rgba(16,185,129,0.25);
+      }
+
+      /* ── SEARCH BAR ── */
+      #catSearchWrap {
+        background: #0d0d2b; padding: 12px 20px 14px;
+        position: sticky; top: 108px; z-index: 99;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+      }
+      #catSearchInner { max-width: 640px; margin: 0 auto; }
+      #catSearch {
+        width: 100%; padding: 11px 16px 11px 42px;
+        border-radius: 12px; border: 1.5px solid rgba(255,255,255,0.12);
+        background: rgba(255,255,255,0.07); color: #fff;
+        font-size: 14px; font-family: inherit; outline: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.4)' stroke-width='2.5'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
+        background-repeat: no-repeat; background-position: 14px center;
+        transition: border-color 0.2s;
+      }
+      #catSearch::placeholder { color: rgba(255,255,255,0.35); }
+      #catSearch:focus { border-color: #10b981; }
+
+      /* ── CATEGORY CHIPS ── */
+      #catChipsWrap {
+        background: #f4f6f8; padding: 14px 20px 10px;
+        overflow-x: auto; white-space: nowrap;
+        scrollbar-width: none;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      #catChipsWrap::-webkit-scrollbar { display: none; }
+      #catChipsInner { max-width: 640px; margin: 0 auto; display: flex; gap: 8px; }
+      .cat-chip {
+        display: inline-flex; align-items: center;
+        padding: 7px 16px; border-radius: 20px;
+        border: 1.5px solid #d1d5db; background: #fff;
+        font-size: 13px; font-weight: 600; color: #6b7280;
+        cursor: pointer; white-space: nowrap;
+        transition: all 0.18s; user-select: none;
+      }
+      .cat-chip.active {
+        background: #0d0d2b; border-color: #0d0d2b;
+        color: #fff; box-shadow: 0 2px 8px rgba(13,13,43,0.25);
+      }
+      .cat-chip:hover:not(.active) { border-color: #9ca3af; color: #374151; }
+
+      /* ── PRODUCT GRID ── */
+      #catBody { max-width: 640px; margin: 0 auto; padding: 16px 16px 80px; }
+      #catGrid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      @media (min-width: 480px) { #catGrid { grid-template-columns: repeat(3, 1fr); } }
+
+      /* ── PRODUCT CARD ── */
+      .cat-card {
+        background: #fff; border-radius: 16px;
+        border: 1.5px solid #e5e7eb;
+        overflow: hidden; display: flex; flex-direction: column;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        transition: transform 0.18s, box-shadow 0.18s;
+      }
+      .cat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
+      .cat-thumb {
+        width: 100%; aspect-ratio: 1;
+        background: linear-gradient(135deg, #f0fdf4, #d1fae5);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 44px; position: relative; overflow: hidden;
+      }
+      .cat-thumb img {
+        width: 100%; height: 100%; object-fit: cover;
+        position: absolute; inset: 0;
+      }
+      .cat-badge-oos {
+        position: absolute; top: 8px; right: 8px;
+        background: rgba(239,68,68,0.9); color: #fff;
+        font-size: 10px; font-weight: 700; padding: 3px 7px;
+        border-radius: 20px; letter-spacing: 0.3px;
+      }
+      .cat-badge-low {
+        position: absolute; top: 8px; right: 8px;
+        background: rgba(245,158,11,0.9); color: #fff;
+        font-size: 10px; font-weight: 700; padding: 3px 7px;
+        border-radius: 20px;
+      }
+      .cat-info { padding: 12px 12px 0; flex: 1; }
+      .cat-name {
+        font-size: 14px; font-weight: 700; color: #111827;
+        line-height: 1.3; margin-bottom: 4px;
+        display: -webkit-box; -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical; overflow: hidden;
+      }
+      .cat-cat {
+        font-size: 11px; color: #9ca3af; font-weight: 500;
+        text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;
+      }
+      .cat-price {
+        font-size: 18px; font-weight: 800; color: #059669;
+        letter-spacing: -0.5px;
+      }
+      .cat-footer { padding: 10px 12px 12px; }
+      .cat-wa-btn {
+        display: flex; align-items: center; justify-content: center; gap: 7px;
+        width: 100%; padding: 11px 8px;
+        background: #25d366; color: #fff;
+        border: none; border-radius: 10px;
+        font-size: 13px; font-weight: 700;
+        text-decoration: none; cursor: pointer;
+        transition: background 0.18s, transform 0.12s;
+        box-shadow: 0 2px 8px rgba(37,211,102,0.35);
+      }
+      .cat-wa-btn:hover { background: #1da851; transform: scale(1.02); }
+      .cat-wa-btn:active { transform: scale(0.98); }
+      .cat-wa-btn.disabled {
+        background: #d1d5db; color: #9ca3af;
+        box-shadow: none; cursor: not-allowed; pointer-events: none;
+      }
+
+      /* ── EMPTY / ERROR STATE ── */
+      #catEmpty {
+        grid-column: 1 / -1; text-align: center;
+        padding: 60px 20px; color: #9ca3af;
+      }
+      #catEmpty .empty-icon { font-size: 56px; margin-bottom: 12px; }
+      #catEmpty p { font-size: 16px; font-weight: 600; color: #6b7280; }
+      #catEmpty small { font-size: 13px; margin-top: 6px; display: block; }
+
+      /* ── SKELETON LOADING ── */
+      .skel {
+        background: linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%);
+        background-size: 200% 100%;
+        animation: skelShimmer 1.4s infinite;
+        border-radius: 8px;
+      }
+      @keyframes skelShimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+      /* ── FOOTER ── */
+      #catFooter {
+        text-align: center; padding: 20px;
+        font-size: 12px; color: #9ca3af;
+      }
+      #catFooter a { color: #10b981; text-decoration: none; font-weight: 600; }
+    </style>
+
+    <!-- HEADER -->
+    <div id="catHeader">
+      <div id="catHeaderInner">
+        <div id="catAvatar">??</div>
+        <div>
+          <div id="catBusinessName">Loading…</div>
+          <div id="catTagline">Store • Browse &amp; order via WhatsApp</div>
+        </div>
       </div>
-      <div id="catalogStatus" style="padding:40px 0;text-align:center;color:var(--text-muted);">Fetching products…</div>
-      <div id="catalogList" class="list"></div>
     </div>
+
+    <!-- SEARCH -->
+    <div id="catSearchWrap">
+      <div id="catSearchInner">
+        <input id="catSearch" type="search" placeholder="Search products…" autocomplete="off" />
+      </div>
+    </div>
+
+    <!-- CATEGORY CHIPS -->
+    <div id="catChipsWrap"><div id="catChipsInner"></div></div>
+
+    <!-- PRODUCT GRID -->
+    <div id="catBody">
+      <div id="catGrid">
+        ${[1,2,3,4].map(() => `
+          <div class="cat-card">
+            <div class="cat-thumb skel" style="aspect-ratio:1;font-size:0;"></div>
+            <div class="cat-info">
+              <div class="skel" style="height:14px;width:80%;margin-bottom:6px;"></div>
+              <div class="skel" style="height:12px;width:50%;margin-bottom:8px;"></div>
+              <div class="skel" style="height:20px;width:60%;"></div>
+            </div>
+            <div class="cat-footer"><div class="skel" style="height:40px;border-radius:10px;"></div></div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    <div id="catFooter">Powered by <a href="/">QuickShop</a></div>
   `;
 
-  // ── Fetch public store profile + products via Supabase REST ─────
-  // Uses the same project URL / anon key as admin mode.
-  // Row-level security on the products table must allow:
-  //   FOR SELECT USING (auth.uid() = user_id OR true)  ← public read
-  // The profiles table is read to get business name + phone.
+  // ── Connect to Supabase ──────────────────────────────────────────
   let supabase;
   try {
     await waitForSupabaseReady(5000);
     supabase = window.__QS_SUPABASE && window.__QS_SUPABASE.client;
-    if (!supabase) throw new Error('Supabase client unavailable');
-  } catch (e) {
-    setStatus('<span style="color:var(--danger)">Could not connect to store. Please try again.</span>');
+    if (!supabase) throw new Error('no client');
+  } catch(e) {
+    document.getElementById('catGrid').innerHTML =
+      `<div id="catEmpty"><div class="empty-icon">⚠️</div><p>Could not connect to store</p><small>Please try again later</small></div>`;
     return;
   }
 
-  // Fetch business profile (name, seller_phone) — no auth required
-  let businessName = 'Store', sellerPhone = '';
+  // ── Fetch profile ────────────────────────────────────────────────
+  let businessName = 'Store', sellerPhone = urlPhone;
   try {
-    const { data: profile } = await supabase
+    const { data: prof } = await supabase
       .from('profiles')
-      .select('business_name, seller_phone')
+      .select('name, business_name')
       .eq('id', storeId)
       .single();
-    if (profile) {
-      businessName = profile.business_name || 'Store';
-      sellerPhone  = (profile.seller_phone || '').replace(/\D/g, '');
+    if (prof) {
+      businessName = prof.business_name || prof.name || 'Store';
     }
-  } catch (_) { /* non-fatal — business name stays as fallback */ }
+  } catch(_) {}
 
-  const bizEl = $('catalogBusiness');
-  if (bizEl) bizEl.textContent = businessName;
-  const subEl = $('catalogSubtitle');
-  if (subEl) subEl.textContent = 'Browse and order via WhatsApp';
+  // Update header
+  document.getElementById('catBusinessName').textContent = businessName;
+  document.getElementById('catAvatar').textContent = initials(businessName);
+  document.getElementById('catTagline').innerHTML =
+    `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#10b981;box-shadow:0 0 0 3px rgba(16,185,129,0.25);margin-right:6px;"></span>` +
+    `${esc(businessName)} · Browse &amp; order via WhatsApp`;
+  document.title = businessName + ' — QuickShop Store';
 
-  // Fetch products for this store — public read
-  let products = [];
+  // ── Fetch products ───────────────────────────────────────────────
+  let allProducts = [];
   try {
     const { data, error } = await supabase
       .from('products')
@@ -3374,75 +3586,106 @@ async function initPublicCatalog(storeId) {
       .eq('user_id', storeId)
       .order('name', { ascending: true });
     if (error) throw error;
-    products = data || [];
-  } catch (e) {
-    setStatus('<span style="color:var(--danger)">Failed to load products: ' + escapeHtml(e.message) + '</span>');
+    allProducts = data || [];
+  } catch(e) {
+    document.getElementById('catGrid').innerHTML =
+      `<div id="catEmpty"><div class="empty-icon">😕</div><p>Failed to load products</p><small>${esc(e.message)}</small></div>`;
     return;
   }
 
-  const listEl = $('catalogList');
-  if (!listEl) return;
-  listEl.innerHTML = '';
-  setStatus('');
+  // ── Build category chips ─────────────────────────────────────────
+  const categories = ['All', ...new Set(allProducts.map(p => p.category || 'Other').filter(Boolean))];
+  let activeCategory = 'All';
+  let searchQuery = '';
 
-  if (!products.length) {
-    listEl.innerHTML = `<div style="text-align:center;padding:40px 0;color:var(--text-muted);">No products available right now.</div>`;
-    return;
-  }
+  const chipsEl = document.getElementById('catChipsInner');
+  categories.forEach(cat => {
+    const chip = document.createElement('button');
+    chip.className = 'cat-chip' + (cat === 'All' ? ' active' : '');
+    chip.textContent = cat;
+    chip.addEventListener('click', () => {
+      activeCategory = cat;
+      chipsEl.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      renderGrid();
+    });
+    chipsEl.appendChild(chip);
+  });
 
-  // ── Render each product with WhatsApp CTA ────────────────────────
-  for (const p of products) {
-    if (typeof p.qty === 'number' && p.qty <= 0) continue; // hide out-of-stock
+  // ── Search handler ───────────────────────────────────────────────
+  document.getElementById('catSearch').addEventListener('input', function() {
+    searchQuery = this.value.toLowerCase().trim();
+    renderGrid();
+  });
 
-    const card = document.createElement('div');
-    card.className = 'product-card';
+  // ── Render grid ──────────────────────────────────────────────────
+  function renderGrid() {
+    const grid = document.getElementById('catGrid');
+    const filtered = allProducts.filter(p => {
+      if (activeCategory !== 'All' && (p.category || 'Other') !== activeCategory) return false;
+      if (searchQuery && !(p.name||'').toLowerCase().includes(searchQuery)) return false;
+      return true;
+    });
 
-    // Thumbnail
-    const thumb = document.createElement('div');
-    thumb.className = 'p-thumb';
-    if (p.image) {
-      const img = document.createElement('img');
-      img.src = p.image;
-      img.alt = p.name || '';
-      img.crossOrigin = 'anonymous';
-      thumb.appendChild(img);
-    } else {
-      thumb.textContent = (p.icon && p.icon.length)
-        ? p.icon
-        : (p.name || '').split(' ').map(s => s[0]).slice(0, 2).join('').toUpperCase();
+    if (!filtered.length) {
+      grid.innerHTML = `<div id="catEmpty">
+        <div class="empty-icon">🔍</div>
+        <p>No products found</p>
+        <small>Try a different category or search term</small>
+      </div>`;
+      return;
     }
 
-    // Info
-    const info = document.createElement('div');
-    info.className = 'p-info';
-    const nameEl = document.createElement('div');
-    nameEl.className = 'p-name';
-    nameEl.textContent = p.name || 'Unnamed';
-    const priceEl = document.createElement('div');
-    priceEl.className = 'p-sub';
-    priceEl.textContent = fmt(p.price || 0) + (p.qty != null ? ` • ${p.qty} in stock` : '');
-    info.appendChild(nameEl);
-    info.appendChild(priceEl);
+    grid.innerHTML = '';
+    filtered.forEach(p => {
+      const inStock = typeof p.qty !== 'number' || p.qty > 0;
+      const lowStock = typeof p.qty === 'number' && p.qty > 0 && p.qty <= 3;
 
-    // WhatsApp CTA — replaces the admin "Sell" button
-    const actions = document.createElement('div');
-    actions.className = 'p-actions';
-    const waBtn = document.createElement('a');
-    waBtn.className = 'btn-sell';
-    waBtn.style.cssText = 'text-decoration:none;display:inline-flex;align-items:center;gap:6px;';
-    // Encode message: "I want to order Product Name (₦price)"
-    const waText = encodeURIComponent(`I want to order ${p.name} (${fmt(p.price || 0)})`);
-    waBtn.href = sellerPhone
-      ? `https://wa.me/${sellerPhone}?text=${waText}`
-      : `https://wa.me/?text=${waText}`;
-    waBtn.target = '_blank';
-    waBtn.rel = 'noopener noreferrer';
-    waBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg> Order`;
-    actions.appendChild(waBtn);
+      const card = document.createElement('div');
+      card.className = 'cat-card';
 
-    card.appendChild(thumb);
-    card.appendChild(info);
-    card.appendChild(actions);
-    listEl.appendChild(card);
+      // Thumb
+      let thumbContent = '';
+      if (p.image_url) {
+        thumbContent = `<img src="${esc(p.image_url)}" alt="${esc(p.name)}" loading="lazy" />`;
+      } else {
+        const emoji = p.icon && p.icon.length ? esc(p.icon)
+          : (p.name||'').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+        thumbContent = `<span style="font-size:${p.icon ? '44' : '22'}px;font-weight:800;color:#059669;">${emoji}</span>`;
+      }
+      const badge = !inStock
+        ? `<span class="cat-badge-oos">Sold Out</span>`
+        : lowStock
+        ? `<span class="cat-badge-low">Only ${p.qty} left</span>`
+        : '';
+
+      // WhatsApp link — goes direct to vendor's number
+      const waText = encodeURIComponent(`Hi! I'd like to order *${p.name}* — ${fmt(p.price || 0)}`);
+      const waHref = sellerPhone
+        ? `https://wa.me/${sellerPhone}?text=${waText}`
+        : `https://wa.me/?text=${waText}`;
+
+      const waIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>`;
+
+      card.innerHTML = `
+        <div class="cat-thumb">${thumbContent}${badge}</div>
+        <div class="cat-info">
+          <div class="cat-cat">${esc(p.category || 'General')}</div>
+          <div class="cat-name">${esc(p.name || 'Product')}</div>
+          <div class="cat-price">${fmt(p.price || 0)}</div>
+        </div>
+        <div class="cat-footer">
+          <a href="${inStock ? waHref : '#'}"
+             class="cat-wa-btn${inStock ? '' : ' disabled'}"
+             ${inStock ? 'target="_blank" rel="noopener noreferrer"' : ''}>
+            ${waIcon} ${inStock ? 'Order on WhatsApp' : 'Out of Stock'}
+          </a>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
   }
+
+  renderGrid();
 }
+
