@@ -44,10 +44,15 @@ function initApp() {
   const log = IS_PROD ? () => {} : (...a) => console.log('[QS]', ...a);
   const errlog = (...a) => console.error('[QS Error]', ...a);
   
-  function escapeHtml(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function escapeHtml(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
   function uid() { return 'p' + Math.random().toString(36).slice(2,9) + Date.now().toString(36); }
-  window.n = function(v) { const num = Number(v || 0); return isNaN(num) ? 0 : num; }
-  window.fmt = function(v) { return '₦' + Number(v || 0).toLocaleString('en-NG'); }
+  const _n = function(v) { const num = Number(v || 0); return isNaN(num) ? 0 : num; };
+  const _fmt = function(v) { return '₦' + Number(v || 0).toLocaleString('en-NG'); };
+  // Expose as read-only globals — external scripts cannot overwrite these
+  try {
+    Object.defineProperty(window, 'n',   { value: _n,   writable: false, configurable: false, enumerable: false });
+    Object.defineProperty(window, 'fmt', { value: _fmt, writable: false, configurable: false, enumerable: false });
+  } catch(_) { window.n = _n; window.fmt = _fmt; } // fallback for edge environments
   function startOfDay(ts) { const d = new Date(ts); d.setHours(0,0,0,0); return d.getTime(); }
   function formatShortDate(ts) { return new Date(ts).toLocaleDateString('en-GB', { month:'short', day:'numeric' }); }
   function formatDateTime(ts) { return new Date(ts).toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }); }
@@ -366,8 +371,8 @@ function handleTouchEnd() {
     
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        const qtyInput = $('modalQty');
-        if (qtyInput) { qtyInput.focus(); qtyInput.select(); }
+        const qty = $('modalQty');
+        if (qty) { qty.focus(); qty.select(); }
       });
     });
   }
@@ -382,12 +387,12 @@ function handleTouchEnd() {
 
   function initKeyboardDetection() {
     document.addEventListener('focusin', (e) => {
-      if (['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) document.body.classList.add('keyboard-open');
+      if (['','TEXTAREA','SELECT'].includes(e.target.tagName)) document.body.classList.add('keyboard-open');
     });
     document.addEventListener('focusout', () => {
       setTimeout(() => {
         const active = document.activeElement;
-        if (!active || !['INPUT','TEXTAREA','SELECT'].includes(active.tagName)) document.body.classList.remove('keyboard-open');
+        if (!active || !['','TEXTAREA','SELECT'].includes(active.tagName)) document.body.classList.remove('keyboard-open');
       }, 50);
     });
   }
@@ -397,8 +402,8 @@ function handleTouchEnd() {
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
       const modKey = isMac ? e.metaKey : e.ctrlKey;
       if (e.key === 'Escape') { hideModal(); hideAddForm(); stopScanner(); closeFullAuditLog(); closeInventoryInsight(); return; }
-      if (['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
-      if (modKey && e.key === 'k') { e.preventDefault(); const h = $('headerSearchInput'); if (h) h.focus(); }
+      if (['','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
+      if (modKey && e.key === 'k') { e.preventDefault(); const h = $('headerSearch'); if (h) h.focus(); }
       if (modKey && e.key === 'n') {
         e.preventDefault();
         const v = document.querySelector('.panel.active')?.id;
@@ -436,9 +441,9 @@ function handleTouchEnd() {
   function hideAllAuthForms() {
     ['loginForm','signupForm','resetForm','verificationNotice','authLoading'].forEach(id => { const el = $(id); if (el) el.style.display = 'none'; });
   }
-  function showLoginForm() { hideAllAuthForms(); const el = $('loginForm'); if (el) el.style.display = 'flex'; clearAuthInputs(); }
-  function showSignupForm() { hideAllAuthForms(); const el = $('signupForm'); if (el) el.style.display = 'flex'; clearAuthInputs(); }
-  function showResetForm() { hideAllAuthForms(); const el = $('resetForm'); if (el) el.style.display = 'flex'; clearAuthInputs(); }
+  function showLoginForm() { hideAllAuthForms(); const el = $('loginForm'); if (el) el.style.display = 'flex'; clearAuths(); }
+  function showSignupForm() { hideAllAuthForms(); const el = $('signupForm'); if (el) el.style.display = 'flex'; clearAuths(); }
+  function showResetForm() { hideAllAuthForms(); const el = $('resetForm'); if (el) el.style.display = 'flex'; clearAuths(); }
   function showVerificationNotice(email) {
     hideAllAuthForms();
     const el = $('verificationNotice');
@@ -447,7 +452,7 @@ function handleTouchEnd() {
     if (emailEl) emailEl.textContent = email || (getUser() && getUser().email) || '';
   }
   function showAuthLoading() { hideAllAuthForms(); const el = $('authLoading'); if (el) el.style.display = 'flex'; }
-  function clearAuthInputs() {
+  function clearAuths() {
     ['loginEmail','loginPass','signupName','signupBusiness','signupEmail','signupPass','signupPassConfirm','resetEmail'].forEach(id => {
       const el = $(id);
       if (el) { el.value = ''; el.classList.remove('error'); }
@@ -476,13 +481,22 @@ function handleTouchEnd() {
 
   function validateEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); }
 
-  function showInventoryInsight(html) {
+  function showInventoryInsight(node) {
   const view = $('inventoryInsightView');
   const content = $('inventoryInsightsContent');
   if (!view || !content) return;
 
-  // 1. Reset the text inside
-  content.innerHTML = html;
+  // 1. Safely replace content using DOM node — never innerHTML with a string
+  while (content.firstChild) content.removeChild(content.firstChild);
+  if (node instanceof Node) {
+    content.appendChild(node);
+  } else {
+    // Safety fallback: node arrived as unexpected type, show plain text only
+    const fallback = document.createElement('div');
+    fallback.style.cssText = 'padding:16px;color:rgba(255,255,255,0.5);font-size:13px;';
+    fallback.textContent = 'Insights could not be displayed.';
+    content.appendChild(fallback);
+  }
 
   // 2. Make the background SOLID Obsidian (No transparency)
   view.style.cssText = `
@@ -599,21 +613,92 @@ function handleTouchEnd() {
     finally { isSyncing = false; }
   }
 
+  // ── LOCAL STATE SCHEMA VALIDATOR ────────────────────────────────────────────
+  // Validates and sanitises every field loaded from localStorage so that a
+  // tampered device or browser extension cannot inject malicious content.
+  function validateLoadedState(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const MAX_ID = 64, MAX_NAME = 200, MAX_CAT = 50, MAX_STR = 500;
+    function safeId(v)       { return (typeof v === 'string' && /^[a-zA-Z0-9_\-]{1,64}$/.test(v)) ? v : null; }
+    function safeStr(v, max) { return typeof v === 'string' ? v.slice(0, max) : ''; }
+    function safeNum(v)      { const n = Number(v); return (isFinite(n) && n >= 0) ? n : 0; }
+
+    const products = Array.isArray(raw.products) ? raw.products.filter(p => {
+      return p && typeof p === 'object' && safeId(p.id) && typeof p.name === 'string' && p.name.trim();
+    }).map(p => ({
+      id: safeId(p.id),
+      name: safeStr(p.name, MAX_NAME),
+      barcode: typeof p.barcode === 'string' ? safeStr(p.barcode, 64) : null,
+      price: safeNum(p.price),
+      cost: safeNum(p.cost),
+      qty: safeNum(p.qty),
+      category: safeStr(p.category || 'Others', MAX_CAT),
+      image: typeof p.image === 'string' ? safeStr(p.image, 4096) : null,
+      icon: typeof p.icon === 'string' ? safeStr(p.icon, 10) : null,
+      createdAt: typeof p.createdAt === 'number' ? p.createdAt : Date.now(),
+      updatedAt: typeof p.updatedAt === 'number' ? p.updatedAt : Date.now()
+    })) : [];
+
+    const sales = Array.isArray(raw.sales) ? raw.sales.filter(s =>
+      s && typeof s === 'object' && safeId(s.id)
+    ).map(s => ({
+      id: safeId(s.id),
+      productId: safeStr(s.productId || '', MAX_ID),
+      qty: safeNum(s.qty),
+      price: safeNum(s.price),
+      cost: safeNum(s.cost),
+      ts: typeof s.ts === 'number' ? s.ts : Date.now()
+    })) : [];
+
+    const notes = Array.isArray(raw.notes) ? raw.notes.filter(n =>
+      n && typeof n === 'object'
+    ).map(n => ({
+      id: typeof n.id === 'string' ? safeStr(n.id, MAX_ID) : uid(),
+      title: safeStr(n.title || '', MAX_NAME),
+      content: safeStr(n.content || '', 10000),
+      ts: typeof n.ts === 'number' ? n.ts : Date.now()
+    })) : [];
+
+    const categories = Array.isArray(raw.categories)
+      ? raw.categories.filter(c => typeof c === 'string' && c.trim()).map(c => safeStr(c.trim(), MAX_CAT))
+      : [];
+
+    const logs = Array.isArray(raw.logs) ? raw.logs.filter(l =>
+      l && typeof l === 'object'
+    ).slice(0, 500).map(l => ({
+      id: typeof l.id === 'string' ? safeStr(l.id, MAX_ID) : uid(),
+      action: safeStr(l.action || '', 50),
+      details: safeStr(l.details || '', MAX_STR),
+      user: safeStr(l.user || '', 100),
+      ts: typeof l.ts === 'number' ? l.ts : Date.now()
+    })) : [];
+
+    return { products, sales, notes, categories, logs, changes: [] };
+  }
+  // ────────────────────────────────────────────────────────────────────────────
+
   function loadLocalData(uid = null) {
     const localKey = uid ? LOCAL_KEY_PREFIX + uid : LOCAL_KEY_PREFIX + 'anon';
-    let localState = { products: [], sales: [], changes: [], notes: [], categories: [], logs: [] };
+    let validated = null;
     try {
       const localRaw = localStorage.getItem(localKey);
-      if (localRaw) localState = JSON.parse(localRaw);
+      if (localRaw) {
+        const parsed = JSON.parse(localRaw);
+        validated = validateLoadedState(parsed);
+      }
     } catch (e) { errlog('Failed to parse local data', e); }
-    state = {
-      products: localState.products || [],
-      sales: localState.sales || [],
-      changes: localState.changes || [],
-      notes: localState.notes || [],
-      categories: (localState.categories && localState.categories.length > 0) ? localState.categories : [...DEFAULT_CATEGORIES],
-      logs: localState.logs || []
-    };
+    if (validated) {
+      state = {
+        products: validated.products,
+        sales: validated.sales,
+        changes: [],
+        notes: validated.notes,
+        categories: validated.categories.length > 0 ? validated.categories : [...DEFAULT_CATEGORIES],
+        logs: validated.logs
+      };
+    } else {
+      state = { products: [], sales: [], changes: [], notes: [], categories: [...DEFAULT_CATEGORIES], logs: [] };
+    }
     initAppUI();
   }
 
@@ -779,12 +864,9 @@ function handleTouchEnd() {
           }
         });
       }
+      const _btnLoginEl = $('btnLogin');
+      if (_btnLoginEl) _btnLoginEl.addEventListener('click', handleLoginSubmit);
     }
-
-    // FIX 8: Duplicate btnLogin click handler removed.
-    // The loginForm 'submit' listener above (handleLoginSubmit) covers button clicks
-    // because btnLogin is type="submit" inside the form (or the Enter-key listeners handle it).
-    // Adding a second identical click listener caused double-submission on every Enter key press.
 
     const btnShowSignup = $('btnShowSignup');
     if (btnShowSignup) btnShowSignup.addEventListener('click', showSignupForm);
@@ -839,11 +921,11 @@ function handleTouchEnd() {
       };
 
       signupForm.addEventListener('submit', handleSignupSubmit);
-      const signupInputs = ['signupName', 'signupBusiness', 'signupEmail', 'signupPass', 'signupPassConfirm'];
-      signupInputs.forEach(inputId => {
-        const input = $(inputId);
-        if (input) {
-          input.addEventListener('keydown', (e) => {
+      const signups = ['signupName', 'signupBusiness', 'signupEmail', 'signupPass', 'signupPassConfirm'];
+      signups.forEach(Id => {
+        const el = $(Id);
+        if (el) {
+          el.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
               handleSignupSubmit();
@@ -851,46 +933,8 @@ function handleTouchEnd() {
           });
         }
       });
-    }
-
-    const btnSignup = $('btnSignup');
-    if (btnSignup) {
-      btnSignup.addEventListener('click', async function () {
-        const signupName = $('signupName'), signupBusiness = $('signupBusiness');
-        const signupEmail = $('signupEmail'), signupPass = $('signupPass'), signupPassConfirm = $('signupPassConfirm');
-        const name = (signupName && signupName.value || '').trim();
-        const business = (signupBusiness && signupBusiness.value || '').trim();
-        const email = (signupEmail && signupEmail.value || '').trim();
-        const pass = (signupPass && signupPass.value) || '';
-        const passConfirm = (signupPassConfirm && signupPassConfirm.value) || '';
-        if (!name) { toast('Please enter your full name', 'error'); if (signupName) signupName.classList.add('error'); return; }
-        if (!validateEmail(email)) { toast('Please enter a valid email', 'error'); if (signupEmail) signupEmail.classList.add('error'); return; }
-        if (!pass || pass.length < 6) { toast('Password must be at least 6 characters', 'error'); if (signupPass) signupPass.classList.add('error'); return; }
-        if (pass !== passConfirm) { toast('Passwords do not match', 'error'); if (signupPassConfirm) signupPassConfirm.classList.add('error'); return; }
-        try {
-          showAuthLoading(); disableBtn(btnSignup, true);
-          const supabase = getClient();
-          if (!supabase) throw new Error('Supabase not initialized');
-          const { data, error } = await supabase.auth.signUp({
-            email: email, password: pass,
-            options: { data: { full_name: name, business_name: business || null } }
-          });
-          if (error) throw error;
-          const user = data.user;
-          const profile = { uid: user.id, name, businessName: business || null, email: user.email, createdAt: Date.now() };
-          await setUserProfile(user.id, profile);
-          showVerificationNotice(email);
-          toast('Account created — verification email sent. Please verify before logging in.');
-        } catch (e) {
-          errlog('signup error', e);
-          showSignupForm();
-          toast(mapAuthError(e), 'error');
-        } finally {
-          disableBtn(btnSignup, false);
-          const authLoading = $('authLoading');
-          if (authLoading) authLoading.style.display = 'none';
-        }
-      });
+      const _btnSignupEl = $('btnSignup');
+      if (_btnSignupEl) _btnSignupEl.addEventListener('click', handleSignupSubmit);
     }
 
     const btnSendReset = $('btnSendReset');
@@ -1244,10 +1288,10 @@ function handleTouchEnd() {
   function scheduleRenderProducts() { clearTimeout(searchTimer); searchTimer = setTimeout(renderProducts, 120); }
 
   function renderProducts() {
-    const productListEl = $('productList'), headerSearchInput = $('headerSearchInput');
+    const productListEl = $('productList'), headerSearch = $('headerSearch');
     if (!productListEl) return;
     productListEl.innerHTML = '';
-    const q = (headerSearchInput && headerSearchInput.value.trim().toLowerCase()) || '';
+    const q = (headerSearch && headerSearch.value.trim().toLowerCase()) || '';
     const items = (state.products || []).filter(p => {
       if (activeCategory !== 'All' && (p.category || 'Others') !== activeCategory) return false;
       if (q && !(((p.name || '').toLowerCase().includes(q)) || ((p.barcode || '') + '').includes(q))) return false;
@@ -1488,12 +1532,13 @@ function handleTouchEnd() {
     if (!p) return;
     p.qty = (typeof p.qty === 'number' ? p.qty : 0) + qty;
     const change = { type: 'updateProduct', item: p };
-    if (window.qsdb && window.qsdb.addPendingChange) await window.qsdb.addPendingChange(change);
     state.changes.push({ type: 'add', productId, qty, ts: Date.now() });
     addActivityLog('Restock', `Added ${qty} to ${p.name}`);
-    await saveState();
+    // Optimistic: render immediately, sync in background
     renderInventory(); renderProducts(); renderDashboard();
     toast(`Added ${qty} to ${p.name}`);
+    if (window.qsdb && window.qsdb.addPendingChange) await window.qsdb.addPendingChange(change);
+    saveState().catch(e => errlog('restock sync', e));
   }
 
   async function doSell(productId, qty) {
@@ -1502,15 +1547,16 @@ function handleTouchEnd() {
     p.qty = p.qty - qty;
     const newSale = { productId, qty, price: window.n(p.price), cost: window.n(p.cost), ts: Date.now(), id: uid() };
     state.sales.push(newSale);
+    state.changes.push({ type: 'sell', productId, qty, ts: newSale.ts });
+    addActivityLog('Sale', `Sold ${qty} x ${p.name} (${fmt(newSale.price * qty)})`);
+    // Optimistic: render immediately, sync in background
+    renderInventory(); renderProducts(); renderDashboard();
+    toast(`Sold ${qty} × ${p.name}`);
     if (window.qsdb && window.qsdb.addPendingChange) {
       await window.qsdb.addPendingChange({ type: 'addSale', item: newSale });
       await window.qsdb.addPendingChange({ type: 'updateProduct', item: p });
     }
-    state.changes.push({ type: 'sell', productId, qty, ts: newSale.ts });
-    addActivityLog('Sale', `Sold ${qty} x ${p.name} (${fmt(newSale.price * qty)})`);
-    await saveState();
-    renderInventory(); renderProducts(); renderDashboard();
-    toast(`Sold ${qty} × ${p.name}`);
+    saveState().catch(e => errlog('sell sync', e));
   }
 
   async function undoLastFor(productId) {
@@ -1524,10 +1570,10 @@ function handleTouchEnd() {
           addActivityLog('Undo', `Reverted Restock of ${ch.qty} ${p.name}`);
         }
         state.changes.splice(i,1);
-        if (p && window.qsdb && window.qsdb.addPendingChange) await window.qsdb.addPendingChange({ type: 'updateProduct', item: p });
-        await saveState();
         renderInventory(); renderProducts(); renderDashboard();
         toast(`Reverted add of ${ch.qty}`);
+        if (p && window.qsdb && window.qsdb.addPendingChange) await window.qsdb.addPendingChange({ type: 'updateProduct', item: p });
+        saveState().catch(e => errlog('undo sync', e));
         return;
       }
       if (ch.type === 'sell') {
@@ -1535,17 +1581,17 @@ function handleTouchEnd() {
           const s = state.sales[j];
           if (s.productId === productId && s.qty === ch.qty && Math.abs(s.ts - ch.ts) < 120000) {
             const saleToRemove = state.sales.splice(j,1)[0];
-            if (saleToRemove && window.qsdb && window.qsdb.addPendingChange) await window.qsdb.addPendingChange({ type: 'removeSale', item: saleToRemove });
             const p = state.products.find(x => x.id === productId);
             if (p) {
               p.qty = (typeof p.qty === 'number' ? p.qty + ch.qty : ch.qty);
               addActivityLog('Undo', `Reverted Sale of ${ch.qty} ${p.name}`);
-              if (window.qsdb && window.qsdb.addPendingChange) await window.qsdb.addPendingChange({ type: 'updateProduct', item: p });
             }
             state.changes.splice(i,1);
-            await saveState();
             renderInventory(); renderProducts(); renderDashboard();
             toast(`Reverted sale of ${ch.qty}`);
+            if (saleToRemove && window.qsdb && window.qsdb.addPendingChange) await window.qsdb.addPendingChange({ type: 'removeSale', item: saleToRemove });
+            if (p && window.qsdb && window.qsdb.addPendingChange) await window.qsdb.addPendingChange({ type: 'updateProduct', item: p });
+            saveState().catch(e => errlog('undo sync', e));
             return;
           }
         }
@@ -1557,16 +1603,16 @@ function handleTouchEnd() {
   }
 
   function clearInvImage() {
-    const invImgInput = $('invImg'), invImgPreview = $('invImgPreview'), invImgPreviewImg = $('invImgPreviewImg');
-    try { if (invImgInput) invImgInput.value = ''; } catch(e) {}
+    const invImg = $('invImg'), invImgPreview = $('invImgPreview'), invImgPreviewImg = $('invImgPreviewImg');
+    try { if (invImg) invImg.value = ''; } catch(e) {}
     if (invImgPreview) invImgPreview.style.display = 'none';
     if (invImgPreviewImg) invImgPreviewImg.src = '';
   }
 
   function initImageUploadHandler() {
-    const invImgInput = $('invImg');
-    if (!invImgInput) return;
-    invImgInput.addEventListener('change', async function (e) {
+    const invImg = $('invImg');
+    if (!invImg) return;
+    invImg.addEventListener('change', async function (e) {
       const file = e.target.files && e.target.files[0];
       if (!file) { clearInvImage(); return; }
       const MAX_IMG_SIZE = 5 * 1024 * 1024;
@@ -1664,6 +1710,10 @@ function handleTouchEnd() {
           return;
         }
         let product, syncType;
+        const origBtnText = addProductBtn.textContent;
+        addProductBtn.disabled = true;
+        addProductBtn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px"><span style="width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;display:inline-block"></span> Saving…</span>';
+        try {
         if (editingProductId) {
           product = state.products.find(p => p.id === editingProductId);
           if (!product) { toast('Product to update not found', 'error'); return; }
@@ -1685,20 +1735,26 @@ function handleTouchEnd() {
           addActivityLog('Create', `Created product: ${name}`);
           toast('Product saved');
         }
-        if (window.qsdb && window.qsdb.addPendingChange) await window.qsdb.addPendingChange({ type: syncType, item: product });
-        await saveState();
+        // Optimistic: hide form + render immediately
         hideAddForm();
         renderInventory(); renderProducts(); renderDashboard(); renderChips();
+        // Background sync
+        if (window.qsdb && window.qsdb.addPendingChange) await window.qsdb.addPendingChange({ type: syncType, item: product });
+        saveState().catch(e => errlog('addProduct sync', e));
+        } finally {
+          addProductBtn.disabled = false;
+          addProductBtn.textContent = origBtnText;
+        }
       });
     }
     if (cancelProductBtn) cancelProductBtn.addEventListener('click', hideAddForm);
   }
 
   function renderInventory() {
-    const inventoryListEl = $('inventoryList'), headerSearchInput = $('headerSearchInput');
+    const inventoryListEl = $('inventoryList'), headerSearch = $('headerSearch');
     if (!inventoryListEl) return;
     inventoryListEl.innerHTML = '';
-    const q = (headerSearchInput && headerSearchInput.value.trim().toLowerCase()) || '';
+    const q = (headerSearch && headerSearch.value.trim().toLowerCase()) || '';
     const items = (state.products || []).filter(p => {
       if (q && !(((p.name || '').toLowerCase().includes(q)) || ((p.barcode || '') + '').includes(q))) return false;
       return true;
@@ -1834,9 +1890,9 @@ function handleTouchEnd() {
     state.changes = state.changes.filter(c => c.productId !== id);
     if (window.qsdb && window.qsdb.addPendingChange) await window.qsdb.addPendingChange({ type: 'removeProduct', item: productToRemove });
     addActivityLog('Delete', `Deleted product: ${p.name}`);
-    await saveState();
     renderInventory(); renderProducts(); renderDashboard(); renderChips();
     toast('Product deleted');
+    saveState().catch(e => errlog('delete sync', e));
   }
 
   function renderDashboard() {
@@ -1913,11 +1969,11 @@ function handleTouchEnd() {
 
   function initNotesHandlers() {
     // Notes IDs used in the DOM:
-    //   noteTitle       → title text input
-    //   noteContentInput → content textarea  (DOM id; NOT "noteContent")
+    //   noteTitle       → title text 
+    //   noteContent → content textarea  (DOM id; NOT "noteContent")
     //   noteSaveBtn     → save / update button
     //   noteCancelBtn   → cancel edit button
-    // All references below use noteContentInput to match the DOM.
+    // All references below use noteContent to match the DOM.
 
     const notesListEl = $('notesList');
     if (notesListEl) {
@@ -1928,18 +1984,21 @@ function handleTouchEnd() {
           const note = state.notes.find(n=>n.id===id);
           if (!note) return;
           const noteTitle = $('noteTitleInput');
-          const noteContent = $('noteContentInput');  // FIX: was 'noteContent', DOM id is noteContentInput
+          const noteContent = $('noteContentInput');  // FIX: was 'noteContent', DOM id is noteContent
           const noteSaveBtn = $('noteSaveBtn');
           if (noteTitle) noteTitle.value = note.title || '';
-          if (noteContent) noteContent.value = note.content || '';  // FIX: was null-ref crash when element not found
-          setActiveView('notes', true);
-          // MUST be after setActiveView — cleanupViewState() inside it wipes editingNoteId
+          if (noteContent) noteContent.value = note.content || '';
           editingNoteId = note.id;
-          if ($('noteSaveBtn')) $('noteSaveBtn').textContent = 'Update Note';
-          const nt2 = $('noteTitleInput'), nc2 = $('noteContentInput');
-          if (nt2) nt2.value = note.title || '';
-          if (nc2) nc2.value = note.content || '';
-          setTimeout(() => { try { $('noteContentInput') && $('noteContentInput').focus(); } catch(e){} }, 100);
+          if (noteSaveBtn) noteSaveBtn.textContent = 'Update Note';
+          // Scroll the input into view so the user sees the form is ready
+          const noteForm = noteTitle ? noteTitle.closest('.note-form') : null;
+          const scrollTarget = noteForm || noteTitle;
+          if (scrollTarget) {
+            setTimeout(() => {
+              scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              if (noteContent) noteContent.focus();
+            }, 50);
+          }
           return;
         }
         const delBtn = e.target.closest('[data-delete-note]');
@@ -1968,7 +2027,7 @@ function handleTouchEnd() {
       noteSaveBtn.addEventListener('click', async function () {
         if (_noteSaving) return; // debounce guard
 
-        // FIX: resolve to the correct DOM id 'noteContentInput'
+        // FIX: resolve to the correct DOM id 'noteContent'
         const noteTitle = $('noteTitleInput');
         const noteContent = $('noteContentInput');  // FIX: was 'noteContent'
 
@@ -1979,25 +2038,29 @@ function handleTouchEnd() {
         if (!content) { toast('Please write something in the note', 'error'); return; }
 
         _noteSaving = true;
+        const originalBtnText = noteSaveBtn.textContent;
         noteSaveBtn.disabled = true;
+        noteSaveBtn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px"><span style="width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;display:inline-block"></span> Saving…</span>';
         try {
+          // ── OPTIMISTIC: mutate state, clear form, render immediately ──
           if (editingNoteId) {
             const note = state.notes.find(n=>n.id===editingNoteId);
             if (note) { note.title = title; note.content = content; note.ts = Date.now(); }
             editingNoteId = null;
             noteSaveBtn.textContent = 'Save Note';
-            toast('✓ Note updated', 'info');
           } else {
             state.notes.push({ id: uid(), title, content, ts: Date.now() });
-            toast('Note saved');
           }
           if (noteTitle) noteTitle.value = '';
           if (noteContent) noteContent.value = '';
-          renderNotes(); // immediate — don't block UI on network sync
-          await saveState();
+          renderNotes(); // instant UI update — don't wait for network
+          toast(originalBtnText === 'Update Note' ? '✓ Note updated' : '✓ Note saved');
+          // ── BACKGROUND SYNC ──
+          saveState().catch(e => { errlog('note sync error', e); toast('Sync failed — changes saved locally', 'error'); });
         } finally {
           _noteSaving = false;
           noteSaveBtn.disabled = false;
+          noteSaveBtn.textContent = 'Save Note';
         }
       });
     }
@@ -2071,42 +2134,116 @@ function handleTouchEnd() {
   }
 
   function renderCategoryEditor() {
-    const container = $('categoryEditorArea');
-    if (!container) return;
-    container.innerHTML = `
-      <div style="font-weight: 600; margin-bottom: 8px; color: var(--text-primary);">Manage Categories</div>
-      <div class="small" style="margin-bottom: 12px; color: var(--text-secondary);">Add, rename, or delete categories. Deleting a category will move its products to "Others".</div>
-      <div id="categoryList" style="display: flex; flex-direction: column; gap: 8px;"></div>
-      <div class="add-row" style="margin-top: 16px;">
-        <input id="newCategoryName" type="text" placeholder="New category name" style="flex: 1;" class="auth-input" />
-        <button id="addCategoryBtn" class="save-btn">Add</button>
-      </div>
-    `;
-    const listEl = $('categoryList');
-    const categoriesToEdit = state.categories.filter(c => c.toLowerCase() !== 'others');
-    categoriesToEdit.forEach(cat => {
+    const listEl = $('qs-cat-list');
+    const addBtn = $('addCategoryBtn');
+    if (!listEl) return;
+
+    listEl.innerHTML = '';
+
+    const cats = state.categories.filter(c => c.toLowerCase() !== 'others');
+
+    if (cats.length === 0) {
+      listEl.innerHTML = `<div style="padding:14px 16px;font-size:13px;color:var(--text-muted);">No custom categories yet. Add one below.</div>`;
+    }
+
+    cats.forEach(cat => {
       const row = document.createElement('div');
-      row.className = 'add-row';
+      row.className = 'qs-cat-row';
+      row.dataset.cat = cat;
       row.innerHTML = `
-        <input type="text" class="auth-input category-name-input" data-original-name="${escapeHtml(cat)}" value="${escapeHtml(cat)}" style="flex: 1;" />
-        <button class="btn-undo category-rename-btn" data-original-name="${escapeHtml(cat)}">Rename</button>
-        <button class="btn-delete category-delete-btn" data-name="${escapeHtml(cat)}">Delete</button>
+        <span class="qs-cat-dot"></span>
+        <span class="qs-cat-name">${escapeHtml(cat)}</span>
+        <button class="qs-cat-icon-btn qs-cat-edit-trigger" title="Rename" aria-label="Rename ${escapeHtml(cat)}">✏️</button>
+        <button class="qs-cat-icon-btn danger qs-cat-delete-btn" title="Delete" aria-label="Delete ${escapeHtml(cat)}" data-name="${escapeHtml(cat)}">🗑</button>
       `;
+
+      // Inline rename on pencil click
+      row.querySelector('.qs-cat-edit-trigger').addEventListener('click', function () {
+        const nameSpan = row.querySelector('.qs-cat-name');
+        const currentName = row.dataset.cat;
+        row.innerHTML = `
+          <span class="qs-cat-dot" style="background:#f59e0b;"></span>
+          <input class="qs-cat-edit-input" value="${escapeHtml(currentName)}" maxlength="40" aria-label="Rename ${escapeHtml(currentName)}" />
+          <button class="qs-cat-save-btn qs-cat-save-trigger">Save</button>
+          <button class="qs-cat-cancel-btn qs-cat-cancel-trigger">Cancel</button>
+        `;
+        const inp = row.querySelector('.qs-cat-edit-input');
+        inp.focus();
+        inp.select();
+
+        // Save
+        async function doSave() {
+          const newName = inp.value.trim();
+          const oldName = currentName;
+          if (!newName) { toast('Name cannot be empty', 'error'); inp.focus(); return; }
+          if (newName.toLowerCase() === oldName.toLowerCase()) {
+            renderCategoryEditor(); return;
+          }
+          if (state.categories.find(c => c.toLowerCase() === newName.toLowerCase())) {
+            toast('That name already exists', 'error'); inp.focus(); return;
+          }
+          if (newName.toLowerCase() === 'others') {
+            toast('Cannot rename to "Others"', 'error'); inp.focus(); return;
+          }
+          const idx = state.categories.findIndex(c => c.toLowerCase() === oldName.toLowerCase());
+          if (idx > -1) state.categories[idx] = newName;
+          state.products.forEach(p => { if (p.category === oldName) p.category = newName; });
+          await saveState();
+          toast('Category renamed ✓');
+          renderCategoryEditor(); renderChips(); renderProducts(); renderInventory();
+        }
+
+        row.querySelector('.qs-cat-save-trigger').addEventListener('click', doSave);
+        row.querySelector('.qs-cat-cancel-trigger').addEventListener('click', () => renderCategoryEditor());
+        inp.addEventListener('keydown', e => {
+          if (e.key === 'Enter') doSave();
+          if (e.key === 'Escape') renderCategoryEditor();
+        });
+      });
+
+      // Delete
+      row.querySelector('.qs-cat-delete-btn').addEventListener('click', async function () {
+        const name = this.dataset.name;
+        const confirmed = await showConfirm({
+          title: `Delete "${name}"?`,
+          message: `Products in "${name}" will move to "Others". This cannot be undone.`,
+          okText: 'Delete',
+          okDanger: true
+        });
+        if (!confirmed) return;
+        state.categories = state.categories.filter(c => c.toLowerCase() !== name.toLowerCase());
+        state.products.forEach(p => { if (p.category === name) p.category = 'Others'; });
+        await saveState();
+        toast('Category deleted');
+        renderCategoryEditor(); renderChips(); renderProducts(); renderInventory();
+      });
+
       listEl.appendChild(row);
     });
-    const addCategoryBtn = $('addCategoryBtn');
-    if (addCategoryBtn) addCategoryBtn.addEventListener('click', handleAddCategory);
-    container.querySelectorAll('.category-rename-btn').forEach(btn => btn.addEventListener('click', handleRenameCategory));
-    container.querySelectorAll('.category-delete-btn').forEach(btn => btn.addEventListener('click', handleDeleteCategory));
+
+    // Add new
+    if (addBtn) {
+      addBtn.onclick = null;
+      addBtn.addEventListener('click', handleAddCategory);
+    }
+    const newCatInput = $('newCategoryName');
+    if (newCatInput) {
+      newCatInput.onkeydown = null;
+      newCatInput.addEventListener('keydown', e => { if (e.key === 'Enter') handleAddCategory(); });
+    }
+
     renderActivityLog();
   }
+
+
 
   async function handleAddCategory() {
     const input = $('newCategoryName');
     const btn = $('addCategoryBtn');
     if (!input) return;
-    const newName = input.value.trim();
+    const newName = input.value.trim().slice(0, 50); // enforce max 50 chars
     if (!newName) { toast('Please enter a category name', 'error'); return; }
+    if (newName.length > 50) { toast('Category name too long (max 50 chars)', 'error'); return; }
     // Guard: prevent duplicate creation if user clicks while saveState is in-flight
     if (state.categories.find(c => c.toLowerCase() === newName.toLowerCase())) {
       toast('Category already exists', 'error'); return;
@@ -2170,14 +2307,14 @@ function handleTouchEnd() {
     hideAddForm();
     stopScanner();
     closeInventoryInsight();
-    const headerSearchInput = $('headerSearchInput');
-    if (headerSearchInput) headerSearchInput.value = '';
+    const headerSearch = $('headerSearch');
+    if (headerSearch) headerSearch.value = '';
   }
 
   function setActiveView(view, resetScroll = false) {
     cleanupViewState();
     const navButtons = Array.from(document.querySelectorAll('.nav-btn'));
-    const headerSearchInput = $('headerSearchInput'), chipsEl = $('chips');
+    const headerSearch = $('headerSearch'), chipsEl = $('chips');
     navButtons.forEach(b => {
       const isActive = b.dataset.view === view;
       b.classList.toggle('active', isActive);
@@ -2187,9 +2324,9 @@ function handleTouchEnd() {
     const panel = $(view + 'Panel');
     if (panel) panel.classList.add('active');
     const isHome = view === 'home', isInv = view === 'inventory';
-    if (headerSearchInput) {
-      headerSearchInput.style.display = (isHome || isInv) ? 'block' : 'none';
-      headerSearchInput.value = '';
+    if (headerSearch) {
+      headerSearch.style.display = (isHome || isInv) ? 'block' : 'none';
+      headerSearch.value = '';
     }
     if (chipsEl) chipsEl.style.display = isHome ? 'flex' : 'none';
     if (view === 'reports') renderReports();
@@ -2604,449 +2741,344 @@ function handleTouchEnd() {
 function generateAdvancedInsights(returnHtml = false) {
   try {
     const s = state || { products: [], sales: [], notes: [] };
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'display:flex;flex-direction:column;gap:16px;padding:20px 0;';
 
-    const last30Days = Date.now() - (30 * 24 * 60 * 60 * 1000);
-    const last60Days = Date.now() - (60 * 24 * 60 * 60 * 1000);
-    const salesLast30 = s.sales.filter(sale => sale.ts >= last30Days);
-    const revenueLast30 = salesLast30.reduce((sum, sale) => sum + (sale.price * sale.qty), 0);
-    const profitLast30 = salesLast30.reduce((sum, sale) => sum + ((sale.price - sale.cost) * sale.qty), 0);
+    // ── TIME WINDOWS ────────────────────────────────────────────────
+    const now = Date.now();
+    const D = 24 * 60 * 60 * 1000;
+    const last7   = now - 7  * D;
+    const last14  = now - 14 * D;
+    const last30  = now - 30 * D;
+    const last60  = now - 60 * D;
+    const prev7   = now - 14 * D; // window: prev7 → last7
 
-    // EXECUTIVE SUMMARY
-    const criticalIssues = [];
-    const highPriority = [];
-    const opportunities = [];
+    // ── HELPERS ─────────────────────────────────────────────────────
+    function salesInWindow(productId, from, to = now) {
+      return s.sales.filter(x => x.productId === productId && x.ts >= from && x.ts < to);
+    }
+    function totalQty(sales)    { return sales.reduce((a,x) => a + x.qty, 0); }
+    function totalProfit(sales) { return sales.reduce((a,x) => a + ((x.price - x.cost) * x.qty), 0); }
+    function totalRevenue(sales){ return sales.reduce((a,x) => a + (x.price * x.qty), 0); }
 
-    // Collect all issues
+    const allSales7   = s.sales.filter(x => x.ts >= last7);
+    const allSalesPrev7 = s.sales.filter(x => x.ts >= prev7 && x.ts < last7);
+    const rev7   = totalRevenue(allSales7);
+    const rev7p  = totalRevenue(allSalesPrev7);
+    const prof7  = totalProfit(allSales7);
+    const txCount7 = allSales7.length;
+
+    // ── COMPUTE 6 SIGNALS ───────────────────────────────────────────
+
+    // 1. RESTOCK NOW — products about to run dry
+    const restockAlerts = [];
     s.products.forEach(p => {
+      const recent = salesInWindow(p.id, last30);
+      const qty30 = totalQty(recent);
+      if (qty30 === 0) return;
+      const dailyRate = qty30 / 30;
       if (p.qty === 0) {
-        const last30Sales = s.sales.filter(sale => sale.productId === p.id && sale.ts >= last30Days);
-        const dailyVelocity = last30Sales.length > 0 ? last30Sales.reduce((sum, sale) => sum + sale.qty, 0) / 30 : 0;
-        const lostPerDay = Math.round(dailyVelocity * p.price);
-        const reorderQty = Math.ceil(dailyVelocity * 14);
-        criticalIssues.push({ type: 'outofstock', product: p, lostPerDay, reorderQty, dailyVelocity });
+        const lostDaily = Math.round(dailyRate * p.price);
+        restockAlerts.push({ product: p, daysLeft: 0, dailyRate, lostDaily, suggest: Math.ceil(dailyRate * 14) });
       } else {
-        const pred = calculateStockoutPrediction(p);
-        if (pred && pred.daysUntilStockout <= 2) {
-          const lostPerDay = Math.round(pred.dailyRate * p.price);
-          const reorderQty = Math.ceil(pred.dailyRate * 14);
-          criticalIssues.push({ type: 'stockout48', product: p, pred, lostPerDay, reorderQty });
-        } else if (pred && pred.daysUntilStockout <= 7) {
-          const reorderQty = Math.ceil(pred.dailyRate * 14);
-          highPriority.push({ type: 'stockout7', product: p, pred, reorderQty });
+        const daysLeft = Math.floor(p.qty / dailyRate);
+        if (daysLeft <= 7) {
+          restockAlerts.push({ product: p, daysLeft, dailyRate, lostDaily: Math.round(dailyRate * p.price), suggest: Math.ceil(dailyRate * 14) });
         }
       }
+    });
+    restockAlerts.sort((a,b) => a.daysLeft - b.daysLeft);
 
-      const margin = p.price > 0 ? ((p.price - p.cost) / p.price) * 100 : 0;
-      if (margin < 0) {
-        const lossPerUnit = p.cost - p.price;
-        const monthlySales = s.sales.filter(sale => sale.productId === p.id && sale.ts >= last30Days).reduce((sum, sale) => sum + sale.qty, 0);
-        const monthlyLoss = lossPerUnit * monthlySales;
-        const suggestedPrice = Math.ceil(p.cost * 1.3);
-        criticalIssues.push({ type: 'negativemargin', product: p, lossPerUnit, monthlyLoss, suggestedPrice });
-      }
-
-      const hasSales = s.sales.some(sale => sale.productId === p.id && sale.ts >= last60Days);
-      if (!hasSales && p.qty > 0) {
-        const tiedCapital = p.cost * p.qty;
-        const opportunityCost = Math.round((tiedCapital * 0.15) / 365 * 60);
-        const discountPrice = Math.floor(p.price * 0.85);
-        highPriority.push({ type: 'deadstock', product: p, tiedCapital, opportunityCost, discountPrice });
-      }
-
-      const industryBenchmarks = { Groceries: 35, Drinks: 40, Clothing: 50, Snacks: 30, Others: 30 };
-      const benchmark = industryBenchmarks[p.category] || 30;
-      if (margin > 0 && margin < benchmark - 5) {
-        const suggestedPrice = Math.ceil(p.cost / (1 - benchmark / 100));
-        const priceIncrease = suggestedPrice - p.price;
-        const monthlySales = s.sales.filter(sale => sale.productId === p.id && sale.ts >= last30Days).reduce((sum, sale) => sum + sale.qty, 0);
-        const monthlyImpact = priceIncrease * monthlySales;
-        highPriority.push({ type: 'lowmargin', product: p, margin, benchmark, suggestedPrice, monthlyImpact });
+    // 2. PROFIT LEAK — selling a lot but making little
+    const profitLeaks = [];
+    s.products.forEach(p => {
+      if (p.price <= 0 || p.cost <= 0) return;
+      const recent = salesInWindow(p.id, last30);
+      const qty30 = totalQty(recent);
+      if (qty30 < 3) return; // ignore rarely sold items
+      const margin = ((p.price - p.cost) / p.price) * 100;
+      const totalProfitMade = totalProfit(recent);
+      const totalRevMade = totalRevenue(recent);
+      if (margin < 15 && totalRevMade > 0) {
+        const betterPrice = Math.ceil(p.cost / 0.75); // targets 25% margin
+        const gainIfFixed = (betterPrice - p.price) * qty30;
+        profitLeaks.push({ product: p, margin, qty30, totalProfitMade, totalRevMade, betterPrice, gainIfFixed });
       }
     });
+    profitLeaks.sort((a,b) => b.totalRevMade - a.totalRevMade); // worst leak by revenue first
 
-    const deadStockValue = highPriority.filter(i => i.type === 'deadstock').reduce((sum, i) => sum + i.tiedCapital, 0);
-    const projectedRevenue = revenueLast30 * 1.0;
-
-    const execSection = document.createElement('div');
-    execSection.style.cssText = 'background:linear-gradient(135deg,rgba(16,185,129,0.15),rgba(99,102,241,0.15));padding:16px;border-radius:10px;border:2px solid var(--accent-emerald);';
-    execSection.innerHTML = `
-      <div style="font-size:20px;font-weight:700;margin-bottom:12px;color:#fff;">📋 Executive Summary</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <div style="background:rgba(0,0,0,0.3);padding:10px;border-radius:6px;">
-          <div class="small" style="color:rgba(255,255,255,0.7);">Critical Issues</div>
-          <div style="font-size:24px;font-weight:700;color:#ef4444;">${criticalIssues.length}</div>
-        </div>
-        <div style="background:rgba(0,0,0,0.3);padding:10px;border-radius:6px;">
-          <div class="small" style="color:rgba(255,255,255,0.7);">High Priority</div>
-          <div style="font-size:24px;font-weight:700;color:#f59e0b;">${highPriority.length}</div>
-        </div>
-        <div style="background:rgba(0,0,0,0.3);padding:10px;border-radius:6px;">
-          <div class="small" style="color:rgba(255,255,255,0.7);">30-Day Revenue</div>
-          <div style="font-size:18px;font-weight:700;color:#10b981;">${fmt(revenueLast30)}</div>
-        </div>
-        <div style="background:rgba(0,0,0,0.3);padding:10px;border-radius:6px;">
-          <div class="small" style="color:rgba(255,255,255,0.7);">Capital at Risk</div>
-          <div style="font-size:18px;font-weight:700;color:#f59e0b;">${fmt(deadStockValue)}</div>
-        </div>
-      </div>
-    `;
-    wrap.appendChild(execSection);
-
-    // CRITICAL ACTIONS - GROUPED
-    if (criticalIssues.length > 0) {
-      const criticalSection = document.createElement('div');
-      criticalSection.style.cssText = 'background:rgba(239,68,68,0.1);padding:16px;border-radius:10px;border-left:4px solid #ef4444;';
-      criticalSection.innerHTML = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;"><span style="font-size:18px;">🔴</span><span style="font-size:18px;font-weight:700;color:#fff;">Critical Actions (24-48hrs)</span></div>';
-
-      const outOfStock = criticalIssues.filter(i => i.type === 'outofstock');
-      const stockout48 = criticalIssues.filter(i => i.type === 'stockout48');
-      const negativeMargin = criticalIssues.filter(i => i.type === 'negativemargin');
-
-      if (outOfStock.length > 0) {
-        const totalLoss = outOfStock.reduce((sum, i) => sum + i.lostPerDay, 0);
-        const box = document.createElement('div');
-        box.style.cssText = 'background:rgba(0,0,0,0.4);padding:12px;border-radius:8px;margin-bottom:10px;border:1px solid rgba(239,68,68,0.3);';
-        box.innerHTML = `
-          <div style="font-weight:700;font-size:15px;color:#fff;margin-bottom:6px;">⛔ Out of Stock Now (${outOfStock.length} items)</div>
-          <div class="small" style="color:rgba(255,255,255,0.8);margin-bottom:10px;">Combined revenue loss: <strong>${fmt(totalLoss)}/day</strong></div>
-        `;
-        
-        outOfStock.forEach(item => {
-          const row = document.createElement('div');
-          row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(239,68,68,0.15);border-radius:6px;margin-bottom:6px;';
-          row.innerHTML = `
-            <div style="flex:1;">
-              <div style="font-weight:600;color:#fff;font-size:14px;">${escapeHtml(item.product.name)}</div>
-              <div class="small" style="color:rgba(255,255,255,0.7);">Loss: ${fmt(item.lostPerDay)}/day • Reorder: ${item.reorderQty} units</div>
-            </div>
-            <button class="ai-action-btn" data-action="restock" data-product-id="${item.product.id}" data-qty="${item.reorderQty}" style="background:#10b981;border:0;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;white-space:nowrap;">
-              📦 ${item.reorderQty}
-            </button>
-          `;
-          box.appendChild(row);
-        });
-
-        criticalSection.appendChild(box);
-      }
-
-      if (stockout48.length > 0) {
-        const box = document.createElement('div');
-        box.style.cssText = 'background:rgba(0,0,0,0.4);padding:12px;border-radius:8px;margin-bottom:10px;border:1px solid rgba(239,68,68,0.3);';
-        box.innerHTML = `<div style="font-weight:700;font-size:15px;color:#fff;margin-bottom:10px;">🔴 Stockout in 48hrs (${stockout48.length} items)</div>`;
-        
-        stockout48.forEach(item => {
-          const row = document.createElement('div');
-          row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(239,68,68,0.15);border-radius:6px;margin-bottom:6px;';
-          row.innerHTML = `
-            <div style="flex:1;">
-              <div style="font-weight:600;color:#fff;font-size:14px;">${escapeHtml(item.product.name)}</div>
-              <div class="small" style="color:rgba(255,255,255,0.7);">${item.pred.daysUntilStockout} days left • ${item.pred.dailyRate.toFixed(1)}/day • ${item.product.qty} in stock</div>
-            </div>
-            <button class="ai-action-btn" data-action="restock" data-product-id="${item.product.id}" data-qty="${item.reorderQty}" style="background:#10b981;border:0;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;white-space:nowrap;">
-              📦 ${item.reorderQty}
-            </button>
-          `;
-          box.appendChild(row);
-        });
-
-        criticalSection.appendChild(box);
-      }
-
-      if (negativeMargin.length > 0) {
-        const totalLoss = negativeMargin.reduce((sum, i) => sum + i.monthlyLoss, 0);
-        const box = document.createElement('div');
-        box.style.cssText = 'background:rgba(0,0,0,0.4);padding:12px;border-radius:8px;margin-bottom:10px;border:1px solid rgba(239,68,68,0.3);';
-        box.innerHTML = `
-          <div style="font-weight:700;font-size:15px;color:#fff;margin-bottom:6px;">💸 Negative Margins (${negativeMargin.length} items)</div>
-          <div class="small" style="color:rgba(255,255,255,0.8);margin-bottom:10px;">Monthly loss: <strong>${fmt(totalLoss)}</strong></div>
-        `;
-        
-        negativeMargin.forEach(item => {
-          const row = document.createElement('div');
-          row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(239,68,68,0.15);border-radius:6px;margin-bottom:6px;';
-          row.innerHTML = `
-            <div style="flex:1;">
-              <div style="font-weight:600;color:#fff;font-size:14px;">${escapeHtml(item.product.name)}</div>
-              <div class="small" style="color:rgba(255,255,255,0.7);">Cost: ${fmt(item.product.cost)} > Price: ${fmt(item.product.price)} • Fix: ${fmt(item.suggestedPrice)}</div>
-            </div>
-            <button class="ai-action-btn" data-action="edit" data-product-id="${item.product.id}" data-price="${item.suggestedPrice}" style="background:#10b981;border:0;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;white-space:nowrap;">
-              💰 Fix
-            </button>
-          `;
-          box.appendChild(row);
-        });
-
-        criticalSection.appendChild(box);
-      }
-
-      wrap.appendChild(criticalSection);
-    }
-
-    // HIGH PRIORITY - GROUPED
-    if (highPriority.length > 0) {
-      const highSection = document.createElement('div');
-      highSection.style.cssText = 'background:rgba(245,158,11,0.1);padding:16px;border-radius:10px;border-left:4px solid #f59e0b;';
-      highSection.innerHTML = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;"><span style="font-size:18px;">🟡</span><span style="font-size:18px;font-weight:700;color:#fff;">High Priority (This Week)</span></div>';
-
-      const stockout7 = highPriority.filter(i => i.type === 'stockout7');
-      const deadStock = highPriority.filter(i => i.type === 'deadstock');
-      const lowMargin = highPriority.filter(i => i.type === 'lowmargin');
-
-      if (stockout7.length > 0) {
-        const box = document.createElement('div');
-        box.style.cssText = 'background:rgba(0,0,0,0.4);padding:12px;border-radius:8px;margin-bottom:10px;border:1px solid rgba(245,158,11,0.3);';
-        box.innerHTML = `<div style="font-weight:700;font-size:15px;color:#fff;margin-bottom:10px;">⚠️ Stockout in 3-7 days (${stockout7.length} items)</div>`;
-        
-        stockout7.forEach(item => {
-          const row = document.createElement('div');
-          row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(245,158,11,0.15);border-radius:6px;margin-bottom:6px;';
-          row.innerHTML = `
-            <div style="flex:1;">
-              <div style="font-weight:600;color:#fff;font-size:14px;">${escapeHtml(item.product.name)}</div>
-              <div class="small" style="color:rgba(255,255,255,0.7);">${item.pred.daysUntilStockout} days • ${item.pred.dailyRate.toFixed(1)}/day • ${item.product.qty} stock</div>
-            </div>
-            <button class="ai-action-btn" data-action="restock" data-product-id="${item.product.id}" data-qty="${item.reorderQty}" style="background:#f59e0b;border:0;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;white-space:nowrap;">
-              📦 ${item.reorderQty}
-            </button>
-          `;
-          box.appendChild(row);
-        });
-
-        highSection.appendChild(box);
-      }
-
-      if (deadStock.length > 0) {
-        const totalTied = deadStock.reduce((sum, i) => sum + i.tiedCapital, 0);
-        const box = document.createElement('div');
-        box.style.cssText = 'background:rgba(0,0,0,0.4);padding:12px;border-radius:8px;margin-bottom:10px;border:1px solid rgba(245,158,11,0.3);';
-        box.innerHTML = `
-          <div style="font-weight:700;font-size:15px;color:#fff;margin-bottom:6px;">💤 Dead Stock 60+ days (${deadStock.length} items)</div>
-          <div class="small" style="color:rgba(255,255,255,0.8);margin-bottom:10px;">Capital tied up: <strong>${fmt(totalTied)}</strong></div>
-        `;
-        
-        deadStock.forEach(item => {
-          const row = document.createElement('div');
-          row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(245,158,11,0.15);border-radius:6px;margin-bottom:6px;';
-          row.innerHTML = `
-            <div style="flex:1;">
-              <div style="font-weight:600;color:#fff;font-size:14px;">${escapeHtml(item.product.name)}</div>
-              <div class="small" style="color:rgba(255,255,255,0.7);">${fmt(item.tiedCapital)} locked • Flash sale: ${fmt(item.discountPrice)} (15% off)</div>
-            </div>
-            <button class="ai-action-btn" data-action="edit" data-product-id="${item.product.id}" data-price="${item.discountPrice}" style="background:#f59e0b;border:0;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;white-space:nowrap;">
-              🏷️ Discount
-            </button>
-          `;
-          box.appendChild(row);
-        });
-
-        highSection.appendChild(box);
-      }
-
-      if (lowMargin.length > 0) {
-        const totalImpact = lowMargin.reduce((sum, i) => sum + i.monthlyImpact, 0);
-        const box = document.createElement('div');
-        box.style.cssText = 'background:rgba(0,0,0,0.4);padding:12px;border-radius:8px;margin-bottom:10px;border:1px solid rgba(245,158,11,0.3);';
-        box.innerHTML = `
-          <div style="font-weight:700;font-size:15px;color:#fff;margin-bottom:6px;">📊 Below Industry Margin (${lowMargin.length} items)</div>
-          <div class="small" style="color:rgba(255,255,255,0.8);margin-bottom:10px;">Potential monthly gain: <strong>${fmt(totalImpact)}</strong></div>
-        `;
-        
-        lowMargin.forEach(item => {
-          const row = document.createElement('div');
-          row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(245,158,11,0.15);border-radius:6px;margin-bottom:6px;';
-          row.innerHTML = `
-            <div style="flex:1;">
-              <div style="font-weight:600;color:#fff;font-size:14px;">${escapeHtml(item.product.name)}</div>
-              <div class="small" style="color:rgba(255,255,255,0.7);">${item.margin.toFixed(1)}% vs ${item.benchmark}% industry • Optimize: ${fmt(item.suggestedPrice)}</div>
-            </div>
-            <button class="ai-action-btn" data-action="edit" data-product-id="${item.product.id}" data-price="${item.suggestedPrice}" style="background:#f59e0b;border:0;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;white-space:nowrap;">
-              💰 Optimize
-            </button>
-          `;
-          box.appendChild(row);
-        });
-
-        highSection.appendChild(box);
-      }
-
-      wrap.appendChild(highSection);
-    }
-
-    // OPPORTUNITIES - COMPACT
-    const oppSection = document.createElement('div');
-    oppSection.style.cssText = 'background:rgba(16,185,129,0.1);padding:16px;border-radius:10px;border-left:4px solid #10b981;';
-    oppSection.innerHTML = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;"><span style="font-size:18px;">🟢</span><span style="font-size:18px;font-weight:700;color:#fff;">Growth Opportunities</span></div>';
-    
-    const productPerformance = {};
-    s.sales.forEach(sale => {
-      if (!productPerformance[sale.productId]) {
-        productPerformance[sale.productId] = { qty: 0, profit: 0 };
-      }
-      productPerformance[sale.productId].qty += sale.qty;
-      productPerformance[sale.productId].profit += ((sale.price - sale.cost) * sale.qty);
+    // 3. SILENT BESTSELLER — most profitable product this week
+    const perfMap = {};
+    s.sales.filter(x => x.ts >= last7).forEach(sale => {
+      if (!perfMap[sale.productId]) perfMap[sale.productId] = { profit: 0, qty: 0, revenue: 0 };
+      perfMap[sale.productId].profit  += (sale.price - sale.cost) * sale.qty;
+      perfMap[sale.productId].qty     += sale.qty;
+      perfMap[sale.productId].revenue += sale.price * sale.qty;
     });
-    
-    const topPerformers = Object.entries(productPerformance).sort((a, b) => b[1].profit - a[1].profit).slice(0, 3);
-    
-    if (topPerformers.length > 0) {
-      const box = document.createElement('div');
-      box.style.cssText = 'background:rgba(0,0,0,0.4);padding:12px;border-radius:8px;margin-bottom:10px;border:1px solid rgba(16,185,129,0.3);';
-      box.innerHTML = '<div style="font-weight:700;font-size:15px;color:#fff;margin-bottom:8px;">🏆 Top 3 Profit Drivers</div>';
-      
-      topPerformers.forEach((entry, idx) => {
-        const [productId, metrics] = entry;
-        const product = s.products.find(p => p.id === productId);
-        const productName = product ? product.name : 'Unknown';
-        const medal = ['🥇', '🥈', '🥉'][idx];
-        
-        box.innerHTML += `
-          <div style="display:flex;justify-content:space-between;padding:6px 8px;background:rgba(16,185,129,0.1);border-radius:6px;margin-bottom:4px;">
-            <span style="font-size:14px;color:#fff;">${medal} ${escapeHtml(productName)}</span>
-            <span style="font-weight:700;color:#10b981;font-size:14px;">${fmt(metrics.profit)}</span>
+    const topByProfit = Object.entries(perfMap)
+      .map(([id, m]) => ({ product: s.products.find(p => p.id === id), ...m }))
+      .filter(x => x.product)
+      .sort((a,b) => b.profit - a.profit)
+      .slice(0, 3);
+
+    // 4. CASH TRAP — dead stock, money sitting idle
+    const cashTraps = [];
+    s.products.forEach(p => {
+      if (p.qty <= 0) return;
+      const age = now - (p.createdAt || now);
+      if (age < 60 * D) return; // skip new products
+      const hasSales = s.sales.some(x => x.productId === p.id && x.ts >= last60);
+      if (!hasSales) {
+        const trapped = p.cost * p.qty;
+        const clearPrice = Math.floor(p.price * 0.82);
+        cashTraps.push({ product: p, trapped, clearPrice, qty: p.qty });
+      }
+    });
+    cashTraps.sort((a,b) => b.trapped - a.trapped);
+    const totalTrapped = cashTraps.reduce((a,x) => a + x.trapped, 0);
+
+    // 5. REVENUE TREND — this week vs last week
+    const trendPct = rev7p > 0 ? ((rev7 - rev7p) / rev7p) * 100 : null;
+    const trendUp = trendPct !== null && trendPct >= 0;
+    // Best day this week
+    const dayTotals = {};
+    allSales7.forEach(sale => {
+      const day = new Date(sale.ts).toLocaleDateString('en-NG', { weekday: 'short' });
+      dayTotals[day] = (dayTotals[day] || 0) + (sale.price * sale.qty);
+    });
+    const bestDay = Object.entries(dayTotals).sort((a,b) => b[1]-a[1])[0];
+
+    // 6. PRICE OPPORTUNITY — fast-selling but low margin
+    const priceOpps = [];
+    s.products.forEach(p => {
+      if (p.price <= 0 || p.cost <= 0) return;
+      const recent = salesInWindow(p.id, last7);
+      const qty7 = totalQty(recent);
+      if (qty7 < 2) return; // must be selling fast enough
+      const margin = ((p.price - p.cost) / p.price) * 100;
+      if (margin < 25) {
+        const nudgePrice = Math.ceil(p.price * 1.10); // +10% nudge
+        const extraProfit = (nudgePrice - p.price) * qty7 * 4; // projected monthly
+        priceOpps.push({ product: p, margin, qty7, nudgePrice, extraProfit });
+      }
+    });
+    priceOpps.sort((a,b) => b.extraProfit - a.extraProfit);
+
+    // ── BUILD UI ────────────────────────────────────────────────────
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;flex-direction:column;gap:12px;padding:4px 0 16px;';
+
+    function card(borderColor, bg) {
+      const el = document.createElement('div');
+      el.style.cssText = `border-radius:14px;overflow:hidden;border:1px solid ${borderColor};background:${bg};`;
+      return el;
+    }
+    function cardHeader(emoji, title, subtitle, color) {
+      return `<div style="padding:14px 16px 10px;border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:${subtitle ? 2 : 0}px;">
+          <span style="font-size:18px;line-height:1;">${emoji}</span>
+          <span style="font-weight:700;font-size:15px;color:#fff;">${title}</span>
+        </div>
+        ${subtitle ? `<div style="font-size:12px;color:rgba(255,255,255,0.5);margin-left:26px;">${subtitle}</div>` : ''}
+      </div>`;
+    }
+    function row(left, right, bg = 'rgba(255,255,255,0.04)') {
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 16px;background:${bg};border-radius:8px;margin:0 10px 6px;">
+        <div style="flex:1;min-width:0;">${left}</div>
+        <div style="flex-shrink:0;margin-left:10px;">${right}</div>
+      </div>`;
+    }
+    function actionBtn(label, color, dataAttrs) {
+      return `<button class="ai-action-btn" ${dataAttrs} style="background:${color};border:0;padding:6px 13px;border-radius:8px;font-size:12px;font-weight:700;color:#fff;cursor:pointer;white-space:nowrap;letter-spacing:0.2px;">${label}</button>`;
+    }
+    function productLine(name, sub) {
+      return `<div style="font-weight:600;font-size:13.5px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;">${escapeHtml(name)}</div>
+              <div style="font-size:11.5px;color:rgba(255,255,255,0.5);margin-top:1px;">${sub}</div>`;
+    }
+
+    // ── CARD 1: REVENUE TREND ───────────────────────────────────────
+    const trendCard = card('rgba(99,102,241,0.35)', 'rgba(99,102,241,0.08)');
+    let trendBody = '';
+    if (trendPct !== null) {
+      const arrow = trendUp ? '↑' : '↓';
+      const trendColor = trendUp ? '#10b981' : '#ef4444';
+      trendBody = `
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px 14px 14px;">
+          <div style="background:rgba(0,0,0,0.25);border-radius:10px;padding:10px 8px;text-align:center;">
+            <div style="font-size:11px;color:rgba(255,255,255,0.45);margin-bottom:4px;">This week</div>
+            <div style="font-size:16px;font-weight:700;color:#10b981;">${fmt(rev7)}</div>
           </div>
-        `;
+          <div style="background:rgba(0,0,0,0.25);border-radius:10px;padding:10px 8px;text-align:center;">
+            <div style="font-size:11px;color:rgba(255,255,255,0.45);margin-bottom:4px;">Profit</div>
+            <div style="font-size:16px;font-weight:700;color:#6366f1;">${fmt(prof7)}</div>
+          </div>
+          <div style="background:rgba(0,0,0,0.25);border-radius:10px;padding:10px 8px;text-align:center;">
+            <div style="font-size:11px;color:rgba(255,255,255,0.45);margin-bottom:4px;">vs last week</div>
+            <div style="font-size:16px;font-weight:700;color:${trendColor};">${arrow}${Math.abs(trendPct).toFixed(0)}%</div>
+          </div>
+        </div>
+        ${bestDay ? `<div style="padding:0 14px 12px;font-size:12px;color:rgba(255,255,255,0.5);">Best day: <span style="color:#fff;font-weight:600;">${bestDay[0]} — ${fmt(bestDay[1])}</span> &nbsp;·&nbsp; ${txCount7} sales this week</div>` : ''}
+      `;
+    } else if (rev7 > 0) {
+      trendBody = `<div style="padding:12px 16px 14px;font-size:13px;color:rgba(255,255,255,0.7);">Revenue this week: <strong style="color:#10b981;">${fmt(rev7)}</strong>. Keep recording sales to unlock trend comparison.</div>`;
+    } else {
+      trendBody = `<div style="padding:12px 16px 14px;font-size:13px;color:rgba(255,255,255,0.5);">No sales recorded yet this week. Tap the sell button when you make a sale.</div>`;
+    }
+    trendCard.innerHTML = cardHeader('📈', 'This week', null, '#6366f1') + trendBody;
+    wrap.appendChild(trendCard);
+
+    // ── CARD 2: RESTOCK NOW ─────────────────────────────────────────
+    if (restockAlerts.length > 0) {
+      const rc = card('rgba(239,68,68,0.35)', 'rgba(239,68,68,0.07)');
+      const outNow = restockAlerts.filter(x => x.daysLeft === 0);
+      const soon   = restockAlerts.filter(x => x.daysLeft > 0);
+      let rbody = '';
+      if (outNow.length) {
+        rbody += `<div style="padding:8px 14px 4px;font-size:11px;font-weight:700;color:rgba(239,68,68,0.9);letter-spacing:0.5px;text-transform:uppercase;">Out now</div>`;
+        outNow.slice(0,3).forEach(a => {
+          rbody += row(
+            productLine(a.product.name, `Losing ~${fmt(a.lostDaily)}/day`),
+            actionBtn(`Restock ${a.suggest}`, '#ef4444', `data-action="restock" data-product-id="${escapeHtml(a.product.id)}" data-qty="${a.suggest}"`)
+          );
+        });
+      }
+      if (soon.length) {
+        rbody += `<div style="padding:8px 14px 4px;font-size:11px;font-weight:700;color:rgba(245,158,11,0.9);letter-spacing:0.5px;text-transform:uppercase;">Running low</div>`;
+        soon.slice(0,3).forEach(a => {
+          rbody += row(
+            productLine(a.product.name, `${a.daysLeft} day${a.daysLeft===1?'':'s'} left · ${a.product.qty} in stock`),
+            actionBtn(`Order ${a.suggest}`, '#f59e0b', `data-action="restock" data-product-id="${escapeHtml(a.product.id)}" data-qty="${a.suggest}"`)
+          );
+        });
+      }
+      rbody += '<div style="height:6px;"></div>';
+      rc.innerHTML = cardHeader('📦', 'Restock Now', `${restockAlerts.length} product${restockAlerts.length>1?'s':''} need attention`, '#ef4444') + rbody;
+      wrap.appendChild(rc);
+    }
+
+    // ── CARD 3: PROFIT LEAK ─────────────────────────────────────────
+    if (profitLeaks.length > 0) {
+      const pc = card('rgba(239,68,68,0.25)', 'rgba(239,68,68,0.05)');
+      let pbody = '';
+      profitLeaks.slice(0,3).forEach(l => {
+        pbody += row(
+          productLine(l.product.name, `${l.margin.toFixed(0)}% margin · sold ${l.qty30}× · only ${fmt(l.totalProfitMade)} profit`),
+          actionBtn('Fix Price', '#ef4444', `data-action="edit" data-product-id="${escapeHtml(l.product.id)}" data-price="${l.betterPrice}"`)
+        );
       });
-      
-      oppSection.appendChild(box);
+      const totalLeak = profitLeaks.slice(0,3).reduce((a,x) => a + (x.gainIfFixed), 0);
+      pbody += `<div style="padding:6px 16px 12px;font-size:12px;color:rgba(255,255,255,0.45);">Fixing these could add ~${fmt(totalLeak)} profit this month</div>`;
+      pc.innerHTML = cardHeader('💸', 'Profit Leak', 'High sales, low margin — cost is eating your money', '#ef4444') + pbody;
+      wrap.appendChild(pc);
     }
 
-    const avgTransactionValue = s.sales.length > 0 ? s.sales.reduce((sum, sale) => sum + (sale.price * sale.qty), 0) / s.sales.length : 0;
-    if (avgTransactionValue > 0) {
-      const targetValue = Math.ceil(avgTransactionValue * 1.2);
-      const monthlyImpact = (targetValue - avgTransactionValue) * salesLast30.length;
-      
-      const box = document.createElement('div');
-      box.style.cssText = 'background:rgba(0,0,0,0.4);padding:12px;border-radius:8px;margin-bottom:10px;border:1px solid rgba(16,185,129,0.3);';
-      box.innerHTML = `
-        <div style="font-weight:700;font-size:15px;color:#fff;margin-bottom:6px;">🛒 Transaction Value Opportunity</div>
-        <div class="small" style="color:rgba(255,255,255,0.9);line-height:1.5;">
-          Current avg: ${fmt(avgTransactionValue)} → Target: ${fmt(targetValue)} (+20%)<br>
-          Monthly impact: <strong>${fmt(monthlyImpact)}</strong> via bundling & upselling
-        </div>
-      `;
-      oppSection.appendChild(box);
+    // ── CARD 4: SILENT BESTSELLER ───────────────────────────────────
+    if (topByProfit.length > 0) {
+      const bc = card('rgba(16,185,129,0.3)', 'rgba(16,185,129,0.07)');
+      let bbody = `<div style="padding:8px 14px 6px;font-size:11px;font-weight:700;color:rgba(16,185,129,0.8);letter-spacing:0.5px;text-transform:uppercase;">Most profitable this week</div>`;
+      const medals = ['🥇','🥈','🥉'];
+      topByProfit.forEach((x, i) => {
+        bbody += row(
+          `<div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:16px;">${medals[i]}</span>
+            <div>
+              <div style="font-weight:600;font-size:13.5px;color:#fff;">${escapeHtml(x.product.name)}</div>
+              <div style="font-size:11.5px;color:rgba(255,255,255,0.45);">${x.qty} sold · ${fmt(x.revenue)} revenue</div>
+            </div>
+          </div>`,
+          `<span style="font-weight:700;font-size:14px;color:#10b981;">${fmt(x.profit)}</span>`,
+          'transparent'
+        );
+      });
+      const top1 = topByProfit[0];
+      bbody += `<div style="padding:2px 16px 12px;font-size:12px;color:rgba(255,255,255,0.45);">${escapeHtml(top1.product.name)} is your best earner. Make sure you never run out.</div>`;
+      bc.innerHTML = cardHeader('🏆', 'Best Sellers', null, '#10b981') + bbody;
+      wrap.appendChild(bc);
     }
 
-    const hoursAnalysis = {};
-    s.sales.forEach(sale => {
-      const hour = new Date(sale.ts).getHours();
-      if (!hoursAnalysis[hour]) hoursAnalysis[hour] = 0;
-      hoursAnalysis[hour]++;
-    });
-    
-    const hourEntries = Object.entries(hoursAnalysis).sort((a, b) => b[1] - a[1]);
-    if (hourEntries.length > 0) {
-      const peakHour = parseInt(hourEntries[0][0]);
-      const peakPercentage = ((hourEntries[0][1] / s.sales.length) * 100).toFixed(0);
-      const formatHour = (h) => `${h % 12 || 12}:00 ${h >= 12 ? 'PM' : 'AM'}`;
-      
-      const box = document.createElement('div');
-      box.style.cssText = 'background:rgba(0,0,0,0.4);padding:12px;border-radius:8px;border:1px solid rgba(16,185,129,0.3);';
-      box.innerHTML = `
-        <div style="font-weight:700;font-size:15px;color:#fff;margin-bottom:6px;">🕐 Peak Hour: ${formatHour(peakHour)}</div>
-        <div class="small" style="color:rgba(255,255,255,0.9);">
-          ${peakPercentage}% of sales happen here. Staff up ${formatHour(peakHour-1)}-${formatHour(peakHour+2)}
-        </div>
-      `;
-      oppSection.appendChild(box);
+    // ── CARD 5: PRICE OPPORTUNITY ───────────────────────────────────
+    if (priceOpps.length > 0) {
+      const oc = card('rgba(99,102,241,0.3)', 'rgba(99,102,241,0.06)');
+      let obody = '';
+      priceOpps.slice(0,3).forEach(o => {
+        obody += row(
+          productLine(o.product.name, `Selling fast (${o.qty7}× this week) but only ${o.margin.toFixed(0)}% margin`),
+          actionBtn(`Try ${fmt(o.nudgePrice)}`, '#6366f1', `data-action="edit" data-product-id="${escapeHtml(o.product.id)}" data-price="${o.nudgePrice}"`)
+        );
+      });
+      const topOpp = priceOpps[0];
+      obody += `<div style="padding:4px 16px 12px;font-size:12px;color:rgba(255,255,255,0.45);">A small price nudge on fast movers can add ${fmt(topOpp.extraProfit)}/month with no extra effort</div>`;
+      oc.innerHTML = cardHeader('💡', 'Price Opportunity', 'These sell fast — a small price nudge earns more with no effort', '#6366f1') + obody;
+      wrap.appendChild(oc);
     }
 
-    wrap.appendChild(oppSection);
-
-    // FINANCIAL SNAPSHOT - COMPACT
-    const salesLast60 = s.sales.filter(sale => sale.ts >= last60Days && sale.ts < last30Days);
-    const revenueLast60 = salesLast60.reduce((sum, sale) => sum + (sale.price * sale.qty), 0);
-    const growthRate = revenueLast60 > 0 ? ((revenueLast30 - revenueLast60) / revenueLast60) * 100 : 0;
-    const avgMargin = revenueLast30 > 0 ? ((profitLast30 / revenueLast30) * 100).toFixed(1) : 0;
-
-    const finSection = document.createElement('div');
-    finSection.style.cssText = 'background:rgba(99,102,241,0.1);padding:16px;border-radius:10px;border-left:4px solid #6366f1;';
-    finSection.innerHTML = `
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;"><span style="font-size:18px;">💰</span><span style="font-size:18px;font-weight:700;color:#fff;">Financial Snapshot (30 days)</span></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
-        <div style="background:rgba(0,0,0,0.4);padding:10px;border-radius:6px;text-align:center;">
-          <div class="small" style="color:rgba(255,255,255,0.7);margin-bottom:4px;">Revenue</div>
-          <div style="font-size:18px;font-weight:700;color:#10b981;">${fmt(revenueLast30)}</div>
-        </div>
-        <div style="background:rgba(0,0,0,0.4);padding:10px;border-radius:6px;text-align:center;">
-          <div class="small" style="color:rgba(255,255,255,0.7);margin-bottom:4px;">Profit</div>
-          <div style="font-size:18px;font-weight:700;color:#6366f1;">${fmt(profitLast30)}</div>
-        </div>
-        <div style="background:rgba(0,0,0,0.4);padding:10px;border-radius:6px;text-align:center;">
-          <div class="small" style="color:rgba(255,255,255,0.7);margin-bottom:4px;">Margin</div>
-          <div style="font-size:18px;font-weight:700;color:#f59e0b;">${avgMargin}%</div>
-        </div>
-      </div>
-      <div style="background:rgba(99,102,241,0.15);padding:10px;border-radius:6px;margin-top:10px;text-align:center;">
-        <div class="small" style="color:rgba(255,255,255,0.9);">
-          Growth: <strong style="color:${growthRate >= 0 ? '#10b981' : '#ef4444'};">${growthRate >= 0 ? '+' : ''}${growthRate.toFixed(1)}%</strong> vs previous period
-        </div>
-      </div>
-    `;
-    
-    wrap.appendChild(finSection);
-
-    if (returnHtml) {
-      return wrap.outerHTML;
+    // ── CARD 6: CASH TRAP ───────────────────────────────────────────
+    if (cashTraps.length > 0) {
+      const cc = card('rgba(245,158,11,0.3)', 'rgba(245,158,11,0.06)');
+      let cbody = '';
+      cashTraps.slice(0,3).forEach(t => {
+        cbody += row(
+          productLine(t.product.name, `${t.qty} units · ${fmt(t.trapped)} sitting idle for 60+ days`),
+          actionBtn(`Sell at ${fmt(t.clearPrice)}`, '#f59e0b', `data-action="edit" data-product-id="${escapeHtml(t.product.id)}" data-price="${t.clearPrice}"`)
+        );
+      });
+      cbody += `<div style="padding:4px 16px 12px;font-size:12px;color:rgba(255,255,255,0.45);">${fmt(totalTrapped)} total cash is locked in unsold stock. A discount frees it up.</div>`;
+      cc.innerHTML = cardHeader('💤', 'Cash Trap', "These haven't sold in 60+ days — your money is stuck", '#f59e0b') + cbody;
+      wrap.appendChild(cc);
     }
-    
+
+    // ── ALL CLEAR ───────────────────────────────────────────────────
+    const hasIssues = restockAlerts.length + profitLeaks.length + cashTraps.length + priceOpps.length;
+    if (!hasIssues && topByProfit.length === 0 && !rev7) {
+      const cl = card('rgba(16,185,129,0.2)', 'rgba(16,185,129,0.05)');
+      cl.innerHTML = `<div style="padding:20px 16px;text-align:center;">
+        <div style="font-size:32px;margin-bottom:8px;">✅</div>
+        <div style="font-weight:700;font-size:15px;color:#fff;margin-bottom:6px;">All good for now</div>
+        <div style="font-size:13px;color:rgba(255,255,255,0.5);line-height:1.6;">No urgent issues found. Keep recording sales and your insights will get sharper over time.</div>
+      </div>`;
+      wrap.appendChild(cl);
+    }
+
+    // ── ATTACH OR RETURN ─────────────────────────────────────────────
+    if (returnHtml) return wrap; // Return the live DOM node — caller uses appendChild, never innerHTML
+
     const aiContent = $('aiContent');
     if (aiContent) {
       aiContent.innerHTML = '';
       aiContent.appendChild(wrap);
-      
       setTimeout(() => {
-        const actionButtons = aiContent.querySelectorAll('.ai-action-btn');
-        actionButtons.forEach(btn => {
+        aiContent.querySelectorAll('.ai-action-btn').forEach(btn => {
           btn.addEventListener('click', function(e) {
             e.preventDefault();
-            const action = this.dataset.action;
+            const action   = this.dataset.action;
             const productId = this.dataset.productId;
-            const qty = this.dataset.qty;
-            const price = this.dataset.price;
-            
+            const qty      = this.dataset.qty;
+            const price    = this.dataset.price;
             closeInventoryInsight();
-            
             setTimeout(() => {
               if (action === 'restock') {
                 openModalFor('add', productId);
                 setTimeout(() => {
-                  const qtyInput = $('modalQty');
-                  if (qtyInput) {
-                    qtyInput.value = qty;
-                    qtyInput.focus();
-                  }
+                  const qtyEl = $('modalQty');
+                  if (qtyEl && qty) { qtyEl.value = qty; qtyEl.focus(); }
                 }, 100);
               } else if (action === 'edit') {
                 openEditProduct(productId);
                 setTimeout(() => {
-                  const priceInput = $('invPrice');
-                  if (priceInput && price) {
-                    priceInput.value = price;
-                    priceInput.focus();
-                    priceInput.select();
-                  }
+                  const priceEl = $('invPrice');
+                  if (priceEl && price) { priceEl.value = price; priceEl.focus(); priceEl.select(); }
                 }, 200);
               }
             }, 100);
           });
         });
-      }, 100);
+      }, 80);
     }
 
-  } catch (e) {
+  } catch(e) {
     errlog('generateAdvancedInsights failed', e);
-    toast('Failed to generate insights', 'error');
-    if (returnHtml) {
-      const errEl = document.createElement('div');
-      errEl.className = 'small error-text';
-      errEl.textContent = 'Failed to generate insights.';
-      return errEl.outerHTML;
-    }
+    if (returnHtml) { const err = document.createElement('div'); err.style.cssText = 'padding:16px;color:rgba(255,255,255,0.5);font-size:13px;'; err.textContent = 'Could not load insights right now.'; return err; }
   }
 }
+
   function initInsightsHandlers() {
     const closeInventoryInsightBtn = $('closeInventoryInsightBtn');
     if (closeInventoryInsightBtn) closeInventoryInsightBtn.addEventListener('click', closeInventoryInsight);
@@ -3086,9 +3118,9 @@ function generateAdvancedInsights(returnHtml = false) {
   }
 
   function initSearchHandler() {
-    const headerSearchInput = $('headerSearchInput');
-    if (headerSearchInput) {
-      headerSearchInput.addEventListener('input', function() {
+    const headerSearch = $('headerSearch');
+    if (headerSearch) {
+      headerSearch.addEventListener('input', function() {
         const currentView = document.querySelector('.panel.active')?.id;
         if (currentView === 'inventoryPanel') renderInventory();
         else if (currentView === 'homePanel') scheduleRenderProducts();
@@ -3121,8 +3153,153 @@ function generateAdvancedInsights(returnHtml = false) {
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', newTheme);
     localStorage.setItem('qs_theme', newTheme);
-    toast(`Theme: ${newTheme}`, 'info', 1500);
+    document.querySelectorAll('.qs-theme-toggle-btn').forEach(btn => {
+      btn.textContent = newTheme === 'dark' ? '☀️  Light Mode' : '🌙  Dark Mode';
+      btn.setAttribute('data-current', newTheme);
+    });
+    document.querySelectorAll('.qs-theme-sub').forEach(el => {
+      el.textContent = 'Currently ' + newTheme + ' mode';
+    });
+    toast('Switched to ' + newTheme + ' mode', 'info', 1500);
   }
+
+  // Inject settings panel CSS into <head> once — avoids accumulation bug and
+  // WebView <style>-in-div reliability issues.
+  (function injectSettingsCSS() {
+    if (document.getElementById('qs-settings-styles')) return; // already injected
+    const s = document.createElement('style');
+    s.id = 'qs-settings-styles';
+    s.textContent = `
+        .qs-s-section {
+          background: var(--card-glass);
+          border: 1px solid var(--border-glass);
+          border-radius: 16px;
+          margin-bottom: 12px;
+          overflow: hidden;
+        }
+        .qs-s-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 14px 16px;
+          gap: 12px;
+          border-bottom: 1px solid var(--border-glass);
+        }
+        .qs-s-row:last-child { border-bottom: none; }
+        .qs-s-row-label { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; }
+        .qs-s-row-sub { font-size: 12px; color: var(--text-muted); }
+        .qs-s-section-title {
+          font-size: 11px; font-weight: 700; letter-spacing: 0.8px;
+          text-transform: uppercase; color: var(--text-muted);
+          padding: 14px 16px 8px;
+        }
+        .qs-avatar {
+          width: 46px; height: 46px; border-radius: 14px;
+          background: linear-gradient(135deg, #6366f1, #a78bfa);
+          display: flex; align-items: center; justify-content: center;
+          font-size: 16px; font-weight: 800; color: #fff;
+          flex-shrink: 0; letter-spacing: -0.5px;
+        }
+        .qs-theme-toggle-btn {
+          background: var(--card-glass);
+          border: 1px solid var(--border-glass);
+          border-radius: 10px;
+          padding: 8px 14px;
+          font-size: 13px; font-weight: 700;
+          color: var(--text-primary);
+          cursor: pointer;
+          transition: background 0.2s, border-color 0.2s;
+          white-space: nowrap;
+        }
+        .qs-theme-toggle-btn:hover { background: var(--card-glass-hover); border-color: var(--accent-primary); }
+        .qs-danger-btn {
+          width: 100%; padding: 13px;
+          background: rgba(239,68,68,0.08);
+          border: 1px solid rgba(239,68,68,0.25);
+          border-radius: 12px;
+          color: #ef4444; font-size: 14px; font-weight: 700;
+          cursor: pointer; transition: all 0.2s;
+        }
+        .qs-danger-btn:hover { background: rgba(239,68,68,0.15); border-color: #ef4444; }
+        .qs-ghost-btn {
+          background: var(--card-glass);
+          border: 1px solid var(--border-glass);
+          border-radius: 10px; padding: 8px 14px;
+          font-size: 13px; font-weight: 600;
+          color: var(--text-secondary); cursor: pointer;
+          transition: all 0.2s;
+        }
+        .qs-ghost-btn:hover { background: var(--card-glass-hover); color: var(--text-primary); }
+        /* Category row */
+        .qs-cat-row {
+          display: flex; align-items: center;
+          padding: 10px 16px; gap: 10px;
+          border-bottom: 1px solid var(--border-glass);
+          transition: background 0.15s;
+        }
+        .qs-cat-row:last-child { border-bottom: none; }
+        .qs-cat-row:hover { background: var(--card-glass-hover); }
+        .qs-cat-dot {
+          width: 8px; height: 8px; border-radius: 50%;
+          background: var(--accent-primary); flex-shrink: 0;
+        }
+        .qs-cat-name {
+          flex: 1; font-size: 14px; font-weight: 600; color: var(--text-primary);
+        }
+        .qs-cat-edit-input {
+          flex: 1; font-size: 14px; font-weight: 600;
+          background: var(--bg-glass) !important;
+          border: 1.5px solid var(--accent-primary) !important;
+          border-radius: 8px; padding: 5px 10px;
+          color: var(--text-primary) !important;
+          outline: none;
+        }
+        .qs-cat-icon-btn {
+          background: transparent; border: 0;
+          padding: 5px 8px; border-radius: 8px;
+          font-size: 14px; cursor: pointer;
+          color: var(--text-muted); transition: all 0.2s;
+        }
+        .qs-cat-icon-btn:hover { background: var(--card-glass-hover); color: var(--text-primary); }
+        .qs-cat-icon-btn.danger:hover { color: #ef4444; }
+        .qs-cat-save-btn {
+          background: var(--accent-primary); border: 0;
+          padding: 5px 12px; border-radius: 8px;
+          font-size: 12px; font-weight: 700;
+          color: #fff; cursor: pointer; transition: background 0.2s;
+        }
+        .qs-cat-save-btn:hover { background: #4f52e0; }
+        .qs-cat-cancel-btn {
+          background: transparent; border: 1px solid var(--border-glass);
+          padding: 5px 10px; border-radius: 8px;
+          font-size: 12px; font-weight: 600;
+          color: var(--text-muted); cursor: pointer;
+        }
+        .qs-add-cat-row {
+          display: flex; gap: 8px; align-items: center;
+          padding: 12px 16px;
+          border-top: 1px solid var(--border-glass);
+        }
+        .qs-add-cat-input {
+          flex: 1; font-size: 13.5px;
+          background: var(--bg-glass) !important;
+          border: 1.5px solid var(--border-glass);
+          border-radius: 10px; padding: 8px 12px;
+          color: var(--text-primary) !important; outline: none;
+          transition: border-color 0.2s;
+        }
+        .qs-add-cat-input:focus { border-color: var(--accent-primary); }
+        .qs-add-cat-btn {
+          background: var(--accent-primary); border: 0;
+          padding: 8px 16px; border-radius: 10px;
+          font-size: 13px; font-weight: 700;
+          color: #fff; cursor: pointer; transition: background 0.2s;
+          white-space: nowrap;
+        }
+        .qs-add-cat-btn:hover { background: #4f52e0; }
+    `;
+    document.head.appendChild(s);
+  })();
 
   function renderSettingsPanel() {
     const user = currentUser;
@@ -3132,80 +3309,110 @@ function generateAdvancedInsights(returnHtml = false) {
     const businessName = meta.business_name || '';
     const fullName = meta.full_name || '';
     const email = user.email || '';
+    const initials = (businessName || fullName || email).slice(0,2).toUpperCase();
 
     const settingsPanel = $('settingsPanel');
     if (!settingsPanel) return;
+    settingsPanel.style.background = '';
 
-    // FIX 10: --card-bg was undefined, causing a white band on every settings card.
-    // Replaced with var(--card-glass) throughout this function's innerHTML.
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+
     settingsPanel.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <div style="font-weight:700; font-size: 18px; color: white;">Settings</div>
-      </div>
-      
-      <div style="background:var(--card-glass);padding:12px;border-radius:12px;border:1px solid var(--border-glass);margin-bottom:12px">
-        <div style="font-weight:700;margin-bottom:10px">Account</div>
-        ${businessName ? `<div style="font-weight:700;margin-bottom:4px;font-size:16px">${escapeHtml(businessName)}</div>` : ''}
-        ${fullName ? `<div style="margin-bottom:4px;color:var(--text-secondary)">${escapeHtml(fullName)}</div>` : ''}
-        <div class="small" style="margin-bottom:12px;color:var(--text-muted)">${escapeHtml(email)}</div>
+
+      <!-- Profile -->
+      <div class="qs-s-section">
+        <div class="qs-s-row" style="gap:14px;">
+          <div class="qs-avatar">${escapeHtml(initials)}</div>
+          <div style="flex:1;min-width:0;">
+            ${businessName ? `<div class="qs-s-row-label" style="font-size:15px;">${escapeHtml(businessName)}</div>` : ''}
+            ${fullName && fullName !== businessName ? `<div class="qs-s-row-sub" style="color:var(--text-secondary);">${escapeHtml(fullName)}</div>` : ''}
+            <div class="qs-s-row-sub" style="margin-top:${businessName||fullName?'2px':'0'};">${escapeHtml(email)}</div>
+          </div>
+        </div>
       </div>
 
-      <div style="background:var(--card-glass);padding:12px;border-radius:12px;border:1px solid var(--border-glass);margin-bottom:12px">
-        <div style="font-weight:700;margin-bottom:10px">Appearance</div>
-        <div style="display:flex;justify-content:space-between;align-items:center;">
+      <!-- Appearance -->
+      <div class="qs-s-section">
+        <div class="qs-s-section-title">Appearance</div>
+        <div class="qs-s-row">
           <div>
-            <div style="font-weight:600;margin-bottom:2px">Theme</div>
-            <div class="small" style="color:var(--text-muted)">Switch between light and dark mode</div>
+            <div class="qs-s-row-label">Theme</div>
+            <div class="qs-s-row-sub qs-theme-sub">Currently ${currentTheme} mode</div>
           </div>
-          <button id="themeToggleBtn" class="save-btn" style="min-width:100px">
-            ${document.documentElement.getAttribute('data-theme') === 'dark' ? '☀️ Light' : '🌙 Dark'}
+          <button class="qs-theme-toggle-btn" data-current="${currentTheme}">
+            ${currentTheme === 'dark' ? '☀️  Light Mode' : '🌙  Dark Mode'}
           </button>
         </div>
       </div>
 
-      <div data-section="store-data" style="background:var(--card-glass);padding:12px;border-radius:12px;border:1px solid var(--border-glass);margin-bottom:12px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom: 12px;">
-          <div style="font-weight:700">Store Data</div>
-          <div style="display:flex;gap:8px">
-            <button id="btnLoadDemo" class="save-btn">Load Demo</button>
-            <button id="btnClearStore" class="btn-undo">Clear Store</button>
+      <!-- Store data -->
+      <div class="qs-s-section">
+        <div class="qs-s-section-title">Store Data</div>
+        <div class="qs-s-row">
+          <div>
+            <div class="qs-s-row-label">Demo Products</div>
+            <div class="qs-s-row-sub">Load 4 sample products to explore the app</div>
           </div>
+          <button id="btnLoadDemo" class="qs-ghost-btn">Load Demo</button>
+        </div>
+        <div class="qs-s-row">
+          <div>
+            <div class="qs-s-row-label">Clear All Data</div>
+            <div class="qs-s-row-sub">Permanently delete all products and sales</div>
+          </div>
+          <button id="btnClearStore" class="qs-ghost-btn" style="color:#ef4444;border-color:rgba(239,68,68,0.25);">Clear</button>
         </div>
       </div>
 
-      <div style="background:var(--card-glass);padding:12px;border-radius:12px;border:1px solid var(--border-glass);margin-bottom:12px">
-        <div id="categoryEditorArea"></div>
+      <!-- Categories -->
+      <div class="qs-s-section">
+        <div class="qs-s-section-title">Categories</div>
+        <div id="qs-cat-list"></div>
+        <div class="qs-add-cat-row">
+          <input id="newCategoryName" class="qs-add-cat-input" type="text" placeholder="New category name…" />
+          <button id="addCategoryBtn" class="qs-add-cat-btn">+ Add</button>
+        </div>
       </div>
 
-      <div style="background:var(--card-glass);padding:12px;border-radius:12px;border:1px solid var(--border-glass);margin-bottom:12px">
+      <!-- Activity log -->
+      <div class="qs-s-section">
         <div id="activityLogArea"></div>
       </div>
 
-      
-
-      <div style="background:var(--card-glass);padding:12px;border-radius:12px;border:1px solid var(--border-glass);margin-bottom:16px">
-        <button id="btnLogout" class="save-btn" style="width:100%;background:#ef4444">Sign Out</button>
+      <!-- About -->
+      <div class="qs-s-section">
+        <div class="qs-s-section-title">About</div>
+        <div class="qs-s-row">
+          <div>
+            <div class="qs-s-row-label">QuickShop</div>
+            <div class="qs-s-row-sub">Offline-first inventory &amp; sales · v2.5</div>
+          </div>
+          <div style="font-size:20px;">⚡</div>
+        </div>
+        <div id="qs-share-btn-area" style="padding:0 16px 14px;"></div>
       </div>
-      <div style="background:var(--card-glass);padding:12px;border-radius:12px;border:1px solid var(--border-glass);margin-bottom:12px">
-        <div style="font-weight:700">About</div>
-        <div class="small" style="margin-top:6px">QuickShop — offline-first inventory & sales</div>
+
+      <!-- Sign out -->
+      <div style="padding:4px 0 20px;">
+        <button id="btnLogout" style="width:100%;padding:14px;background:#ef4444;border:0;border-radius:12px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:-0.1px;">Sign Out</button>
       </div>
     `;
 
-    const themeToggleBtn = $('themeToggleBtn');
-    if (themeToggleBtn) {
-      themeToggleBtn.addEventListener('click', toggleTheme);
-    }
+    // Wire theme toggle
+    settingsPanel.querySelectorAll('.qs-theme-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', toggleTheme);
+    });
 
+    // Wire demo / clear / logout
     initDemoAndSettingsHandlers();
+
+    // Render categories into the new slot
     renderCategoryEditor();
 
-    // FIX 11: Call renderShareButton() explicitly here instead of relying on
-    // MutationObserver injection in share-catalog.js. The observer was firing
-    // BEFORE the innerHTML rewrite completed, inserting into a node that was
-    // then immediately destroyed. Explicit call after innerHTML is safe.
+    // Share button
     if (typeof window.renderShareButton === 'function') {
-      window.renderShareButton(settingsPanel);
+      const area = $('qs-share-btn-area');
+      if (area) window.renderShareButton(area);
     }
 
     const btnLogout = $('btnLogout');
@@ -3225,10 +3432,15 @@ function generateAdvancedInsights(returnHtml = false) {
           document.body.classList.remove('mode-app');
           toast('Signed out');
           window.location.reload();
-        } catch (e) { errlog('signout error', e); toast('Sign out failed: ' + (e.message || ''), 'error'); }
+        } catch (err) {
+          errlog('Logout error', err);
+          toast('Sign out failed', 'error');
+        }
       });
     }
   }
+
+
 
   function initAppUI() {
     try {
@@ -3288,13 +3500,13 @@ function generateAdvancedInsights(returnHtml = false) {
     toast('An unexpected error occurred. See console.', 'error');
   });
 
-  window.__QS_APP = {
+  window.__QS_APP = Object.freeze({
     getClient, getUser, saveState,
     getState: () => state,
     startScanner, stopScanner,
     syncCloudData, showConfirm,
     generateAdvancedInsights
-  };
+  });
 
   log('QuickShop loaded successfully');
 }
@@ -3318,7 +3530,7 @@ async function initPublicCatalog(storeId) {
   const qs = new URLSearchParams(window.location.search);
   const urlPhone = (qs.get('phone') || '').replace(/\D/g, '');
 
-  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
   function fmt(v) { return '₦' + Number(v||0).toLocaleString('en-NG'); }
   function initials(name) {
     return (name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
@@ -3635,8 +3847,15 @@ async function initPublicCatalog(storeId) {
     supabase = window.__QS_SUPABASE && window.__QS_SUPABASE.client;
     if (!supabase) throw new Error('no client');
   } catch(e) {
-    document.getElementById('catGrid').innerHTML =
-      `<div id="catEmpty"><div class="ei">⚠️</div><strong>Could not connect</strong><span>Please try again later</span></div>`;
+    const g = document.getElementById('catGrid');
+    if (g) {
+      g.innerHTML = '';
+      const d = document.createElement('div'); d.id = 'catEmpty';
+      const ei = document.createElement('div'); ei.className = 'ei'; ei.textContent = '⚠️';
+      const strong = document.createElement('strong'); strong.textContent = 'Could not connect';
+      const span = document.createElement('span'); span.textContent = 'Please try again later';
+      d.appendChild(ei); d.appendChild(strong); d.appendChild(span); g.appendChild(d);
+    }
     return;
   }
 
@@ -3675,8 +3894,15 @@ async function initPublicCatalog(storeId) {
     if (error) throw error;
     allProducts = data || [];
   } catch(e) {
-    document.getElementById('catGrid').innerHTML =
-      `<div id="catEmpty"><div class="ei">😕</div><strong>Failed to load products</strong><span>${esc(e.message)}</span></div>`;
+    const g = document.getElementById('catGrid');
+    if (g) {
+      g.innerHTML = '';
+      const d = document.createElement('div'); d.id = 'catEmpty';
+      const ei = document.createElement('div'); ei.className = 'ei'; ei.textContent = '😕';
+      const strong = document.createElement('strong'); strong.textContent = 'Failed to load products';
+      const span = document.createElement('span'); span.textContent = String(e && e.message || 'Unknown error').slice(0, 200);
+      d.appendChild(ei); d.appendChild(strong); d.appendChild(span); g.appendChild(d);
+    }
     return;
   }
 
@@ -3724,11 +3950,12 @@ async function initPublicCatalog(storeId) {
       : '';
 
     if (!filtered.length) {
-      grid.innerHTML = `<div id="catEmpty">
-        <div class="ei">🔍</div>
-        <strong>Nothing found</strong>
-        <span>Try a different search or category</span>
-      </div>`;
+      grid.innerHTML = '';
+      const d = document.createElement('div'); d.id = 'catEmpty';
+      const ei = document.createElement('div'); ei.className = 'ei'; ei.textContent = '🔍';
+      const strong = document.createElement('strong'); strong.textContent = 'Nothing found';
+      const span = document.createElement('span'); span.textContent = 'Try a different search or category';
+      d.appendChild(ei); d.appendChild(strong); d.appendChild(span); grid.appendChild(d);
       return;
     }
 

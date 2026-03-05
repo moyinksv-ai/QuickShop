@@ -4,7 +4,7 @@
    This change alone forces the browser to reinstall the worker 
    and trigger the cleanup of the old 'v1' cache. 
 */
-const CACHE_NAME = 'quickshop-cache-v18';
+const CACHE_NAME = 'quickshop-cache-v28';
 
 const URLS_TO_CACHE = [
   '/',

@@ -68,8 +68,7 @@
     user: null // Will be populated by auth state listener in app.js
   };
 
-  console.log('✅ QuickShop: Supabase initialized successfully');
-  console.log('🔗 Project URL:', SUPABASE_URL);
+  // Initialisation confirmed — URL not logged to avoid info disclosure in production
 
   // ============================================
   // HELPER: Check if user is authenticated
