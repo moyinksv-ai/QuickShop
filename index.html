@@ -1109,5 +1109,100 @@
   <script src="indexeddb_sync.js"></script>
   <script src="share-catalog.js"></script>
   <script src="appss.js" defer></script>
+  <style>
+  #qs-pwa-modal {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(120%);
+    width: calc(100% - 32px); max-width: 400px; background: var(--card-glass);
+    border: 1px solid var(--border-hi); border-radius: 20px; padding: 20px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5); z-index: 99999;
+    transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  }
+  #qs-pwa-modal.active { transform: translateX(-50%) translateY(0); }
+  .pwa-flex { display: flex; align-items: center; gap: 16px; }
+  .pwa-icon { width: 50px; height: 50px; border-radius: 12px; background: var(--accent-primary); 
+              display: flex; align-items: center; justify-content: center; font-size: 24px; }
+  .pwa-content { flex: 1; }
+  .pwa-title { font-weight: 700; color: var(--text-primary); font-size: 16px; margin-bottom: 4px; }
+  .pwa-body { font-size: 13px; color: var(--text-secondary); line-height: 1.4; }
+  .pwa-actions { margin-top: 16px; display: flex; gap: 10px; }
+  .pwa-btn { flex: 1; padding: 10px; border-radius: 10px; font-weight: 700; border: none; cursor: pointer; font-size: 14px; }
+  .pwa-btn-primary { background: var(--accent-primary); color: #fff; }
+  .pwa-btn-ghost { background: transparent; color: var(--text-secondary); }
+</style>
+
+<div id="qs-pwa-modal" role="dialog" aria-modal="true" aria-labelledby="pwa-t" aria-describedby="pwa-d">
+  <div class="pwa-flex">
+    <div class="pwa-icon">🛍️</div>
+    <div class="pwa-content">
+      <div class="pwa-title" id="pwa-t">Install QuickShop</div>
+      <div class="pwa-body" id="pwa-d">Access your inventory instantly, even without internet.</div>
+    </div>
+  </div>
+  <div class="pwa-actions">
+    <button class="pwa-btn pwa-btn-ghost" id="pwa-later">Later</button>
+    <button class="pwa-btn pwa-btn-primary" id="pwa-install">Install Now</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  const modal = document.getElementById('qs-pwa-modal');
+  const installBtn = document.getElementById('pwa-install');
+  const laterBtn = document.getElementById('pwa-later');
+  const desc = document.getElementById('pwa-d');
+  let deferredPrompt = null;
+
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const isInstalled = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+  if (isInstalled) return;
+
+  // 1. Android/Chrome Native Event
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    showPrompt();
+  });
+
+  // 2. iOS Custom Logic (Manual prompt)
+  if (isIOS) {
+    desc.textContent = 'Tap the Share button and "Add to Home Screen" to install.';
+    installBtn.style.display = 'none';
+    showPrompt();
+  }
+
+  function showPrompt() {
+    const lastDismissed = localStorage.getItem('pwa_dismissed');
+    // Don't show if dismissed in the last 24 hours
+    if (lastDismissed && Date.now() - lastDismissed < 86400000) return;
+    
+    setTimeout(() => modal.classList.add('active'), 3000);
+  }
+
+  installBtn.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    modal.classList.remove('active');
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    deferredPrompt = null;
+  });
+
+  laterBtn.addEventListener('click', () => {
+    modal.classList.remove('active');
+    localStorage.setItem('pwa_dismissed', Date.now());
+  });
+
+  // Security: Focus Trap for Accessibility
+  modal.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') laterBtn.click();
+    if (e.key === 'Tab') {
+      if (e.shiftKey) { if (document.activeElement === laterBtn) { e.preventDefault(); installBtn.focus(); } }
+      else { if (document.activeElement === installBtn) { e.preventDefault(); laterBtn.focus(); } }
+    }
+  });
+})();
+</script>
+
 </body>
 </html>

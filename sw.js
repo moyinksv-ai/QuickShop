@@ -1,106 +1,63 @@
-/* sw.js - Service Worker for Caching App Shell */
+/* sw.js - QuickShop Service Worker v3.2 (Production Build) */
 
-/* [FIX]: Bumped version to v2. 
-   This change alone forces the browser to reinstall the worker 
-   and trigger the cleanup of the old 'v1' cache. 
-*/
-const CACHE_NAME = 'quickshop-cache-v28';
+const CACHE_NAME = 'qs-cache-v3.3';
 
 const URLS_TO_CACHE = [
   '/',
   '/index.html',
-  '/style.css',
-  '/app.js',
-  '/report.js',
+  '/styless.css',
+  '/appss.js',
   '/indexeddb_sync.js',
   '/supabase-config.js',
   '/manifest.json',
-  /* [FIX]: Added these external libraries to the cache. 
-     Previously, if the internet cut out, the scanner and charts 
-     would stop working because they weren't saved offline. 
-  */
+  // Third-party Hardening: Cache CDN assets so the app works fully offline
   'https://unpkg.com/@zxing/library@latest/umd/index.min.js',
   'https://cdn.jsdelivr.net/npm/chart.js',
-  'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
-  'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js',
-  'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js',
-  'https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js',
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
   'pwa-192.png',
   'pwa-512.png'
 ];
 
-// Install event: cache all the app shell files
+// Install: Populate cache
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('[SW] Opened cache');
-        return cache.addAll(URLS_TO_CACHE);
-      })
-      .then(() => {
-        // Force the waiting service worker to become the active service worker immediately
-        return self.skipWaiting();
-      })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(URLS_TO_CACHE))
   );
 });
 
-// Activate event: clean up old caches
+// Activate: Clean up old Firebase or legacy QuickShop caches
 self.addEventListener('activate', (event) => {
-  const cacheWhitelist = [CACHE_NAME];
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          // [Logic]: If the cache name is NOT 'quickshop-cache-v2', DELETE IT.
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
-            console.log('[SW] Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
-    .then(() => {
-      // Take control of all open clients immediately so the user sees updates instantly
-      return self.clients.claim();
-    })
+    caches.keys().then((keys) => {
+      return Promise.all(keys.map((key) => {
+        if (key !== CACHE_NAME) return caches.delete(key);
+      }));
+    }).then(() => self.clients.claim())
   );
 });
 
-// Fetch event: serve from cache first (Cache-First strategy)
+// Fetch Strategy: Stale-While-Revalidate
 self.addEventListener('fetch', (event) => {
-  // We only want to cache GET requests
-  if (event.request.method !== 'GET') {
+  // 1. Skip non-GET and Supabase API calls (Auth must be live)
+  if (event.request.method !== 'GET' || event.request.url.includes('supabase.co')) {
     return;
   }
 
-  // Don't cache Firebase requests (Let Firebase SDK handle its own offline logic)
-  if (event.request.url.includes('firebase') || event.request.url.includes('googleapis') || event.request.url.includes('firestore')) {
-    return;
-  }
-  
   event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        if (response) {
-          return response;
+    caches.match(event.request).then((cachedResponse) => {
+      const fetchPromise = fetch(event.request).then((networkResponse) => {
+        // Dynamic caching for product images
+        if (networkResponse && networkResponse.status === 200 && event.request.url.match(/\.(jpg|jpeg|png|gif|webp)/)) {
+          const clonedResponse = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clonedResponse));
         }
-        
-        return fetch(event.request)
-          .then((networkResponse) => {
-            // [FIX]: Dynamic Image Caching
-            // If the user loads a product image while online, save it to cache
-            // so it appears next time they are offline.
-            if (networkResponse && networkResponse.status === 200 && event.request.url.match(/\.(jpg|jpeg|png|gif|webp)/)) {
-                const responseClone = networkResponse.clone();
-                caches.open(CACHE_NAME).then((cache) => {
-                    cache.put(event.request, responseClone);
-                });
-            }
-            return networkResponse;
-          })
-          .catch(() => {
-            console.warn('[SW] Fetch failed for:', event.request.url);
-          });
-      })
+        return networkResponse;
+      }).catch(() => {
+        // Return nothing if network fails and not in cache
+      });
+
+      return cachedResponse || fetchPromise;
+    })
   );
 });

@@ -45,7 +45,11 @@ function initApp() {
   const errlog = (...a) => console.error('[QS Error]', ...a);
   
   function escapeHtml(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-  function uid() { return 'p' + Math.random().toString(36).slice(2,9) + Date.now().toString(36); }
+  // FIX 1: Use crypto.randomUUID() to prevent ID collisions — Math.random() is not cryptographically safe.
+  function uid() {
+    try { return self.crypto.randomUUID().replace(/-/g, '').slice(0, 20); }
+    catch (_) { return 'p' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36); }
+  }
   const _n = function(v) { const num = Number(v || 0); return isNaN(num) ? 0 : num; };
   const _fmt = function(v) { return '₦' + Number(v || 0).toLocaleString('en-NG'); };
   // Expose as read-only globals — external scripts cannot overwrite these
@@ -416,24 +420,39 @@ function handleTouchEnd() {
   function initConfirmModal() {
     const backdrop = $('confirmModalBackdrop'), okBtn = $('confirmModalOK'), cancelBtn = $('confirmModalCancel');
     if (!backdrop || !okBtn || !cancelBtn) return;
-    okBtn.addEventListener('click', () => { if (confirmResolve) confirmResolve(true); backdrop.style.display = 'none'; });
-    cancelBtn.addEventListener('click', () => { if (confirmResolve) confirmResolve(false); backdrop.style.display = 'none'; });
-    backdrop.addEventListener('click', (e) => {
-      if (e.target.id === 'confirmModalBackdrop') { if (confirmResolve) confirmResolve(false); backdrop.style.display = 'none'; }
-    });
+
+    // FIX 13: ARIA accessibility attributes
+    backdrop.setAttribute('role', 'dialog');
+    backdrop.setAttribute('aria-modal', 'true');
+    const titleEl = $('confirmModalTitle'), msgEl = $('confirmModalMessage');
+    if (titleEl && !titleEl.id) titleEl.id = 'confirmModalTitle';
+    if (msgEl && !msgEl.id) msgEl.id = 'confirmModalMessage';
+    if (titleEl) backdrop.setAttribute('aria-labelledby', 'confirmModalTitle');
+    if (msgEl) backdrop.setAttribute('aria-describedby', 'confirmModalMessage');
+
+    const close = (result) => { if (confirmResolve) { confirmResolve(result); confirmResolve = null; } backdrop.style.display = 'none'; };
+    okBtn.addEventListener('click', () => close(true));
+    cancelBtn.addEventListener('click', () => close(false));
+    backdrop.addEventListener('click', (e) => { if (e.target.id === 'confirmModalBackdrop') close(false); });
+
+    // FIX 13: ESC key closes modal
+    backdrop.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(false); });
   }
 
+  // FIX 2: Remove window.confirm() blocking-dialog fallback — resolve(false) gracefully instead.
   function showConfirm({ title = 'Are you sure?', message, okText = 'OK', okDanger = false }) {
     return new Promise((resolve) => {
       const backdrop = $('confirmModalBackdrop'), titleEl = $('confirmModalTitle');
       const messageEl = $('confirmModalMessage'), okBtn = $('confirmModalOK');
-      if (!backdrop || !titleEl || !messageEl || !okBtn) return resolve(window.confirm(title + '\n' + message));
+      if (!backdrop || !titleEl || !messageEl || !okBtn) return resolve(false);
       confirmResolve = resolve;
       titleEl.textContent = title;
       messageEl.textContent = message;
       okBtn.textContent = okText;
       okBtn.style.background = okDanger ? 'var(--danger)' : 'var(--accent-emerald)';
       backdrop.style.display = 'flex';
+      // Focus cancel by default — safer UX for destructive actions
+      requestAnimationFrame(() => { const c = $('confirmModalCancel'); if (c) c.focus(); });
     });
   }
 
@@ -1383,6 +1402,8 @@ function handleTouchEnd() {
     showModal();
   }
 
+  // FIX 3: _modalConfirmLock prevents double-click race that could trigger two sells.
+  let _modalConfirmLock = false;
   function initModalHandlers() {
     const modalCancel = $('modalCancel');
     if (modalCancel) modalCancel.addEventListener('click', hideModal);
@@ -1394,38 +1415,46 @@ function handleTouchEnd() {
     }
     const modalConfirm = $('modalConfirm');
     if (modalConfirm) {
-      modalConfirm.addEventListener('click', function () {
-        if (!modalContext) { hideModal(); return; }
-        const qtyEl = $('modalQty');
-        const q = Math.max(1, Math.floor(window.n(qtyEl && qtyEl.value)));
-        if (modalContext.mode === 'sell') {
-          const p = state.products.find(x => x.id === modalContext.productId);
-          if (!p) { toast('Product not found.', 'error'); hideModal(); return; }
-          if (typeof p.qty !== 'number') p.qty = 0;
-          if (p.qty < q) {
+      modalConfirm.addEventListener('click', async function () {
+        if (_modalConfirmLock) return;
+        _modalConfirmLock = true;
+        modalConfirm.disabled = true;
+        try {
+          if (!modalContext) { hideModal(); return; }
+          const qtyEl = $('modalQty');
+          const q = Math.max(1, Math.floor(window.n(qtyEl && qtyEl.value)));
+          if (modalContext.mode === 'sell') {
+            const p = state.products.find(x => x.id === modalContext.productId);
+            if (!p) { toast('Product not found.', 'error'); hideModal(); return; }
+            if (typeof p.qty !== 'number') p.qty = 0;
+            if (p.qty < q) {
+              let errEl = $('modalError');
+              if (!errEl) {
+                errEl = document.createElement('div');
+                errEl.id = 'modalError';
+                errEl.className = 'error-text';
+                errEl.style.marginTop = '10px';
+                qtyEl.parentElement.insertAdjacentElement('afterend', errEl);
+              }
+              errEl.textContent = `Not enough stock. You only have ${p.qty}.`;
+              const modal = qtyEl.closest('.modal');
+              if (modal) {
+                modal.style.animation = 'shake 0.3s ease';
+                setTimeout(() => { modal.style.animation = ''; }, 300);
+              }
+              return;
+            }
             let errEl = $('modalError');
-            if (!errEl) {
-              errEl = document.createElement('div');
-              errEl.id = 'modalError';
-              errEl.className = 'error-text';
-              errEl.style.marginTop = '10px';
-              qtyEl.parentElement.insertAdjacentElement('afterend', errEl);
-            }
-            errEl.textContent = `Not enough stock. You only have ${p.qty}.`;
-            const modal = qtyEl.closest('.modal');
-            if (modal) {
-              modal.style.animation = 'shake 0.3s ease';
-              setTimeout(() => { modal.style.animation = ''; }, 300);
-            }
-            return;
+            if (errEl) errEl.textContent = '';
+            doSell(modalContext.productId, q);
+          } else {
+            doAddStock(modalContext.productId, q);
           }
-          let errEl = $('modalError');
-          if (errEl) errEl.textContent = '';
-          doSell(modalContext.productId, q);
-        } else {
-          doAddStock(modalContext.productId, q);
+          hideModal();
+        } finally {
+          _modalConfirmLock = false;
+          modalConfirm.disabled = false;
         }
-        hideModal();
       });
     }
   }
@@ -1439,67 +1468,116 @@ function handleTouchEnd() {
     saveState();
   }
 
+  // FIX 4: Use DOM methods only — no innerHTML with user-controlled data.
   function renderActivityLog() {
     const container = $('activityLogArea');
     if (!container) return;
-    container.innerHTML = `
-      <div style="font-weight: 600; margin-bottom: 8px; margin-top: 24px; color: var(--text-primary);">Activity History (Audit Log)</div>
-      <div class="small" style="margin-bottom: 12px; color: var(--text-secondary);">Review recent actions. Click to view full log.</div>
-      <div id="activityLogList" style="display: flex; flex-direction: column; gap: 0px; max-height: 300px; overflow-y: auto; border: 1px solid var(--border-glass); padding: 0; border-radius: var(--radius); background: var(--card-glass);"></div>
-    `;
-    const listEl = $('activityLogList'), logs = (state.logs || []).slice(0, 5);
+    while (container.firstChild) container.removeChild(container.firstChild);
+
+    const heading = document.createElement('div');
+    heading.style.cssText = 'font-weight:600;margin-bottom:8px;margin-top:24px;color:var(--text-primary);';
+    heading.textContent = 'Activity History (Audit Log)';
+    container.appendChild(heading);
+
+    const sub = document.createElement('div');
+    sub.className = 'small';
+    sub.style.cssText = 'margin-bottom:12px;color:var(--text-secondary);';
+    sub.textContent = 'Review recent actions. Click to view full log.';
+    container.appendChild(sub);
+
+    const listEl = document.createElement('div');
+    listEl.id = 'activityLogList';
+    listEl.style.cssText = 'display:flex;flex-direction:column;gap:0;max-height:300px;overflow-y:auto;border:1px solid var(--border-glass);padding:0;border-radius:var(--radius);background:var(--card-glass);';
+    container.appendChild(listEl);
+
+    const logs = (state.logs || []).slice(0, 5);
     if (logs.length === 0) {
-      listEl.innerHTML = '<div class="small" style="color: var(--text-muted); text-align: center; padding: 20px;">No activity recorded yet.</div>';
+      const empty = document.createElement('div');
+      empty.className = 'small';
+      empty.style.cssText = 'color:var(--text-muted);text-align:center;padding:20px;';
+      empty.textContent = 'No activity recorded yet.';
+      listEl.appendChild(empty);
+      setupActivityLogClick();
       return;
     }
-    logs.forEach(log => {
+    logs.forEach(logEntry => {
       const row = document.createElement('div');
-      row.style.cssText = "padding: 12px; background: var(--card-glass); border-bottom: 1px solid var(--border-glass); font-size: 13px; cursor: pointer; transition: background 0.2s;";
-      const isSuspicious = log.action === 'Delete' || log.action === 'Undo';
-      const color = isSuspicious ? '#ef4444' : 'var(--text-primary)';
-      row.innerHTML = `
-        <div style="display: flex; justify-content: space-between; color: var(--text-muted); font-size: 11px; margin-bottom: 4px;">
-          <span>${formatDateTime(log.ts)}</span>
-          <span style="max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(log.user)}</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; margin-top: 4px;">
-          <span style="font-weight: 600; color: ${color}">${escapeHtml(log.action)}</span>
-          <span style="color: var(--text-secondary); font-size: 13px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(log.details)}</span>
-        </div>
-      `;
+      row.style.cssText = 'padding:12px;background:var(--card-glass);border-bottom:1px solid var(--border-glass);font-size:13px;cursor:pointer;transition:background 0.2s;';
+
+      const topRow = document.createElement('div');
+      topRow.style.cssText = 'display:flex;justify-content:space-between;color:var(--text-muted);font-size:11px;margin-bottom:4px;';
+      const tsSpan = document.createElement('span');
+      tsSpan.textContent = formatDateTime(logEntry.ts);
+      const userSpan = document.createElement('span');
+      userSpan.style.cssText = 'max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      userSpan.textContent = logEntry.user || '';
+      topRow.appendChild(tsSpan);
+      topRow.appendChild(userSpan);
+
+      const botRow = document.createElement('div');
+      botRow.style.cssText = 'display:flex;justify-content:space-between;margin-top:4px;';
+      const actionSpan = document.createElement('span');
+      actionSpan.style.fontWeight = '600';
+      actionSpan.style.color = (logEntry.action === 'Delete' || logEntry.action === 'Undo') ? '#ef4444' : 'var(--text-primary)';
+      actionSpan.textContent = logEntry.action || '';
+      const detailSpan = document.createElement('span');
+      detailSpan.style.cssText = 'color:var(--text-secondary);font-size:13px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      detailSpan.textContent = logEntry.details || '';
+      botRow.appendChild(actionSpan);
+      botRow.appendChild(detailSpan);
+
+      row.appendChild(topRow);
+      row.appendChild(botRow);
       listEl.appendChild(row);
     });
     setupActivityLogClick();
   }
 
+  // FIX 5: Use DOM methods only — no innerHTML with user-controlled data.
   function openFullAuditLog() {
-  const modal = $('fullAuditLogModal'), list = $('fullAuditLogList');
-  if (!modal || !list) return;
-  
-  // FIX: Reset list styles to prevent border artifacts
-  list.innerHTML = '';
-  list.style.border = 'none'; 
-  list.style.background = 'transparent';
+    const modal = $('fullAuditLogModal'), list = $('fullAuditLogList');
+    if (!modal || !list) return;
+    while (list.firstChild) list.removeChild(list.firstChild);
+    list.style.border = 'none';
+    list.style.background = 'transparent';
 
-  const logs = state.logs || [];
-  if (logs.length === 0) {
-      list.innerHTML = '<div class="small" style="padding:40px;text-align:center;color:var(--text-muted)">No activity recorded yet.</div>';
+    const logs = state.logs || [];
+    if (logs.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'small';
+      empty.style.cssText = 'padding:40px;text-align:center;color:var(--text-muted)';
+      empty.textContent = 'No activity recorded yet.';
+      list.appendChild(empty);
     } else {
-      logs.forEach(log => {
+      logs.forEach(logEntry => {
         const row = document.createElement('div');
         row.className = 'full-log-row';
-        const isSuspicious = log.action === 'Delete' || log.action === 'Undo';
-        const actionColor = isSuspicious ? '#ef4444' : 'var(--text-primary)';
-        row.innerHTML = `
-          <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-            <span style="font-size:11px;color:var(--text-muted)">${formatDateTime(log.ts)}</span>
-            <span style="font-size:11px;color:var(--text-muted)">${escapeHtml(log.user)}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;">
-            <span style="font-weight:700;color:${actionColor}">${escapeHtml(log.action)}</span>
-            <span style="color:var(--text-secondary);font-size:13px">${escapeHtml(log.details)}</span>
-          </div>
-        `;
+
+        const topRow = document.createElement('div');
+        topRow.style.cssText = 'display:flex;justify-content:space-between;margin-bottom:4px;';
+        const tsSpan = document.createElement('span');
+        tsSpan.style.cssText = 'font-size:11px;color:var(--text-muted)';
+        tsSpan.textContent = formatDateTime(logEntry.ts);
+        const userSpan = document.createElement('span');
+        userSpan.style.cssText = 'font-size:11px;color:var(--text-muted)';
+        userSpan.textContent = logEntry.user || '';
+        topRow.appendChild(tsSpan);
+        topRow.appendChild(userSpan);
+
+        const botRow = document.createElement('div');
+        botRow.style.cssText = 'display:flex;justify-content:space-between;';
+        const actionSpan = document.createElement('span');
+        actionSpan.style.fontWeight = '700';
+        actionSpan.style.color = (logEntry.action === 'Delete' || logEntry.action === 'Undo') ? '#ef4444' : 'var(--text-primary)';
+        actionSpan.textContent = logEntry.action || '';
+        const detailSpan = document.createElement('span');
+        detailSpan.style.cssText = 'color:var(--text-secondary);font-size:13px';
+        detailSpan.textContent = logEntry.details || '';
+        botRow.appendChild(actionSpan);
+        botRow.appendChild(detailSpan);
+
+        row.appendChild(topRow);
+        row.appendChild(botRow);
         list.appendChild(row);
       });
     }
@@ -2010,10 +2088,19 @@ function handleTouchEnd() {
             okDanger: true
           });
           if (!confirmed) return;
-          state.notes = state.notes.filter(n => n.id !== delBtn.dataset.deleteNote);
-          saveState();
+          const noteId = delBtn.dataset.deleteNote;
+          state.notes = state.notes.filter(n => n.id !== noteId);
           renderNotes();
           toast('Note deleted');
+          // FIX 6: Explicit Supabase delete — without this, syncCloudData re-fetches and
+          // resurrects the note (zombie data), overwriting the local deletion.
+          if (currentUser && getClient() && navigator.onLine) {
+            try {
+              const supabase = getClient();
+              await supabase.from('notes').delete().eq('id', noteId).eq('user_id', currentUser.id);
+            } catch(e) { errlog('note delete cloud sync', e); }
+          }
+          saveState();
         }
       });
     }
@@ -2188,6 +2275,18 @@ function handleTouchEnd() {
           const idx = state.categories.findIndex(c => c.toLowerCase() === oldName.toLowerCase());
           if (idx > -1) state.categories[idx] = newName;
           state.products.forEach(p => { if (p.category === oldName) p.category = newName; });
+          // FIX 7: Sync rename to Supabase — without this, syncCloudData resurrects the old name.
+          if (currentUser && getClient() && navigator.onLine) {
+            try {
+              const supabase = getClient();
+              // Rename the categories row
+              await supabase.from('categories').update({ name: newName })
+                .eq('user_id', currentUser.id).eq('name', oldName);
+              // Re-categorise matching products
+              await supabase.from('products').update({ category: newName })
+                .eq('user_id', currentUser.id).eq('category', oldName);
+            } catch(e) { errlog('category rename cloud sync', e); }
+          }
           await saveState();
           toast('Category renamed ✓');
           renderCategoryEditor(); renderChips(); renderProducts(); renderInventory();
@@ -2213,6 +2312,17 @@ function handleTouchEnd() {
         if (!confirmed) return;
         state.categories = state.categories.filter(c => c.toLowerCase() !== name.toLowerCase());
         state.products.forEach(p => { if (p.category === name) p.category = 'Others'; });
+        // FIX 8: Explicit Supabase delete — without this, syncCloudData resurrects the deleted category.
+        if (currentUser && getClient() && navigator.onLine) {
+          try {
+            const supabase = getClient();
+            await supabase.from('categories').delete()
+              .eq('user_id', currentUser.id).eq('name', name);
+            // Move products to Others in Supabase too
+            await supabase.from('products').update({ category: 'Others' })
+              .eq('user_id', currentUser.id).eq('category', name);
+          } catch(e) { errlog('category delete cloud sync', e); }
+        }
         await saveState();
         toast('Category deleted');
         renderCategoryEditor(); renderChips(); renderProducts(); renderInventory();
@@ -2267,40 +2377,16 @@ function handleTouchEnd() {
     }
   }
 
-  async function handleRenameCategory(e) {
-    const oldName = e.target.dataset.originalName;
-    const input = e.target.closest('.add-row').querySelector('.category-name-input');
-    const newName = input.value.trim();
-    if (!newName) { toast('Category name cannot be empty', 'error'); input.value = oldName; return; }
-    if (newName.toLowerCase() === oldName.toLowerCase()) return;
-    if (state.categories.find(c => c.toLowerCase() === newName.toLowerCase())) { toast('Category name already exists', 'error'); input.value = oldName; return; }
-    if (newName.toLowerCase() === 'others') { toast('Cannot rename to "Others"', 'error'); input.value = oldName; return; }
-    const index = state.categories.findIndex(c => c.toLowerCase() === oldName.toLowerCase());
-    if (index > -1) state.categories[index] = newName;
-    state.products.forEach(p => { if (p.category === oldName) p.category = newName; });
-    await saveState();
-    toast('Category renamed');
-    renderCategoryEditor(); renderChips(); renderProducts(); renderInventory();
-  }
 
-  async function handleDeleteCategory(e) {
-    const name = e.target.dataset.name;
-    const confirmed = await showConfirm({
-      title: `Delete ${name}?`,
-      message: `All products in "${name}" will be moved to "Others". This cannot be undone.`,
-      okText: 'Delete Category',
-      okDanger: true
-    });
-    if (!confirmed) return;
-    state.categories = state.categories.filter(c => c.toLowerCase() !== name.toLowerCase());
-    state.products.forEach(p => { if (p.category === name) p.category = 'Others'; });
-    await saveState();
-    toast('Category deleted');
-    renderCategoryEditor(); renderChips(); renderProducts(); renderInventory();
-  }
+  // NOTE: handleRenameCategory and handleDeleteCategory were removed (FIX 12).
+  // They were dead code — unreachable because renderCategoryEditor uses inline closures
+  // instead. Their presence caused "unexpected token" lint errors and confused tooling.
 
   function cleanupViewState() {
-    editingNoteId = null;
+    // FIX 9: editingNoteId is intentionally NOT reset here. Resetting it on every tab
+    // switch caused note edits to create a NEW note instead of updating the existing one
+    // when the user navigated away and returned. It is only nulled after a confirmed save
+    // (in noteSaveBtn handler) or an explicit Cancel click (in noteCancelBtn handler).
     editingProductId = null;
     modalContext = null;
     hideModal();
@@ -2528,13 +2614,12 @@ function handleTouchEnd() {
     }
   }
 
+  // FIX 10: Returns a DOM node instead of an HTML string — caller uses appendChild, not innerHTML.
   function renderTop3Products(start, end) {
     const salesInRange = getSalesInRange(start, end);
     const productPerformance = {};
     salesInRange.forEach(s => {
-      if (!productPerformance[s.productId]) {
-        productPerformance[s.productId] = { qty: 0, revenue: 0, profit: 0 };
-      }
+      if (!productPerformance[s.productId]) productPerformance[s.productId] = { qty: 0, revenue: 0, profit: 0 };
       productPerformance[s.productId].qty += s.qty;
       productPerformance[s.productId].revenue += (s.price * s.qty);
       productPerformance[s.productId].profit += ((s.price - s.cost) * s.qty);
@@ -2544,35 +2629,65 @@ function handleTouchEnd() {
       .sort((a, b) => b[1].profit - a[1].profit)
       .slice(0, 3);
 
+    const fragment = document.createDocumentFragment();
+
     if (topPerformers.length === 0) {
-      return '<div class="small" style="padding:20px;text-align:center;color:var(--text-muted)">No sales in this period</div>';
+      const empty = document.createElement('div');
+      empty.className = 'small';
+      empty.style.cssText = 'padding:20px;text-align:center;color:var(--text-muted)';
+      empty.textContent = 'No sales in this period';
+      fragment.appendChild(empty);
+      return fragment;
     }
 
-    let html = '<div style="display:flex;flex-direction:column;gap:12px;">';
-    topPerformers.forEach((entry, idx) => {
-      const [productId, metrics] = entry;
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
+    const medals = ['🥇', '🥈', '🥉'];
+
+    topPerformers.forEach(([productId, metrics], idx) => {
       const product = state.products.find(p => p.id === productId);
       const productName = product ? product.name : 'Unknown Product';
-      const medal = ['🥇', '🥈', '🥉'][idx];
 
-      html += `
-        <div style="padding:12px;background:var(--card-glass);border-radius:8px;display:flex;justify-content:space-between;align-items:center;border:1px solid var(--border-glass);">
-          <div style="display:flex;align-items:center;gap:12px;">
-            <span style="font-size:24px;">${medal}</span>
-            <div>
-              <div style="font-weight:600;color:var(--text-primary);">${escapeHtml(productName)}</div>
-              <div class="small" style="color:var(--text-secondary);">${metrics.qty} units sold</div>
-            </div>
-          </div>
-          <div style="text-align:right;">
-            <div style="font-weight:700;color:var(--accent-emerald);font-size:16px;">${fmt(metrics.profit)}</div>
-            <div class="small" style="color:var(--text-muted);">profit</div>
-          </div>
-        </div>
-      `;
+      const card = document.createElement('div');
+      card.style.cssText = 'padding:12px;background:var(--card-glass);border-radius:8px;display:flex;justify-content:space-between;align-items:center;border:1px solid var(--border-glass);';
+
+      const left = document.createElement('div');
+      left.style.cssText = 'display:flex;align-items:center;gap:12px;';
+      const medalSpan = document.createElement('span');
+      medalSpan.style.fontSize = '24px';
+      medalSpan.textContent = medals[idx] || '🏅';
+      const nameBlock = document.createElement('div');
+      const nameEl = document.createElement('div');
+      nameEl.style.cssText = 'font-weight:600;color:var(--text-primary);';
+      nameEl.textContent = productName;
+      const unitsEl = document.createElement('div');
+      unitsEl.className = 'small';
+      unitsEl.style.color = 'var(--text-secondary)';
+      unitsEl.textContent = metrics.qty + ' units sold';
+      nameBlock.appendChild(nameEl);
+      nameBlock.appendChild(unitsEl);
+      left.appendChild(medalSpan);
+      left.appendChild(nameBlock);
+
+      const right = document.createElement('div');
+      right.style.textAlign = 'right';
+      const profitEl = document.createElement('div');
+      profitEl.style.cssText = 'font-weight:700;color:var(--accent-emerald);font-size:16px;';
+      profitEl.textContent = fmt(metrics.profit);
+      const profitLbl = document.createElement('div');
+      profitLbl.className = 'small';
+      profitLbl.style.color = 'var(--text-muted)';
+      profitLbl.textContent = 'profit';
+      right.appendChild(profitEl);
+      right.appendChild(profitLbl);
+
+      card.appendChild(left);
+      card.appendChild(right);
+      wrap.appendChild(card);
     });
-    html += '</div>';
-    return html;
+
+    fragment.appendChild(wrap);
+    return fragment;
   }
 
   function renderReports(range = currentReportRange) {
@@ -2619,7 +2734,12 @@ function handleTouchEnd() {
     const newTop3Container = document.createElement('div');
     newTop3Container.id = 'top3Container';
     newTop3Container.style.cssText = 'margin-top:12px;background:var(--card-glass);padding:12px;border-radius:12px;border:1px solid var(--border-glass)';
-    newTop3Container.innerHTML = '<div style="font-weight:700;margin-bottom:12px;color:var(--text-primary);">🏆 Top 3 Products (by profit)</div>' + renderTop3Products(rangeStart, rangeEnd);
+    newTop3Container.innerHTML = '';
+    const top3Heading = document.createElement('div');
+    top3Heading.style.cssText = 'font-weight:700;margin-bottom:12px;color:var(--text-primary);';
+    top3Heading.textContent = '🏆 Top 3 Products (by profit)';
+    newTop3Container.appendChild(top3Heading);
+    newTop3Container.appendChild(renderTop3Products(rangeStart, rangeEnd));
     
     const reportChartCardEl = $('reportChartCard');
     if (reportChartCardEl && reportChartCardEl.parentNode) {
@@ -2655,9 +2775,8 @@ function handleTouchEnd() {
       tbl.appendChild(tbody);
       outer.appendChild(tbl);
       reportBreakdown.appendChild(outer);
-      const reportsPanel = $('reportsPanel');
-      if (reportsPanel) reportsPanel.style.paddingBottom = '100px';
-      reportBreakdown.style.paddingBottom = '24px';
+      // FIX 11: Removed inline reportsPanel.style.paddingBottom injection — padding is now
+      // owned by CSS (#reportsPanel { padding-bottom: 80px }) so inline styles can't override it.
     }
   }
 
