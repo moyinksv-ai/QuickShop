@@ -1,6 +1,6 @@
 /* sw.js - QuickShop Service Worker v3.2 (Production Build) */
 
-const CACHE_NAME = 'qs-cache-v3.8';
+const CACHE_NAME = 'qs-cache-v4';
 
 const URLS_TO_CACHE = [
   '/',

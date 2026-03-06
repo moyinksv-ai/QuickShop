@@ -2774,10 +2774,10 @@ function handleTouchEnd() {
       tbl.appendChild(tbody);
       outer.appendChild(tbl);
       reportBreakdown.appendChild(outer);
-      // Spacer: guarantees the last table row clears the fixed navbar on all browsers.
-      // CSS padding-bottom alone is unreliable when content is injected dynamically.
+      // Spacer accounts for the fixed navbar height + Android gesture bar safe area.
+      // env(safe-area-inset-bottom) is 0 in desktop/Acode, ~34px in installed PWA.
       const spacer = document.createElement('div');
-      spacer.style.cssText = 'height:calc(var(--nav-h, 68px) + 32px);flex-shrink:0;pointer-events:none;';
+      spacer.style.cssText = 'height:calc(var(--nav-h, 68px) + 16px + env(safe-area-inset-bottom));flex-shrink:0;pointer-events:none;';
       reportBreakdown.appendChild(spacer);
     }
   }
