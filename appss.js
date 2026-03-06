@@ -27,15 +27,21 @@ function initApp() {
   'use strict';
 
   // ── PUBLIC CATALOG ROUTING ─────────────────────────────────────────
-  // Branch point: if ?view=catalog&store=USER_ID is present, render
-  // a read-only customer storefront and skip all admin/auth setup.
+  // Token-based: ?view=catalog&token=OPAQUE_TOKEN
+  // The token is resolved server-side to a store_id via share_links table.
+  // Old ?store=UUID links are no longer accepted — they exposed internal IDs.
   const _qs = new URLSearchParams(window.location.search);
-  const isCatalogMode = _qs.get('view') === 'catalog' && !!_qs.get('store');
-  const catalogStoreId = _qs.get('store') || null;
+  const catalogToken = _qs.get('token') || null;
+  const isCatalogMode = _qs.get('view') === 'catalog' && !!catalogToken;
 
   if (isCatalogMode) {
+    // Validate token format before any network call
+    if (!/^[A-Za-z0-9_\-]{20,128}$/.test(catalogToken)) {
+      document.body.innerHTML = '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#ef4444;">Invalid or expired catalog link.</div>';
+      return;
+    }
     document.body.classList.add('customer-mode');
-    initPublicCatalog(catalogStoreId);
+    initPublicCatalog(catalogToken);
     return; // ← hard branch: everything below is admin-only
   }
   // ── END CATALOG ROUTING ────────────────────────────────────────────
@@ -3640,11 +3646,11 @@ if (document.readyState === 'loading') {
 
 // ══════════════════════════════════════════════════════════════════════
 // PUBLIC CATALOG MODE — Customer Storefront
-// Entry: initApp() detects ?view=catalog&store=USER_ID and calls here.
-// Everything in this function is intentionally self-contained and does
-// NOT share any admin-mode state, handlers, or auth requirements.
+// Entry: initApp() detects ?view=catalog&token=OPAQUE_TOKEN and calls here.
+// Token is resolved server-side via share_links table → store_id.
+// Never reads internal UUIDs from the URL.
 // ══════════════════════════════════════════════════════════════════════
-async function initPublicCatalog(storeId) {
+async function initPublicCatalog(token) {
   'use strict';
 
   const $  = id => document.getElementById(id);
@@ -3980,11 +3986,38 @@ async function initPublicCatalog(storeId) {
     return;
   }
 
-  // ── Profile ──────────────────────────────────────────────────────
+  // ── Resolve token → store_id ─────────────────────────────────────
+  // Query the share_links table using the opaque token.
+  // Never expose the internal store UUID in the URL.
+  let storeId;
+  try {
+    const { data: linkRow, error: linkErr } = await supabase
+      .from('share_links')
+      .select('store_id')
+      .eq('token', token)
+      .or('expires_at.is.null,expires_at.gt.' + new Date().toISOString())
+      .maybeSingle();
+    if (linkErr) throw linkErr;
+    if (!linkRow || !linkRow.store_id) throw new Error('not found');
+    storeId = linkRow.store_id;
+  } catch(_) {
+    const g = document.getElementById('catGrid');
+    if (g) {
+      g.innerHTML = '';
+      const d = document.createElement('div'); d.id = 'catEmpty';
+      const ei = document.createElement('div'); ei.className = 'ei'; ei.textContent = '🔗';
+      const strong = document.createElement('strong'); strong.textContent = 'Link expired or invalid';
+      const span = document.createElement('span'); span.textContent = 'Ask the seller for a new link';
+      d.appendChild(ei); d.appendChild(strong); d.appendChild(span); g.appendChild(d);
+    }
+    return;
+  }
+
+  // ── Profile (safe view — exposes only name + business_name) ──────
   let businessName = '', sellerPhone = urlPhone;
   try {
     const { data: prof } = await supabase
-      .from('profiles')
+      .from('public_catalog_profiles')
       .select('name, business_name')
       .eq('id', storeId)
       .single();
@@ -4004,11 +4037,11 @@ async function initPublicCatalog(storeId) {
   document.getElementById('catAvatar').textContent = initials(displayName);
   document.title = displayName;
 
-  // ── Products ─────────────────────────────────────────────────────
+  // ── Products (safe view — omits cost column) ─────────────────────
   let allProducts = [];
   try {
     const { data, error } = await supabase
-      .from('products')
+      .from('public_catalog_products')
       .select('id, name, price, qty, category, image_url, icon, barcode')
       .eq('user_id', storeId)
       .order('name', { ascending: true });
