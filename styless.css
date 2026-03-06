@@ -13,9 +13,9 @@
   --card-bg:        #1c1c22;
   --text-primary:   #f4f4f5;
   --text-secondary: rgba(244,244,245,0.62);
-  --text-muted:     rgba(244,244,245,0.78);
+  --text-muted:     rgba(244,244,245,0.38);
   --text-dark:      #f4f4f5;
-  --muted:          rgba(244,244,245,0.78);
+  --muted:          rgba(244,244,245,0.38);
   --border-glass:   rgba(255,255,255,0.08);
   --border-subtle:  rgba(255,255,255,0.04);
   --border-hi:      rgba(255,255,255,0.15);
@@ -37,8 +37,7 @@
   --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' fill='rgba%28244%2C244%2C245%2C0.5%29' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
   --radius:    14px;
   --radius-sm: 9px;
-  --nav-h: calc(68px + env(safe-area-inset-bottom, 0px));
-
+  --nav-h:     68px;
   --topbar-h:  56px;
   --transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
 }
@@ -52,7 +51,7 @@
   --card-bg:        #ffffff;
   --text-primary:   #09090b;
   --text-secondary: rgba(9,9,11,0.65);
-  --text-muted:     rgba(9,9,11,0.72);
+  --text-muted:     rgba(9,9,11,0.42);
   --text-dark:      #09090b;
   --muted:          rgba(9,9,11,0.42);
   --border-glass:   rgba(0,0,0,0.09);
@@ -223,6 +222,8 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { opacity: 0
 .app {
   max-width: 480px; margin: 0 auto;
   padding: 0 12px;
+  /* Bottom padding clears the fixed nav — .list no longer owns this */
+  padding-bottom: calc(var(--nav-h) + 24px + env(safe-area-inset-bottom));
   width: 100%; display: none;
 }
 
@@ -329,7 +330,8 @@ body.ai-open { overflow: hidden; position: fixed; width: 100%; height: 100%; }
 #aiCard .ai-actions button { flex: 1; }
 
 /* ── PRODUCT LIST ────────────────────────────────────────────────── */
-.list { display: flex; flex-direction: column; gap: 8px; padding-bottom: calc(var(--nav-h) + 20px + env(safe-area-inset-bottom)); }
+/* FIX: Removed padding-bottom — .app container now owns bottom clearance */
+.list { display: flex; flex-direction: column; gap: 8px; }
 
 .product-card {
   display: flex; gap: 10px; align-items: flex-start;
@@ -460,12 +462,18 @@ body.keyboard-open .modal { top: 8vh !important; }
 #barcodeValue { font-size: 16px; font-weight: 700; color: var(--text-primary); }
 
 /* ── PANELS — consistent spacing ─────────────────────────────────── */
-.panel { display: none; min-height: calc(100vh - var(--topbar-h) - var(--nav-h)); overflow-anchor: none; contain: content; padding-top: 12px; }
+/* FIX: Removed contain:content — contain:paint was clipping dynamically-added report content
+   in mobile Safari. overflow-anchor:none is kept to prevent scroll jump on list updates. */
+.panel { display: none; min-height: calc(100vh - var(--topbar-h) - var(--nav-h)); overflow-anchor: none; padding-top: 12px; }
 .panel.active { display: block; animation: fadeIn 0.22s ease; }
 /* Panels with sticky-header-wrapper should NOT have extra top padding — the header creates it */
 #inventoryPanel { padding-top: 0; }
-#settingsPanel { overflow-y: auto !important; padding-bottom: calc(var(--nav-h) + 20px + env(safe-area-inset-bottom)) !important; padding-top: 12px; }
-#notesPanel #notesList { padding-bottom: calc(var(--nav-h) + 16px + env(safe-area-inset-bottom)); }
+/* settingsPanel scrolls with the page body — .app owns the nav clearance */
+#settingsPanel { overflow-y: auto !important; padding-bottom: 8px !important; padding-top: 12px; }
+/* notesList scrolls with the page — .app already owns the nav clearance, no extra needed */
+#notesPanel #notesList { padding-bottom: 8px; }
+/* Reports: .app already owns the nav clearance — panel just needs a small inner buffer */
+#reportsPanel { padding-bottom: 16px; }
 
 /* ── REPORTS ─────────────────────────────────────────────────────── */
 #reportChartCard { margin-top: 10px; background: var(--card-glass); padding: 10px; border-radius: var(--radius); box-shadow: var(--shadow-glass); border: 1px solid var(--border-glass); }
@@ -500,7 +508,11 @@ table tr:last-child td { border-bottom: none; }
 .note-meta { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
 
 /* ── BOTTOM NAV ──────────────────────────────────────────────────── */
-.bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; height: var(--nav-h); display: flex; align-items: center; justify-content: center; background: var(--bg-glass); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: 0 -1px 0 var(--border-glass); z-index: 300; border-top: 1px solid var(--border-glass); }
+.bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; height: var(--nav-h); display: flex; align-items: center; justify-content: center; background: var(--bg-glass); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: 0 -1px 0 var(--border-glass); z-index: 300; border-top: 1px solid var(--border-glass);
+  /* FIX: Glass background is non-interactive — clicks pass through to content underneath
+     (e.g. inventory Delete button on last card). Nav buttons stay fully interactive. */
+  pointer-events: none; }
+.bottom-nav .nav { pointer-events: auto; } /* re-enable the button strip only */
 body.keyboard-open .bottom-nav { transform: translateY(110%); opacity: 0; pointer-events: none; }
 .nav { max-width: 480px; display: flex; gap: 2px; justify-content: space-between; padding: 6px 10px; width: 100%; }
 .nav-btn { display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--text-muted); font-size: 10px; background: transparent; border: 0; padding: 6px 5px; border-radius: var(--radius-sm); cursor: pointer; transition: var(--transition); flex: 1 1 0px; min-width: 0; font-weight: 600; }
@@ -530,6 +542,33 @@ body.keyboard-open .bottom-nav { transform: translateY(110%); opacity: 0; pointe
 #activityLogArea > div[style*="font-weight:600"], #activityLogArea > div[style*="font-weight:700"] { color: var(--text-primary); background: transparent; }
 #categoryEditorArea { color: var(--text-primary); }
 #categoryEditorArea input { background: var(--bg-glass) !important; color: var(--text-primary) !important; border-color: var(--border-glass); }
+
+/* FIX: Settings transparency — override the 38% opacity token inside the settings panel
+   so labels, sub-labels, and inputs are fully legible in both themes */
+#settingsPanel { --text-muted: rgba(244,244,245,0.82); }
+[data-theme="light"] #settingsPanel { --text-muted: rgba(9,9,11,0.62); }
+
+#settingsPanel .qs-s-row-label { color: var(--text-primary) !important; }
+#settingsPanel .qs-s-row-sub   { color: rgba(244,244,245,0.72) !important; }
+[data-theme="light"] #settingsPanel .qs-s-row-sub { color: rgba(9,9,11,0.58) !important; }
+
+/* Settings inputs — solid, legible background in both themes */
+#settingsPanel input[type="text"],
+#settingsPanel input[type="number"],
+#settingsPanel input[type="email"],
+#settingsPanel input[type="tel"],
+#settingsPanel textarea,
+#settingsPanel select {
+  background: var(--card-bg) !important;
+  color: var(--text-primary) !important;
+  border: 1.5px solid var(--border-glass) !important;
+}
+#settingsPanel input:focus,
+#settingsPanel textarea:focus,
+#settingsPanel select:focus {
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.14) !important;
+}
 
 /* ── AUDIT LOG ───────────────────────────────────────────────────── */
 .full-screen-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg-glass); z-index: 999999; display: flex; flex-direction: column; animation: slideUp 0.3s cubic-bezier(0.16,1,0.3,1); }
