@@ -198,34 +198,33 @@ function handleTouchStart(e) {
 
 function handleTouchMove(e) {
   if (pullToRefresh.state !== 'PULLING') return;
-  
+
   const currentY = e.touches[0].clientY;
   const delta = currentY - pullToRefresh.startY;
 
-  // If user scrolls up or isn't at the top, reset and bail
   if (delta < 0 || window.scrollY > 5) {
     pullToRefresh.state = 'IDLE';
     updatePullToRefreshUI();
     return;
   }
 
-  // Sync delta to distance so handleTouchEnd can see it
-  pullToRefresh.distance = delta;
+  // Apply resistance so the indicator moves at 40% of finger speed —
+  // requires a deliberate hard pull rather than an accidental swipe.
+  pullToRefresh.distance = delta * 0.4;
   updatePullToRefreshUI();
-  
-  // Prevent the whole page from bouncing (optional but smoother)
+
   if (delta > 10 && e.cancelable) e.preventDefault();
 }
 
 function handleTouchEnd() {
   if (pullToRefresh.state === 'PULLING') {
-    // Now 'distance' actually has the value from the move event!
-    if (pullToRefresh.distance > 70) {
+    // Threshold 120px of resisted distance (~300px of actual finger travel)
+    // — accidental scrolls never reach this; intentional pulls do.
+    if (pullToRefresh.distance > 120) {
       pullToRefresh.state = 'REFRESHING';
       updatePullToRefreshUI();
       setTimeout(() => location.reload(), 500);
     } else {
-      // If pull was too short, reset state to IDLE immediately
       pullToRefresh.state = 'IDLE';
       pullToRefresh.distance = 0;
       updatePullToRefreshUI();
