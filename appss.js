@@ -3915,11 +3915,80 @@ async function initPublicCatalog(token) {
 
     /* ── FOOTER ─────────────────────────────────────────────── */
     #catFooter {
-      text-align: center; padding: 16px 20px 28px;
+      text-align: center; padding: 32px 20px 40px;
       font-size: 11.5px; color: var(--text2);
     }
     #catFooter strong { color: var(--accent); font-weight: 700; }
+
+    /* ── CTA BANNER ──────────────────────────────────────────────── */
+    #catCta {
+      margin: 8px 16px 32px;
+      background: linear-gradient(135deg, rgba(124,58,237,0.12) 0%, rgba(79,70,229,0.08) 100%);
+      border: 1px solid rgba(124,58,237,0.25);
+      border-radius: 16px;
+      padding: 24px 20px;
+      text-align: center;
+    }
+    #catCta .cta-emoji { font-size: 28px; margin-bottom: 10px; display: block; }
+    #catCta .cta-heading {
+      font-size: 16px; font-weight: 700; color: var(--text);
+      margin-bottom: 6px; letter-spacing: -0.02em;
+    }
+    #catCta .cta-sub {
+      font-size: 13px; color: var(--text2);
+      margin-bottom: 18px; line-height: 1.5;
+    }
+    #catCta .cta-btn {
+      display: inline-block;
+      background: var(--accent);
+      color: #fff;
+      font-size: 14px; font-weight: 700;
+      padding: 12px 28px;
+      border-radius: 10px;
+      text-decoration: none;
+      letter-spacing: -0.01em;
+      transition: opacity 0.18s, transform 0.18s;
+    }
+    #catCta .cta-btn:hover  { opacity: 0.88; }
+    #catCta .cta-btn:active { transform: scale(0.97); }
+
+    /* ── LIGHTBOX ────────────────────────────────────────────────── */
+    #catLightbox {
+      display: none;
+      position: fixed; inset: 0; z-index: 99999;
+      background: rgba(0,0,0,0.88);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    #catLightbox.open { display: flex; }
+    #catLightbox img {
+      max-width: 100%; max-height: 88vh;
+      border-radius: 12px;
+      object-fit: contain;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.7);
+      user-select: none;
+    }
+    #catLbClose {
+      position: absolute; top: 16px; right: 16px;
+      width: 36px; height: 36px;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: #fff; font-size: 18px; font-weight: 300;
+      transition: background 0.15s;
+    }
+    #catLbClose:hover { background: rgba(255,255,255,0.22); }
+    .cat-thumb.has-image { cursor: zoom-in; }
   </style>
+
+  <!-- LIGHTBOX (hidden until image clicked) -->
+  <div id="catLightbox" role="dialog" aria-modal="true" aria-label="Product image">
+    <button id="catLbClose" aria-label="Close image">&times;</button>
+    <img id="catLbImg" src="" alt=""/>
+  </div>
 
   <!-- HEADER -->
   <div id="catHeader">
@@ -3964,6 +4033,15 @@ async function initPublicCatalog(token) {
       `).join('')}
     </div>
   </div>
+
+  <!-- CTA BANNER -->
+  <div id="catCta">
+    <span class="cta-emoji">🛍️</span>
+    <div class="cta-heading">Want your own catalog like this?</div>
+    <div class="cta-sub">QuickShop lets you sell smarter on WhatsApp — one link, all your products, totally free.</div>
+    <a class="cta-btn" href="https://quickshoppify.vercel.app" target="_blank" rel="noopener noreferrer">Create Your Free Catalog →</a>
+  </div>
+
   <div id="catFooter">Powered by <strong>QuickShop</strong></div>
   `;
 
@@ -4085,6 +4163,32 @@ async function initPublicCatalog(token) {
     renderGrid();
   });
 
+  // ── Lightbox ─────────────────────────────────────────────────────
+  const lightbox   = document.getElementById('catLightbox');
+  const lbImg      = document.getElementById('catLbImg');
+  const lbClose    = document.getElementById('catLbClose');
+
+  function openLightbox(src, alt) {
+    lbImg.src = src;
+    lbImg.alt = alt || '';
+    lightbox.classList.add('open');
+    lbClose.focus();
+    document.body.style.overflow = 'hidden';
+  }
+  function closeLightbox() {
+    lightbox.classList.remove('open');
+    lbImg.src = '';
+    document.body.style.overflow = '';
+  }
+
+  lbClose.addEventListener('click', closeLightbox);
+  lightbox.addEventListener('click', function(e) {
+    if (e.target === lightbox) closeLightbox();
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && lightbox.classList.contains('open')) closeLightbox();
+  });
+
   // ── Render ───────────────────────────────────────────────────────
   const WA_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
     <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
@@ -4118,50 +4222,93 @@ async function initPublicCatalog(token) {
       const inStock = typeof p.qty !== 'number' || p.qty > 0;
       const lowStock = inStock && typeof p.qty === 'number' && p.qty <= 3;
 
-      // Thumbnail
-      let thumbInner = '';
+      // ── Thumbnail ──────────────────────────────────────────────────
+      const thumbDiv = document.createElement('div');
+      thumbDiv.className = 'cat-thumb';
+
       if (p.image_url) {
-        thumbInner = `<img src="${esc(p.image_url)}" alt="${esc(p.name||'')}" loading="lazy"/>`;
+        thumbDiv.classList.add('has-image');
+        thumbDiv.setAttribute('role', 'button');
+        thumbDiv.setAttribute('tabindex', '0');
+        thumbDiv.setAttribute('aria-label', 'View full image of ' + (p.name || 'product'));
+        const img = document.createElement('img');
+        img.src     = p.image_url;           // safe: set via property, not innerHTML
+        img.alt     = p.name || '';
+        img.loading = 'lazy';
+        thumbDiv.appendChild(img);
+        function handleThumbActivate() { openLightbox(p.image_url, p.name || ''); }
+        thumbDiv.addEventListener('click', handleThumbActivate);
+        thumbDiv.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleThumbActivate(); }
+        });
       } else if (p.icon && p.icon.trim().length) {
-        // Emoji: centered, no competing colour
-        thumbInner = `<span class="cat-emoji-placeholder">${esc(p.icon)}</span>`;
+        const span = document.createElement('span');
+        span.className   = 'cat-emoji-placeholder';
+        span.textContent = p.icon;
+        thumbDiv.appendChild(span);
       } else {
-        // Text monogram — typographic, muted, like Depop
-        const mono = (p.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
-        thumbInner = `<span class="cat-monogram">${esc(mono)}</span>`;
+        const mono = (p.name || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+        const span = document.createElement('span');
+        span.className   = 'cat-monogram';
+        span.textContent = mono;
+        thumbDiv.appendChild(span);
       }
 
-      const badge = !inStock
-        ? `<span class="cat-badge cat-badge-oos">Sold out</span>`
-        : lowStock
-        ? `<span class="cat-badge cat-badge-low">Last ${p.qty}</span>`
-        : '';
+      if (!inStock) {
+        const badge = document.createElement('span');
+        badge.className   = 'cat-badge cat-badge-oos';
+        badge.textContent = 'Sold out';
+        thumbDiv.appendChild(badge);
+      } else if (lowStock) {
+        const badge = document.createElement('span');
+        badge.className   = 'cat-badge cat-badge-low';
+        badge.textContent = 'Last ' + p.qty;
+        thumbDiv.appendChild(badge);
+      }
 
-      // WhatsApp — opens vendor's number directly
-      const waText = encodeURIComponent(`Hi! I'd like to order *${p.name}* — ${fmt(p.price||0)}`);
+      // ── Info ───────────────────────────────────────────────────────
+      const infoDiv    = document.createElement('div');
+      infoDiv.className = 'cat-info';
+      const catEl  = document.createElement('div'); catEl.className  = 'cat-cat';  catEl.textContent  = p.category || 'General';
+      const nameEl = document.createElement('div'); nameEl.className = 'cat-name'; nameEl.textContent = p.name || 'Product';
+      const lblEl  = document.createElement('div'); lblEl.className  = 'cat-price-label'; lblEl.textContent = 'Price';
+      const priceEl = document.createElement('div'); priceEl.className = 'cat-price'; priceEl.textContent = fmt(p.price || 0);
+      infoDiv.appendChild(catEl); infoDiv.appendChild(nameEl);
+      infoDiv.appendChild(lblEl); infoDiv.appendChild(priceEl);
+
+      // ── Footer / WhatsApp CTA ──────────────────────────────────────
+      const footerDiv = document.createElement('div');
+      footerDiv.className = 'cat-footer';
+      const waText = encodeURIComponent('Hi! I\u2019d like to order *' + (p.name || '') + '* \u2014 ' + fmt(p.price || 0));
       const waHref = sellerPhone
-        ? `https://wa.me/${sellerPhone}?text=${waText}`
-        : `https://wa.me/?text=${waText}`;
+        ? 'https://wa.me/' + sellerPhone + '?text=' + waText
+        : 'https://wa.me/?text=' + waText;
 
+      if (inStock) {
+        const waBtn = document.createElement('a');
+        waBtn.href      = waHref;
+        waBtn.className = 'cat-wa-btn';
+        waBtn.target    = '_blank';
+        waBtn.rel       = 'noopener noreferrer';
+        const waIconWrapper = document.createElement('span');
+        waIconWrapper.setAttribute('aria-hidden', 'true');
+        waIconWrapper.innerHTML = WA_ICON;    // static SVG — no user data
+        waBtn.appendChild(waIconWrapper);
+        waBtn.appendChild(document.createTextNode(' Order on WhatsApp'));
+        footerDiv.appendChild(waBtn);
+      } else {
+        const oos = document.createElement('span');
+        oos.className   = 'cat-wa-btn sold-out';
+        oos.textContent = 'Out of stock';
+        footerDiv.appendChild(oos);
+      }
+
+      // ── Assemble card ──────────────────────────────────────────────
       const card = document.createElement('div');
       card.className = 'cat-card';
-      card.innerHTML = `
-        <div class="cat-thumb">${thumbInner}${badge}</div>
-        <div class="cat-info">
-          <div class="cat-cat">${esc(p.category||'General')}</div>
-          <div class="cat-name">${esc(p.name||'Product')}</div>
-          <div class="cat-price-label">Price</div>
-          <div class="cat-price">${fmt(p.price||0)}</div>
-        </div>
-        <div class="cat-footer">
-          ${inStock
-            ? `<a href="${waHref}" class="cat-wa-btn" target="_blank" rel="noopener noreferrer">
-                ${WA_ICON} Order on WhatsApp
-               </a>`
-            : `<span class="cat-wa-btn sold-out">Out of stock</span>`
-          }
-        </div>
-      `;
+      card.appendChild(thumbDiv);
+      card.appendChild(infoDiv);
+      card.appendChild(footerDiv);
       grid.appendChild(card);
     });
   }
