@@ -472,9 +472,7 @@ body.keyboard-open .modal { top: 8vh !important; }
 #settingsPanel { overflow-y: auto !important; padding-bottom: 8px !important; padding-top: 12px; }
 /* notesList scrolls with the page — .app already owns the nav clearance, no extra needed */
 #notesPanel #notesList { padding-bottom: 8px; }
-/* reportsPanel: content is injected dynamically by JS so it can exceed .app's
-   pre-computed padding. Give it its own full nav + safe-area clearance. */
-#reportsPanel { padding-bottom: calc(var(--nav-h) + 32px + env(safe-area-inset-bottom)); }
+/* reportsPanel clearance is handled by a JS-injected spacer after the breakdown table */
 
 /* ── REPORTS ─────────────────────────────────────────────────────── */
 #reportChartCard { margin-top: 10px; background: var(--card-glass); padding: 10px; border-radius: var(--radius); box-shadow: var(--shadow-glass); border: 1px solid var(--border-glass); }

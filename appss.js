@@ -2774,8 +2774,11 @@ function handleTouchEnd() {
       tbl.appendChild(tbody);
       outer.appendChild(tbl);
       reportBreakdown.appendChild(outer);
-      // FIX 11: Removed inline reportsPanel.style.paddingBottom injection — padding is now
-      // owned by CSS (#reportsPanel { padding-bottom: 80px }) so inline styles can't override it.
+      // Spacer: guarantees the last table row clears the fixed navbar on all browsers.
+      // CSS padding-bottom alone is unreliable when content is injected dynamically.
+      const spacer = document.createElement('div');
+      spacer.style.cssText = 'height:calc(var(--nav-h, 68px) + 32px);flex-shrink:0;pointer-events:none;';
+      reportBreakdown.appendChild(spacer);
     }
   }
 
