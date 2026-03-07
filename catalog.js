@@ -1221,11 +1221,11 @@
     try {
       var results = await Promise.all([
         client.from('public_catalog_profiles')
-              .select('id, name, business_name')
+              .select('*')
               .eq('id', storeId)
               .maybeSingle(),
         client.from('public_catalog_products')
-              .select('id, user_id, name, price, qty, category, image_url, image_url2, icon, barcode')
+              .select('*')
               .eq('user_id', storeId)
               .order('name', { ascending: true })
       ]);
@@ -1237,8 +1237,9 @@
     }
 
     if (productsResult.error) {
+      var errMsg = (productsResult.error && productsResult.error.message) || String(productsResult.error);
       console.error('[Catalog] Products fetch error:', productsResult.error);
-      showError('Could not load products. The catalog may be unavailable.');
+      showError('Could not load products (' + errMsg + '). Run the latest migration in Supabase or check your connection.');
       return;
     }
 
