@@ -30,17 +30,17 @@ function initApp() {
   // Token-based: ?view=catalog&token=OPAQUE_TOKEN (production)
   // Legacy fallback: ?view=catalog&store=UUID (local dev only — bypasses token resolution)
   const _qs = new URLSearchParams(window.location.search);
-  const catalogToken   = _qs.get('token') || null;
-  const catalogStoreId = _qs.get('store') || null;   // legacy / dev fallback
-  const isCatalogMode  = _qs.get('view') === 'catalog' && !!(catalogToken || catalogStoreId);
+const catalogToken = _qs.get('token');
+// We remove 'store' entirely to prevent UUID exposure
+const isCatalogMode = _qs.get('view') === 'catalog' && !!catalogToken;
 
-  if (isCatalogMode) {
-    document.body.classList.add('customer-mode');
-    // catalogStoreId (?store=UUID) is the primary path — direct, reliable, no DB table needed.
-    // catalogToken (?token=...) is supported for backward compat but now also extracts store from URL.
-    initPublicCatalog(catalogToken, catalogStoreId);
-    return;
-  }
+if (isCatalogMode) {
+  document.body.classList.add('customer-mode');
+  // We only pass the token; the function will resolve it to the User ID internally
+  initPublicCatalog(catalogToken);
+  return;
+}
+
   // ── END CATALOG ROUTING ────────────────────────────────────────────
 
   const IS_PROD = window.location.hostname !== 'localhost' && !window.location.hostname.includes('127.0.0.1');
@@ -3368,18 +3368,49 @@ if (document.readyState === 'loading') {
 // Token is resolved server-side via share_links table → store_id.
 // Never reads internal UUIDs from the URL.
 // ══════════════════════════════════════════════════════════════════════
-async function initPublicCatalog(token, directStoreId) {
+async function initPublicCatalog(token) {
   'use strict';
 
-  const $  = id => document.getElementById(id);
-  const qs = new URLSearchParams(window.location.search);
-  const urlPhone = (qs.get('phone') || '').replace(/\D/g, '');
+  // 1. Initial Setup & Helpers
+  const $ = id => document.getElementById(id);
+  const _qs = new URLSearchParams(window.location.search);
+  const urlPhone = (_qs.get('phone') || '').replace(/\D/g, '');
 
-  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-  function fmt(v) { return '₦' + Number(v||0).toLocaleString('en-NG'); }
-  function initials(name) {
-    return (name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  const esc = (s) => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  const fmt = (v) => '₦' + Number(v||0).toLocaleString('en-NG');
+  const initials = (name) => (name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+
+  // 2. Token Resolution (The "SaaS Grade" Security Layer)
+  // We resolve the token to a user_id. If it fails, the catalog is inaccessible.
+  const { data: linkData, error: linkError } = await window.__QS_SUPABASE.client
+    .from('share_links')
+    .select('user_id')
+    .eq('token', token)
+    .single();
+
+  if (linkError || !linkData) {
+    console.error('Catalog Error:', linkError);
+    const root = $('publicCatalogRoot');
+    if (root) root.innerHTML = `<div class="p-8 text-center text-gray-400">Catalog not found or link has expired.</div>`;
+    return;
   }
+
+  const effectiveStoreId = linkData.user_id;
+
+  // 3. Fetch Business Profile
+  const { data: profile } = await window.__QS_SUPABASE.client
+    .from('profiles')
+    .select('business_name, phone_number')
+    .eq('id', effectiveStoreId)
+    .single();
+
+   sellerPhone = urlPhone || (profile ? profile.phone_number : '');
+  const storeName   = profile ? profile.business_name : 'Our Catalog';
+
+  // Update UI Header
+  const titleEl = $('publicStoreName');
+  if (titleEl) titleEl.textContent = storeName;
+
 
   // Detect system dark preference (catalog has its own theme, independent of app)
   const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
