@@ -30,7 +30,8 @@
     connect-src 'self'
                 https://*.supabase.co
                 wss://*.supabase.co
-                https://*.supabase.in;
+                https://*.supabase.in
+                https://world.openfoodfacts.org;
     img-src 'self' data: blob:
             https://*.supabase.co
             https://*.supabase.in;
@@ -590,19 +591,19 @@
       <!-- ── SCREENSHOTS ──────────────────────────────────── -->
       <div class="ql-screens" aria-label="App screenshots" role="img">
         <div class="ql-screen-wrap">
-          <img src="home.png" alt="QuickShop home screen" loading="lazy" />
+          <img src="qs-screen-1.png" alt="QuickShop home screen" loading="lazy" />
           <div class="ql-screen-caption">Home</div>
         </div>
         <div class="ql-screen-wrap">
-          <img src="store.png" alt="Inventory view" loading="lazy" />
+          <img src="qs-screen-2.png" alt="Inventory view" loading="lazy" />
           <div class="ql-screen-caption">Inventory</div>
         </div>
         <div class="ql-screen-wrap">
-          <img src="inventory.png" alt="AI Insights" loading="lazy" />
+          <img src="qs-screen-3.png" alt="AI Insights" loading="lazy" />
           <div class="ql-screen-caption">Insights</div>
         </div>
         <div class="ql-screen-wrap">
-          <img src="report.png" alt="Reports" loading="lazy" />
+          <img src="qs-screen-4.png" alt="Reports" loading="lazy" />
           <div class="ql-screen-caption">Reports</div>
         </div>
       </div>
@@ -613,7 +614,8 @@
       <!-- ── FEATURES ─────────────────────────────────────── -->
       <section class="ql-section" aria-label="Features">
         <div class="ql-eyebrow ql-reveal">What you get</div>
-        <h2 class="ql-h2 ql-reveal ql-reveal-delay-1">Three things that make a real difference every trading day.</h2>
+        <h2 class="ql-h2 ql-reveal ql-reveal-delay-1">Built for how traders actually work.</h2>
+        <p class="ql-h2-sub ql-reveal ql-reveal-delay-2">Three things that make a real difference every trading day.</p>
 
         <div class="ql-feat-grid">
           <div class="ql-feat ql-reveal ql-reveal-delay-1">
@@ -901,8 +903,9 @@
     <div id="inventoryPanel" class="panel">
       <div class="sticky-header-wrapper">
         <div style="font-weight:700; font-size: 18px; color: var(--text-primary);">Inventory</div>
-        <div style="display:flex; gap: 8px;">
+        <div style="display:flex; gap: 8px; flex-wrap:wrap;">
           <button id="primaryScanBtn" class="save-btn" type="button" style="background: var(--accent-cyan);">📷 Scan</button>
+          <button id="csvImportBtn2" class="save-btn" type="button" style="background:var(--accent-indigo, #6366f1);">📥 Import</button>
           <button id="insightBtn" class="save-btn" type="button">💡 Insight</button>
           <button id="toggleAddFormBtn" class="save-btn" type="button">+ Add</button>
         </div>
@@ -922,10 +925,23 @@
           <input id="invQty" type="number" placeholder="Stock" min="0" style="flex:1;" />
         </div>
         <div class="add-row"><select id="invCategory" style="flex:1;"></select></div>
-        <div class="add-row"><input id="invImg" type="file" accept="image/*" style="flex:1;" /></div>
-        <div id="invImgPreview" class="img-preview">
-          <img id="invImgPreviewImg" src="" alt="Preview" />
-          <button id="invImgClear" class="btn-undo" type="button">Remove</button>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div class="add-row" style="align-items:center;gap:8px;">
+            <label style="font-size:12px;font-weight:600;color:var(--text-muted);white-space:nowrap;">Photo 1</label>
+            <input id="invImg" type="file" accept="image/*" style="flex:1;" />
+          </div>
+          <div id="invImgPreview" class="img-preview">
+            <img id="invImgPreviewImg" src="" alt="Preview" style="max-height:80px;border-radius:8px;object-fit:cover;" />
+            <button id="invImgClear" class="btn-undo" type="button" style="font-size:12px;">Remove</button>
+          </div>
+          <div class="add-row" style="align-items:center;gap:8px;">
+            <label style="font-size:12px;font-weight:600;color:var(--text-muted);white-space:nowrap;">Photo 2</label>
+            <input id="invImg2" type="file" accept="image/*" style="flex:1;" />
+          </div>
+          <div id="invImgPreview2" class="img-preview" style="display:none;">
+            <img id="invImgPreviewImg2" src="" alt="Preview 2" style="max-height:80px;border-radius:8px;object-fit:cover;" />
+            <button id="invImgClear2" class="btn-undo" type="button" style="font-size:12px;">Remove</button>
+          </div>
         </div>
         <div class="add-row">
           <button id="addProductBtn" class="save-btn" style="flex:1;">Save Product</button>
@@ -1109,100 +1125,5 @@
   <script src="indexeddb_sync.js"></script>
   <script src="share-catalog.js"></script>
   <script src="appss.js" defer></script>
-  <style>
-  #qs-pwa-modal {
-    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(120%);
-    width: calc(100% - 32px); max-width: 400px; background: var(--card-glass);
-    border: 1px solid var(--border-hi); border-radius: 20px; padding: 20px;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.5); z-index: 99999;
-    transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1);
-    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  }
-  #qs-pwa-modal.active { transform: translateX(-50%) translateY(0); }
-  .pwa-flex { display: flex; align-items: center; gap: 16px; }
-  .pwa-icon { width: 50px; height: 50px; border-radius: 12px; background: var(--accent-primary); 
-              display: flex; align-items: center; justify-content: center; font-size: 24px; }
-  .pwa-content { flex: 1; }
-  .pwa-title { font-weight: 700; color: var(--text-primary); font-size: 16px; margin-bottom: 4px; }
-  .pwa-body { font-size: 13px; color: var(--text-secondary); line-height: 1.4; }
-  .pwa-actions { margin-top: 16px; display: flex; gap: 10px; }
-  .pwa-btn { flex: 1; padding: 10px; border-radius: 10px; font-weight: 700; border: none; cursor: pointer; font-size: 14px; }
-  .pwa-btn-primary { background: var(--accent-primary); color: #fff; }
-  .pwa-btn-ghost { background: transparent; color: var(--text-secondary); }
-</style>
-
-<div id="qs-pwa-modal" role="dialog" aria-modal="true" aria-labelledby="pwa-t" aria-describedby="pwa-d">
-  <div class="pwa-flex">
-    <div class="pwa-icon">🛍️</div>
-    <div class="pwa-content">
-      <div class="pwa-title" id="pwa-t">Install QuickShop</div>
-      <div class="pwa-body" id="pwa-d">Access your inventory instantly, even without internet.</div>
-    </div>
-  </div>
-  <div class="pwa-actions">
-    <button class="pwa-btn pwa-btn-ghost" id="pwa-later">Later</button>
-    <button class="pwa-btn pwa-btn-primary" id="pwa-install">Install Now</button>
-  </div>
-</div>
-
-<script>
-(function() {
-  const modal = document.getElementById('qs-pwa-modal');
-  const installBtn = document.getElementById('pwa-install');
-  const laterBtn = document.getElementById('pwa-later');
-  const desc = document.getElementById('pwa-d');
-  let deferredPrompt = null;
-
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-  const isInstalled = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-
-  if (isInstalled) return;
-
-  // 1. Android/Chrome Native Event
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    showPrompt();
-  });
-
-  // 2. iOS Custom Logic (Manual prompt)
-  if (isIOS) {
-    desc.textContent = 'Tap the Share button and "Add to Home Screen" to install.';
-    installBtn.style.display = 'none';
-    showPrompt();
-  }
-
-  function showPrompt() {
-    const lastDismissed = localStorage.getItem('pwa_dismissed');
-    // Don't show if dismissed in the last 24 hours
-    if (lastDismissed && Date.now() - lastDismissed < 86400000) return;
-    
-    setTimeout(() => modal.classList.add('active'), 3000);
-  }
-
-  installBtn.addEventListener('click', async () => {
-    if (!deferredPrompt) return;
-    modal.classList.remove('active');
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    deferredPrompt = null;
-  });
-
-  laterBtn.addEventListener('click', () => {
-    modal.classList.remove('active');
-    localStorage.setItem('pwa_dismissed', Date.now());
-  });
-
-  // Security: Focus Trap for Accessibility
-  modal.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') laterBtn.click();
-    if (e.key === 'Tab') {
-      if (e.shiftKey) { if (document.activeElement === laterBtn) { e.preventDefault(); installBtn.focus(); } }
-      else { if (document.activeElement === installBtn) { e.preventDefault(); laterBtn.focus(); } }
-    }
-  });
-})();
-</script>
-
 </body>
 </html>
