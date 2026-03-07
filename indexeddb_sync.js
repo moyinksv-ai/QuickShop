@@ -102,13 +102,14 @@
     return {
       id:        safeStr(p.id, 64),
       name:      safeStr(p.name || '', 200),
-      barcode:   p.barcode != null ? safeStr(p.barcode, 64) : null,
+      barcode:   p.barcode  != null ? safeStr(p.barcode,  64)   : null,
       price:     safeNum(p.price),
       cost:      safeNum(p.cost),
       qty:       Math.max(0, Math.floor(safeNum(p.qty))),
       category:  safeStr(p.category || 'Others', 50),
-      image:     p.image != null ? safeStr(p.image, 4096) : null,
-      icon:      p.icon  != null ? safeStr(p.icon, 10)   : null,
+      image:     p.image    != null ? safeStr(p.image,  4096)   : null,
+      image2:    p.image2   != null ? safeStr(p.image2, 4096)   : null,
+      icon:      p.icon     != null ? safeStr(p.icon,   10)     : null,
       createdAt: typeof p.createdAt === 'number' ? p.createdAt : Date.now(),
       updatedAt: typeof p.updatedAt === 'number' ? p.updatedAt : Date.now()
     };
@@ -209,15 +210,16 @@
 
             case 'addProduct': {
               var p = sanitiseProduct(act.item);
-              var _r1 = await supabase.from('products').insert({
+              var _r1 = await supabase.from('products').upsert({
                 id: p.id, user_id: user.id,
                 name: p.name, barcode: p.barcode || null,
                 price: p.price, cost: p.cost, qty: p.qty,
                 category: p.category,
-                image_url: p.image || null, icon: p.icon || null,
+                image_url: p.image || null, image_url2: p.image2 || null,
+                icon: p.icon || null,
                 created_at: new Date(p.createdAt).toISOString(),
-                updated_at: new Date(p.updatedAt).toISOString()
-              });
+                updated_at: new Date(p.updatedAt || p.createdAt).toISOString()
+              }, { onConflict: 'id' });
               if (_r1.error) throw _r1.error;
               success = true;
               break;
@@ -229,7 +231,8 @@
                 name: p2.name, barcode: p2.barcode || null,
                 price: p2.price, cost: p2.cost, qty: p2.qty,
                 category: p2.category,
-                image_url: p2.image || null, icon: p2.icon || null,
+                image_url: p2.image || null, image_url2: p2.image2 || null,
+                icon: p2.icon || null,
                 updated_at: new Date().toISOString()
               }).eq('id', p2.id).eq('user_id', user.id);
               if (_r2.error) throw _r2.error;

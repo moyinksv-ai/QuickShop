@@ -996,10 +996,11 @@
       <div style="background:var(--card-bg);padding:12px;border-radius:12px;border:1px solid rgba(7,18,43,0.04);margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom: 12px;">
           <div style="font-weight:700">Store Data</div>
-          <div style="display:flex;gap:8px">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button id="btnSyncNow" class="save-btn" style="background:var(--accent-emerald);">☁️ Sync Now</button>
             <button id="btnLoadDemo" class="save-btn">Load Demo</button>
             <button id="btnClearStore" class="btn-undo">Clear Store</button>
-          </div>
+            </div>
         </div>
       </div>
       <div style="background:var(--card-bg);padding:12px;border-radius:12px;border:1px solid rgba(7,18,43,0.04);margin-bottom:12px">
@@ -1125,5 +1126,6 @@
   <script src="indexeddb_sync.js"></script>
   <script src="share-catalog.js"></script>
   <script src="appss.js" defer></script>
+  <script src="inventory.js" defer></script>
 </body>
 </html>
