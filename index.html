@@ -89,6 +89,14 @@
     .panel      { display: none; }
     .panel.active { display: block; }
 
+    /* 3b. Catalog mode — hides landing/app chrome synchronously when ?store= or ?token=
+           is present. Applied by the early-body script below before first paint,
+           so #qs-landing never flashes even though catalog.js loads async. */
+    body.qs-cat-early #qs-landing,
+    body.qs-cat-early #loginScreen,
+    body.qs-cat-early .app,
+    body.qs-cat-early .bottom-nav { display: none !important; }
+
     /* 4. Logged-in state. */
     body.mode-app #loginScreen   { display: none !important; }
     body.mode-app #qs-landing    { display: none !important; }
@@ -527,6 +535,12 @@
       try {
         if (localStorage.getItem('qs_session_active') === 'true') {
           document.body.classList.add('mode-app');
+        }
+        // Catalog mode: hide landing page before first paint — no flash.
+        // catalog.js (async) will later add body.qs-cat which takes over.
+        var _p = new URLSearchParams(window.location.search);
+        if (_p.has('store') || _p.has('token')) {
+          document.body.classList.add('qs-cat-early');
         }
       } catch(e) { console.warn('QuickShop: storage check failed', e); }
     })();
@@ -1137,6 +1151,12 @@
       ?token=<opaque-token>  — legacy share_links token
 
     Everything else loads the full admin app stack.
+
+    LOAD ORDER NOTE:
+    Dynamically inserted scripts are async=true by default per spec —
+    setting .defer=true has no effect on them. Setting .async=false
+    restores insertion-order guarantee, which is required because
+    inventory.js depends on window.__QS_APP set by appss.js.
     ─────────────────────────────────────────────────────────────────────
   -->
   <script>
@@ -1144,21 +1164,24 @@
       var p = new URLSearchParams(window.location.search);
       var isCatalog = p.has('store') || p.has('token');
 
-      function addScript(src, defer) {
+      // async=false on dynamically inserted scripts enforces insertion order.
+      // This is the correct technique — defer=true is silently ignored on
+      // dynamic scripts per the HTML specification.
+      function addScript(src, ordered) {
         var s = document.createElement('script');
         s.src = src;
-        if (defer) s.defer = true;
+        if (ordered) s.async = false;
         document.body.appendChild(s);
       }
 
       if (isCatalog) {
-        // Customer storefront — only catalog.js needed
-        addScript('catalog.js', true);
+        // Customer storefront — only catalog.js, load async (fine, standalone)
+        addScript('catalog.js', false);
       } else {
-        // Admin app — full stack
+        // Admin app — full stack, ordered (inventory.js depends on appss.js bridge)
         window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); });
-        addScript('indexeddb_sync.js', false);
-        addScript('share-catalog.js', false);
+        addScript('indexeddb_sync.js', true);
+        addScript('share-catalog.js', true);
         addScript('appss.js', true);
         addScript('inventory.js', true);
       }

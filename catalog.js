@@ -608,7 +608,7 @@
   // Returns effectiveStoreId string or null.
 
   async function resolveStore(client) {
-    // Prefer direct ?store= param (new URLs from share-products-index.ts)
+    // Prefer direct ?store= param (new URLs — UUID is cryptographically unguessable)
     if (STORE_ID) return STORE_ID;
 
     // Fall back to opaque token → share_links table lookup
@@ -616,25 +616,16 @@
     try {
       var r = await client
         .from('share_links')
-        .select('store_id')
-        .eq('token', TOKEN)
-        .gt('expires_at', new Date().toISOString()) // ignore expired
-        .is('expires_at', null)                      // OR no expiry
-        .single();
-      // Supabase doesn't support OR across .is and .gt easily;
-      // do it as a JS check instead:
-      var r2 = await client
-        .from('share_links')
         .select('store_id, expires_at')
         .eq('token', TOKEN)
         .maybeSingle();
-      if (r2.error || !r2.data) return null;
-      var expiresAt = r2.data.expires_at;
-      if (expiresAt && new Date(expiresAt) < new Date()) {
+      if (r.error || !r.data) return null;
+      // Supabase .gt() and .is() combine as AND, not OR — expiry check done in JS
+      if (r.data.expires_at && new Date(r.data.expires_at) < new Date()) {
         showError('This catalog link has expired. Please ask the seller for a new one.');
         return null;
       }
-      return r2.data.store_id || null;
+      return r.data.store_id || null;
     } catch (e) {
       return null;
     }
@@ -1178,17 +1169,14 @@
           if (!pid) return;
           if (action === 'qty-minus') {
             var entry = cart.get(pid);
+            // cartSetQty → refreshCartUI → renderCartItems (if drawer open). No extra calls needed.
             if (entry) cartSetQty(pid, entry.qty - 1);
-            renderCartItems();
-            refreshCartUI();
           } else if (action === 'qty-plus') {
             var entry2 = cart.get(pid);
             if (entry2) cartSetQty(pid, entry2.qty + 1);
-            renderCartItems();
-            refreshCartUI();
           } else if (action === 'cart-remove') {
+            // cartRemove → refreshCartUI → renderCartItems (if drawer open).
             cartRemove(pid);
-            renderCartItems();
           }
         });
       }
