@@ -1,53 +1,76 @@
-/* indexeddb_sync.js - Offline-first queueing and sync logic for Supabase
- * SECURITY HARDENING:
- *   - VALID_ACTION_TYPES allowlist: unknown sync operations are rejected before storage
- *   - validateAction(): structural check on every pending change before it is queued
- *   - sanitiseProduct() / sanitiseSale(): numeric fields clamped, strings length-limited
- *     before any data reaches Supabase — prevents negative prices, NaN, Infinity, oversized payloads
- *   - window.qsdb frozen after full assembly: external scripts cannot replace sync functions
- *   - Production console.log calls removed; only errors and warnings remain
+/* indexeddb_sync.js — Offline-first queueing and sync logic for Supabase
+ *
+ * SECURITY HARDENING
+ * ─────────────────────────────────────────────────────────────────────────
+ *  · VALID_ACTION_TYPES allowlist: unknown operations rejected before storage
+ *  · validateAction(): structural check on every pending change before queuing
+ *  · sanitiseProduct() / sanitiseSale(): numeric fields clamped, strings
+ *    length-limited before reaching Supabase — prevents NaN, Infinity,
+ *    negative prices, oversized payloads
+ *  · window.qsdb frozen after assembly: external scripts cannot replace fns
+ *  · Production log calls suppressed via IS_PROD flag
+ *
+ * BATCHING (avoids per-item HTTP round trips on reconnect)
+ * ─────────────────────────────────────────────────────────────────────────
+ *  · addProduct + updateProduct  → single upsert array   (1 HTTP call)
+ *  · removeProduct               → single .in() delete   (1 HTTP call)
+ *  · addSale                     → single upsert array   (1 HTTP call)
+ *  · removeSale                  → single .in() delete   (1 HTTP call)
+ *  · addStock                    → individual (read-modify-write, must stay serial)
+ *  If a batch fails the entire group stays in queue for retry on next sync.
+ *  Partial success within a batch is impossible — all-or-nothing per group.
+ *
+ * isSyncing GUARD
+ * ─────────────────────────────────────────────────────────────────────────
+ *  · Module-level flag prevents concurrent sync runs.
+ *  · Multiple triggers (online event, auth event, manual Sync Now, page load)
+ *    will coalesce: the second call returns immediately, queues no work.
  */
 
 (function () {
   'use strict';
 
-  const DB_NAME    = 'quickshop_db';
-  const DB_VERSION = 1;
-  const STORE_NAME = 'pending_sync';
+  var DB_NAME    = 'quickshop_db';
+  var DB_VERSION = 1;
+  var STORE_NAME = 'pending_sync';
 
-  const VALID_ACTION_TYPES = Object.freeze([
-    'addProduct',
-    'updateProduct',
-    'removeProduct',
-    'addSale',
-    'removeSale',
-    'addStock'
+  var VALID_ACTION_TYPES = Object.freeze([
+    'addProduct', 'updateProduct', 'removeProduct',
+    'addSale', 'removeSale', 'addStock'
   ]);
 
-  const IS_PROD = (
+  var IS_PROD = (
     window.location.hostname !== 'localhost' &&
     !window.location.hostname.startsWith('127.') &&
     !window.location.hostname.startsWith('192.168.')
   );
-  const log  = IS_PROD ? () => {} : (...a) => console.log('[qsdb]', ...a);
-  const warn = (...a) => console.warn('[qsdb]', ...a);
+  var log  = IS_PROD ? function () {} : function () {
+    var args = Array.prototype.slice.call(arguments);
+    console.log.apply(console, ['[qsdb]'].concat(args));
+  };
+  var warn = function () {
+    var args = Array.prototype.slice.call(arguments);
+    console.warn.apply(console, ['[qsdb]'].concat(args));
+  };
 
-  let dbPromise = null;
+  // ── Concurrency guard ────────────────────────────────────────────────
+  var isSyncing = false;
+
+  // ── IndexedDB ────────────────────────────────────────────────────────
+  var dbPromise = null;
 
   function getDb() {
     if (dbPromise) return dbPromise;
-    dbPromise = new Promise((resolve, reject) => {
-      if (!('indexedDB' in window)) {
-        return reject(new Error('IndexedDB not supported'));
-      }
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
-      request.onerror = (ev) => {
+    dbPromise = new Promise(function (resolve, reject) {
+      if (!('indexedDB' in window)) return reject(new Error('IndexedDB not supported'));
+      var request = indexedDB.open(DB_NAME, DB_VERSION);
+      request.onerror = function (ev) {
         console.error('[qsdb] IndexedDB open error:', ev.target.error);
         reject(ev.target.error);
       };
-      request.onsuccess = (ev) => resolve(ev.target.result);
-      request.onupgradeneeded = (ev) => {
-        const db = ev.target.result;
+      request.onsuccess = function (ev) { resolve(ev.target.result); };
+      request.onupgradeneeded = function (ev) {
+        var db = ev.target.result;
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
         }
@@ -56,19 +79,18 @@
     return dbPromise;
   }
 
-  function waitForSupabaseReady(timeoutMs = 3000) {
-    return new Promise((resolve) => {
-      if (window.__QS_SUPABASE && window.__QS_SUPABASE.client) {
+  // ── Supabase readiness ───────────────────────────────────────────────
+  function waitForSupabaseReady(timeoutMs) {
+    return new Promise(function (resolve) {
+      if (window.__QS_SUPABASE && window.__QS_SUPABASE.client)
         return resolve(window.__QS_SUPABASE);
-      }
-      let waited = 0;
-      const iv = setInterval(() => {
+      var waited = 0;
+      var iv = setInterval(function () {
         if (window.__QS_SUPABASE && window.__QS_SUPABASE.client) {
-          clearInterval(iv);
-          return resolve(window.__QS_SUPABASE);
+          clearInterval(iv); return resolve(window.__QS_SUPABASE);
         }
         waited += 100;
-        if (waited >= timeoutMs) {
+        if (waited >= (timeoutMs || 3000)) {
           clearInterval(iv);
           warn('Supabase did not initialise within timeout.');
           return resolve(window.__QS_SUPABASE || null);
@@ -77,15 +99,16 @@
     });
   }
 
+  // ── Validation ───────────────────────────────────────────────────────
   function validateAction(action) {
     if (!action || typeof action !== 'object') return 'Action must be an object';
     if (!VALID_ACTION_TYPES.includes(action.type))
       return 'Unknown action type: ' + String(action.type).slice(0, 50);
-    if (!action.item || typeof action.item !== 'object') return 'Action must have an item object';
-
-    const item = action.item;
+    if (!action.item || typeof action.item !== 'object')
+      return 'Action must have an item object';
+    var item = action.item;
     if (['addProduct','updateProduct','removeProduct','addStock'].includes(action.type)) {
-      const id = item.id || item.productId;
+      var id = item.id || item.productId;
       if (typeof id !== 'string' || !/^[a-zA-Z0-9_\-]{1,64}$/.test(id))
         return 'Item has invalid or missing id';
     }
@@ -96,6 +119,7 @@
     return null;
   }
 
+  // ── Sanitisers ───────────────────────────────────────────────────────
   function sanitiseProduct(p) {
     function safeNum(v)      { var n = Number(v); return (isFinite(n) && n >= 0) ? n : 0; }
     function safeStr(v, max) { return (typeof v === 'string' ? v : String(v || '')).slice(0, max); }
@@ -128,200 +152,230 @@
     };
   }
 
+  // ── Public API ───────────────────────────────────────────────────────
   var qsdb = {
 
-    addPendingChange: async function(action) {
+    addPendingChange: async function (action) {
       var err = validateAction(action);
-      if (err) {
-        warn('addPendingChange rejected — validation failed:', err);
-        return null;
-      }
+      if (err) { warn('addPendingChange rejected:', err); return null; }
       var db = await getDb();
-      return new Promise(function(resolve, reject) {
-        var tx    = db.transaction([STORE_NAME], 'readwrite');
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction([STORE_NAME], 'readwrite');
         var store = tx.objectStore(STORE_NAME);
-        var req   = store.add(action);
-        req.onsuccess = function() { resolve(req.result); };
-        req.onerror   = function(ev) {
+        var req = store.add(action);
+        req.onsuccess = function () { resolve(req.result); };
+        req.onerror   = function (ev) {
           console.error('[qsdb] addPendingChange failed:', ev.target.error);
           reject(ev.target.error);
         };
       });
     },
 
-    getAllPending: async function() {
+    getAllPending: async function () {
       var db = await getDb();
-      return new Promise(function(resolve, reject) {
-        var tx    = db.transaction([STORE_NAME], 'readonly');
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction([STORE_NAME], 'readonly');
         var store = tx.objectStore(STORE_NAME);
-        var req   = store.getAll();
-        req.onsuccess = function() { resolve(req.result); };
-        req.onerror   = function(ev) {
+        var req = store.getAll();
+        req.onsuccess = function () { resolve(req.result); };
+        req.onerror   = function (ev) {
           console.error('[qsdb] getAllPending failed:', ev.target.error);
           reject(ev.target.error);
         };
       });
     },
 
-    clearPending: async function(id) {
+    clearPending: async function (id) {
       var db = await getDb();
-      return new Promise(function(resolve, reject) {
-        var tx    = db.transaction([STORE_NAME], 'readwrite');
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction([STORE_NAME], 'readwrite');
         var store = tx.objectStore(STORE_NAME);
-        var req   = store.delete(id);
-        req.onsuccess = function() { resolve(); };
-        req.onerror   = function(ev) {
+        var req = store.delete(id);
+        req.onsuccess = function () { resolve(); };
+        req.onerror   = function (ev) {
           console.error('[qsdb] clearPending failed:', ev.target.error);
           reject(ev.target.error);
         };
       });
     }
+
   };
 
+  // ── syncPendingToSupabase (BATCHED) ──────────────────────────────────
   async function syncPendingToSupabase() {
+
+    if (isSyncing) { log('Sync in progress — skipping.'); return; }
+    if (!navigator.onLine) { log('Offline — skipping sync.'); return; }
+
+    isSyncing = true;
+    log('Sync started.');
+
     try {
-      if (!navigator.onLine) { log('Offline — skipping sync.'); return; }
-
       var pending = await window.qsdb.getAllPending();
-      if (!pending || pending.length === 0) { log('No pending items to sync.'); return; }
+      if (!pending || pending.length === 0) { log('Nothing pending.'); return; }
+      log('Pending actions:', pending.length);
 
-      log('Syncing ' + pending.length + ' pending item(s)…');
-
-      var sb = await waitForSupabaseReady();
-      if (!sb || !sb.client) { warn('Supabase not ready — sync deferred.'); return; }
-
+      var sb = await waitForSupabaseReady(3000);
+      if (!sb || !sb.client) { warn('Supabase not ready — deferred.'); return; }
       var supabase = sb.client;
       var user     = sb.user;
-      if (!user || !user.id) { warn('No authenticated user — sync deferred.'); return; }
+      if (!user || !user.id) { warn('No user — deferred.'); return; }
+      var userId = user.id;
 
-      for (var i = 0; i < pending.length; i++) {
-        var act = pending[i];
+      // ── Group by type ──────────────────────────────────────────────
+      var productUpsertRows   = []; var productUpsertActIds = [];
+      var productDeleteIds    = []; var productDeleteActIds = [];
+      var saleInsertRows      = []; var saleInsertActIds    = [];
+      var saleDeleteIds       = []; var saleDeleteActIds    = [];
+      var stockSerial         = [];
+      var invalidActIds       = [];
+
+      pending.forEach(function (act) {
+        var err = validateAction(act);
+        if (err) { warn('Dropping invalid action id=' + act.id + ':', err); invalidActIds.push(act.id); return; }
+
+        switch (act.type) {
+          case 'addProduct':
+          case 'updateProduct': {
+            var p = sanitiseProduct(act.item);
+            productUpsertRows.push({
+              id: p.id, user_id: userId,
+              name: p.name, barcode: p.barcode || null,
+              price: p.price, cost: p.cost, qty: p.qty,
+              category: p.category,
+              image_url:  p.image  || null,
+              image_url2: p.image2 || null,
+              icon: p.icon || null,
+              created_at: new Date(p.createdAt).toISOString(),
+              updated_at: new Date(p.updatedAt || p.createdAt).toISOString()
+            });
+            productUpsertActIds.push(act.id);
+            break;
+          }
+          case 'removeProduct': {
+            productDeleteIds.push(act.item.id);
+            productDeleteActIds.push(act.id);
+            break;
+          }
+          case 'addSale': {
+            var s = sanitiseSale(act.item);
+            saleInsertRows.push({
+              id: s.id, user_id: userId, product_id: s.productId,
+              qty: s.qty, price: s.price, cost: s.cost,
+              sale_date: new Date(s.ts).toISOString()
+            });
+            saleInsertActIds.push(act.id);
+            break;
+          }
+          case 'removeSale': {
+            saleDeleteIds.push(act.item.id);
+            saleDeleteActIds.push(act.id);
+            break;
+          }
+          case 'addStock': {
+            stockSerial.push(act);
+            break;
+          }
+        }
+      });
+
+      // Drop invalid actions from queue immediately
+      for (var ii = 0; ii < invalidActIds.length; ii++) {
+        try { await window.qsdb.clearPending(invalidActIds[ii]); } catch (_) {}
+      }
+
+      var doneActIds = [];
+
+      // ── Product upserts ──────────────────────────────────────────
+      if (productUpsertRows.length > 0) {
+        log('Product upsert batch:', productUpsertRows.length);
         try {
-          var validErr = validateAction(act);
-          if (validErr) {
-            warn('Skipping invalid queued action (id=' + act.id + '):', validErr);
-            await window.qsdb.clearPending(act.id);
-            continue;
-          }
+          var r1 = await supabase.from('products')
+            .upsert(productUpsertRows, { onConflict: 'id' });
+          if (r1.error) { console.error('[qsdb] Product upsert failed:', r1.error); }
+          else { doneActIds = doneActIds.concat(productUpsertActIds); log('Product upsert OK.'); }
+        } catch (e) { console.error('[qsdb] Product upsert threw:', e); }
+      }
 
-          var success = false;
+      // ── Product deletes ──────────────────────────────────────────
+      if (productDeleteIds.length > 0) {
+        log('Product delete batch:', productDeleteIds.length);
+        try {
+          var r2 = await supabase.from('products').delete()
+            .in('id', productDeleteIds).eq('user_id', userId);
+          if (r2.error) { console.error('[qsdb] Product delete failed:', r2.error); }
+          else { doneActIds = doneActIds.concat(productDeleteActIds); log('Product delete OK.'); }
+        } catch (e) { console.error('[qsdb] Product delete threw:', e); }
+      }
 
-          switch (act.type) {
+      // ── Sale inserts (upsert so retries are idempotent) ──────────
+      if (saleInsertRows.length > 0) {
+        log('Sale insert batch:', saleInsertRows.length);
+        try {
+          var r3 = await supabase.from('sales')
+            .upsert(saleInsertRows, { onConflict: 'id', ignoreDuplicates: true });
+          if (r3.error) { console.error('[qsdb] Sale insert failed:', r3.error); }
+          else { doneActIds = doneActIds.concat(saleInsertActIds); log('Sale insert OK.'); }
+        } catch (e) { console.error('[qsdb] Sale insert threw:', e); }
+      }
 
-            case 'addProduct': {
-              var p = sanitiseProduct(act.item);
-              var _r1 = await supabase.from('products').upsert({
-                id: p.id, user_id: user.id,
-                name: p.name, barcode: p.barcode || null,
-                price: p.price, cost: p.cost, qty: p.qty,
-                category: p.category,
-                image_url: p.image || null, image_url2: p.image2 || null,
-                icon: p.icon || null,
-                created_at: new Date(p.createdAt).toISOString(),
-                updated_at: new Date(p.updatedAt || p.createdAt).toISOString()
-              }, { onConflict: 'id' });
-              if (_r1.error) throw _r1.error;
-              success = true;
-              break;
-            }
+      // ── Sale deletes ─────────────────────────────────────────────
+      if (saleDeleteIds.length > 0) {
+        log('Sale delete batch:', saleDeleteIds.length);
+        try {
+          var r4 = await supabase.from('sales').delete()
+            .in('id', saleDeleteIds).eq('user_id', userId);
+          if (r4.error) { console.error('[qsdb] Sale delete failed:', r4.error); }
+          else { doneActIds = doneActIds.concat(saleDeleteActIds); log('Sale delete OK.'); }
+        } catch (e) { console.error('[qsdb] Sale delete threw:', e); }
+      }
 
-            case 'updateProduct': {
-              var p2 = sanitiseProduct(act.item);
-              var _r2 = await supabase.from('products').update({
-                name: p2.name, barcode: p2.barcode || null,
-                price: p2.price, cost: p2.cost, qty: p2.qty,
-                category: p2.category,
-                image_url: p2.image || null, image_url2: p2.image2 || null,
-                icon: p2.icon || null,
-                updated_at: new Date().toISOString()
-              }).eq('id', p2.id).eq('user_id', user.id);
-              if (_r2.error) throw _r2.error;
-              success = true;
-              break;
-            }
-
-            case 'removeProduct': {
-              var p3 = sanitiseProduct(act.item);
-              var _r3 = await supabase.from('products')
-                .delete().eq('id', p3.id).eq('user_id', user.id);
-              if (_r3.error) throw _r3.error;
-              success = true;
-              break;
-            }
-
-            case 'addSale': {
-              var s = sanitiseSale(act.item);
-              var _r4 = await supabase.from('sales').insert({
-                id: s.id, user_id: user.id,
-                product_id: s.productId,
-                qty: s.qty, price: s.price, cost: s.cost,
-                sale_date: new Date(s.ts).toISOString()
-              });
-              if (_r4.error) throw _r4.error;
-              success = true;
-              break;
-            }
-
-            case 'removeSale': {
-              var s2 = sanitiseSale(act.item);
-              var _r5 = await supabase.from('sales')
-                .delete().eq('id', s2.id).eq('user_id', user.id);
-              if (_r5.error) throw _r5.error;
-              success = true;
-              break;
-            }
-
-            case 'addStock': {
-              var productId = String(act.item.productId || '').slice(0, 64);
-              var qty       = Math.max(1, Math.floor(Number(act.item.qty) || 1));
-              var _r6 = await supabase.from('products').select('qty')
-                .eq('id', productId).eq('user_id', user.id).single();
-              if (_r6.error) throw _r6.error;
-              var newQty = Math.max(0, (Number(_r6.data.qty) || 0) + qty);
-              var _r7 = await supabase.from('products')
-                .update({ qty: newQty, updated_at: new Date().toISOString() })
-                .eq('id', productId).eq('user_id', user.id);
-              if (_r7.error) throw _r7.error;
-              success = true;
-              break;
-            }
-
-            default:
-              warn('Unexpected action type after allowlist check — skipping:', act.type);
-          }
-
-          if (success) {
-            await window.qsdb.clearPending(act.id);
-            log('Synced item ' + act.id);
-          }
-
-        } catch(e) {
-          console.error('[qsdb] Failed to sync item ' + act.id + ' — will retry.', e);
+      // ── addStock: serial (read-modify-write, cannot batch) ───────
+      for (var si = 0; si < stockSerial.length; si++) {
+        var act = stockSerial[si];
+        try {
+          var productId = String(act.item.productId || '').slice(0, 64);
+          var addQty    = Math.max(1, Math.floor(Number(act.item.qty) || 1));
+          var fetchRes  = await supabase.from('products').select('qty')
+            .eq('id', productId).eq('user_id', userId).single();
+          if (fetchRes.error) throw fetchRes.error;
+          var newQty = Math.max(0, (Number(fetchRes.data.qty) || 0) + addQty);
+          var updRes = await supabase.from('products')
+            .update({ qty: newQty, updated_at: new Date().toISOString() })
+            .eq('id', productId).eq('user_id', userId);
+          if (updRes.error) throw updRes.error;
+          doneActIds.push(act.id);
+          log('addStock OK:', productId);
+        } catch (e) {
+          console.error('[qsdb] addStock failed for action', act.id, '— will retry.', e);
         }
       }
 
-      log('Sync complete.');
-      document.dispatchEvent(new Event('qs:data:synced'));
+      // ── Mark done ────────────────────────────────────────────────
+      for (var di = 0; di < doneActIds.length; di++) {
+        try { await window.qsdb.clearPending(doneActIds[di]); } catch (_) {}
+      }
 
-    } catch(e) {
+      var deferred = pending.length - invalidActIds.length - doneActIds.length;
+      log('Sync done. Done:', doneActIds.length, '/ Total:', pending.length, '/ Deferred:', deferred);
+
+      if (doneActIds.length > 0) document.dispatchEvent(new Event('qs:data:synced'));
+
+    } catch (e) {
       warn('syncPendingToSupabase error:', e);
+    } finally {
+      isSyncing = false;
     }
   }
 
   qsdb.syncPendingToSupabase = syncPendingToSupabase;
   window.qsdb = Object.freeze(qsdb);
 
-  window.addEventListener('online', function() {
-    log('Network restored — attempting sync…');
-    syncPendingToSupabase();
+  // ── Sync triggers ────────────────────────────────────────────────────
+  window.addEventListener('online', function () {
+    log('Network restored — syncing.'); syncPendingToSupabase();
   });
-
-  document.addEventListener('qs:user:auth', function() {
-    syncPendingToSupabase();
-  });
-
-  window.addEventListener('load', function() {
-    setTimeout(syncPendingToSupabase, 3000);
-  });
+  document.addEventListener('qs:user:auth', function () { syncPendingToSupabase(); });
+  window.addEventListener('load', function () { setTimeout(syncPendingToSupabase, 3000); });
 
 })();

@@ -1122,10 +1122,47 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase-config.js"></script>
-  <script>window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); });</script>
-  <script src="indexeddb_sync.js"></script>
-  <script src="share-catalog.js" defer></script>
-  <script src="appss.js" defer></script>
-  <script src="inventory.js" defer></script>
+
+  <!--
+    CONDITIONAL SCRIPT LOADER
+    ─────────────────────────────────────────────────────────────────────
+    catalog.js is a fully standalone module that owns the customer-facing
+    storefront. It has zero dependency on appss.js, inventory.js, or
+    share-catalog.js. Loading both runtimes on the same page is wasteful
+    and creates state conflicts, so we branch here at the earliest safe
+    point (after supabase-config.js has set window.__QS_SUPABASE).
+
+    URL patterns that trigger catalog mode:
+      ?store=<UUID>          — direct store link (preferred, new)
+      ?token=<opaque-token>  — legacy share_links token
+
+    Everything else loads the full admin app stack.
+    ─────────────────────────────────────────────────────────────────────
+  -->
+  <script>
+    (function () {
+      var p = new URLSearchParams(window.location.search);
+      var isCatalog = p.has('store') || p.has('token');
+
+      function addScript(src, defer) {
+        var s = document.createElement('script');
+        s.src = src;
+        if (defer) s.defer = true;
+        document.body.appendChild(s);
+      }
+
+      if (isCatalog) {
+        // Customer storefront — only catalog.js needed
+        addScript('catalog.js', true);
+      } else {
+        // Admin app — full stack
+        window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); });
+        addScript('indexeddb_sync.js', false);
+        addScript('share-catalog.js', false);
+        addScript('appss.js', true);
+        addScript('inventory.js', true);
+      }
+    })();
+  </script>
 </body>
 </html>
