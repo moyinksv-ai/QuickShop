@@ -121,7 +121,7 @@
         'body.qs-cat #loginScreen{display:none!important;}',
 
       /* --- root catalog wrapper --- */
-      '#qs-catalog{display:none;padding-bottom:110px;}',
+      '#qs-catalog{display:none;padding-bottom:72px;}',
       'body.qs-cat #qs-catalog{display:block;}',
 
       /* --- header --- */
@@ -168,13 +168,13 @@
         'border:1px solid rgba(124,58,237,0.4);}',
 
       /* --- results bar --- */
-      '#cat-results-bar{padding:4px 14px 8px;',
+      '#cat-results-bar{padding:2px 14px 6px;',
         'font-size:11px;color:rgba(240,240,246,0.3);font-weight:600;',
         'letter-spacing:.4px;text-transform:uppercase;}',
 
       /* --- grid --- */
       '#cat-grid{display:grid;grid-template-columns:repeat(2,1fr);',
-        'gap:10px;padding:0 10px;}',
+        'gap:8px;padding:0 10px;}',
       '@media(min-width:460px){#cat-grid{grid-template-columns:repeat(3,1fr);}}',
 
       /* --- card --- */
@@ -356,11 +356,11 @@
         'display:flex;align-items:center;justify-content:center;}',
 
       /* --- footer branding CTA --- */
-      '#cat-branding{padding:32px 20px 20px;text-align:center;}',
+      '#cat-branding{padding:12px 20px 16px;text-align:center;}',
       '#cat-branding-link{display:inline-flex;flex-direction:column;align-items:center;',
-        'gap:8px;text-decoration:none;',
+        'gap:5px;text-decoration:none;',
         'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);',
-        'border-radius:16px;padding:16px 24px;',
+        'border-radius:14px;padding:12px 20px;',
         'transition:all .2s;-webkit-tap-highlight-color:transparent;}',
       '#cat-branding-link:active{background:rgba(124,58,237,0.1);',
         'border-color:rgba(124,58,237,0.3);}',
