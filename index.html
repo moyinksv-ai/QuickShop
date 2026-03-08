@@ -533,14 +533,14 @@
        This script only sets the body class so CSS rules activate immediately. */
     (function() {
       try {
-        if (localStorage.getItem('qs_session_active') === 'true') {
-          document.body.classList.add('mode-app');
-        }
-        // Catalog mode: hide landing page before first paint — no flash.
-        // catalog.js (async) will later add body.qs-cat which takes over.
         var _p = new URLSearchParams(window.location.search);
-        if (_p.has('store') || _p.has('token')) {
+        var _isCatalog = _p.has('store') || _p.has('token');
+        if (_isCatalog) {
+          // Catalog URL — never show app chrome, even if user is logged in.
+          // catalog.js takes over completely.
           document.body.classList.add('qs-cat-early');
+        } else if (localStorage.getItem('qs_session_active') === 'true') {
+          document.body.classList.add('mode-app');
         }
       } catch(e) { console.warn('QuickShop: storage check failed', e); }
     })();
