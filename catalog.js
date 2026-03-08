@@ -355,10 +355,18 @@
         'width:38px;height:38px;border-radius:50%;font-size:18px;cursor:pointer;',
         'display:flex;align-items:center;justify-content:center;}',
 
-      /* --- footer branding --- */
-      '#cat-branding{text-align:center;padding:28px 20px 10px;',
-        'font-size:12px;color:rgba(240,240,246,0.2);}',
-      '#cat-branding strong{color:rgba(240,240,246,0.35);}',
+      /* --- footer branding CTA --- */
+      '#cat-branding{padding:32px 20px 20px;text-align:center;}',
+      '#cat-branding-link{display:inline-flex;flex-direction:column;align-items:center;',
+        'gap:8px;text-decoration:none;',
+        'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);',
+        'border-radius:16px;padding:16px 24px;',
+        'transition:all .2s;-webkit-tap-highlight-color:transparent;}',
+      '#cat-branding-link:active{background:rgba(124,58,237,0.1);',
+        'border-color:rgba(124,58,237,0.3);}',
+      '#cat-branding-label{font-size:12px;color:rgba(240,240,246,0.35);font-weight:500;}',
+      '#cat-branding-btn{font-size:13px;font-weight:800;',
+        'color:rgba(167,139,250,0.8);letter-spacing:-.2px;}',
 
       /* --- util --- */
       '.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}',
@@ -577,14 +585,24 @@
     lb.appendChild(lbimg);
     document.body.appendChild(lb);
 
-    // Branding footer
+    // Branding CTA footer — links to landing page
     var brand = document.createElement('div');
     brand.id = 'cat-branding';
-    brand.setAttribute('aria-hidden', 'true');
-    brand.appendChild(document.createTextNode('Powered by '));
-    var bs = document.createElement('strong');
-    bs.textContent = 'QuickShop';
-    brand.appendChild(bs);
+    var brandLink = document.createElement('a');
+    brandLink.id = 'cat-branding-link';
+    brandLink.href = window.location.origin + '/';
+    brandLink.target = '_blank';
+    brandLink.rel = 'noopener noreferrer';
+    brandLink.setAttribute('aria-label', 'Create your own catalog with QuickShop');
+    var brandTop = document.createElement('div');
+    brandTop.id = 'cat-branding-label';
+    brandTop.textContent = 'Want a catalog like this?';
+    var brandBtn = document.createElement('div');
+    brandBtn.id = 'cat-branding-btn';
+    brandBtn.textContent = 'Create yours free → QuickShop';
+    brandLink.appendChild(brandTop);
+    brandLink.appendChild(brandBtn);
+    brand.appendChild(brandLink);
     root.appendChild(brand);
 
     document.body.appendChild(root);
@@ -1196,7 +1214,10 @@
 
   /* ── 17. MAIN BOOTSTRAP ──────────────────────────────────────────────── */
 
+  var _catalogInitDone = false;
   async function initCatalog() {
+    if (_catalogInitDone) return;
+    _catalogInitDone = true;
     // Inject styles and build DOM shell immediately — no flash
     injectCSS();
     document.body.classList.add('qs-cat');
@@ -1216,19 +1237,56 @@
       return;
     }
 
-    // Fetch profile + products in parallel
+    // Fetch profile + products.
+    // Strategy: try the security-scoped views first (post-migration).
+    // If either view is missing ("not in schema cache"), fall back to querying
+    // the underlying tables directly with explicit safe-column selects —
+    // this matches the behaviour of the original working catalog code and
+    // keeps the catalog functional before the migration is applied.
+
+    async function fetchProducts() {
+      // Try view first
+      var vr = await client
+        .from('public_catalog_products')
+        .select('*')
+        .eq('user_id', storeId)
+        .order('name', { ascending: true });
+      if (!vr.error) return vr;
+
+      // View missing — fall back to products table directly.
+      // Only select public-safe columns (no cost, no internal fields).
+      // qty > 0 filter mirrors the view WHERE clause.
+      console.warn('[Catalog] View missing, falling back to products table:', vr.error.message);
+      return client
+        .from('products')
+        .select('id, user_id, name, price, qty, category, image_url, image_url2, icon, barcode')
+        .eq('user_id', storeId)
+        .gt('qty', 0)
+        .order('name', { ascending: true });
+    }
+
+    async function fetchProfile() {
+      // Try view first
+      var vr = await client
+        .from('public_catalog_profiles')
+        .select('*')
+        .eq('id', storeId)
+        .maybeSingle();
+      if (!vr.error) return vr;
+
+      // View missing — fall back to profiles table.
+      // Explicit columns only — never expose email.
+      console.warn('[Catalog] Profile view missing, falling back to profiles table:', vr.error.message);
+      return client
+        .from('profiles')
+        .select('id, name, business_name')
+        .eq('id', storeId)
+        .maybeSingle();
+    }
+
     var profileResult, productsResult;
     try {
-      var results = await Promise.all([
-        client.from('public_catalog_profiles')
-              .select('*')
-              .eq('id', storeId)
-              .maybeSingle(),
-        client.from('public_catalog_products')
-              .select('*')
-              .eq('user_id', storeId)
-              .order('name', { ascending: true })
-      ]);
+      var results = await Promise.all([ fetchProfile(), fetchProducts() ]);
       profileResult  = results[0];
       productsResult = results[1];
     } catch (e) {
@@ -1239,7 +1297,7 @@
     if (productsResult.error) {
       var errMsg = (productsResult.error && productsResult.error.message) || String(productsResult.error);
       console.error('[Catalog] Products fetch error:', productsResult.error);
-      showError('Could not load products (' + errMsg + '). Run the latest migration in Supabase or check your connection.');
+      showError('Could not load products. (' + errMsg + ')');
       return;
     }
 
