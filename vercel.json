@@ -1,8 +1,12 @@
 {
-  "buildCommand": "bash build.sh",
-  "outputDirectory": ".",
-  "env": {
-    "SUPABASE_URL": "@supabase_url",
-    "SUPABASE_ANON_KEY": "@supabase_anon_key"
-  }
+  "version": 2,
+  "builds": [
+    {
+      "src": "build.sh",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "."
+      }
+    }
+  ]
 }
