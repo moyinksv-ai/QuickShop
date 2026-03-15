@@ -1,0 +1,22 @@
+{
+  "name": "QuickShop",
+  "short_name": "QuickShop",
+  "description": "Inventory, Sales, and Notes",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1e1e2f",
+  "theme_color": "#2c2c3c",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "pwa-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "pwa-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ]
+}
