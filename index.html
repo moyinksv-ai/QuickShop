@@ -1260,7 +1260,13 @@
         addScript('catalog.js', false);
       } else {
         // Admin app — full stack, ordered (inventory.js depends on appss.js bridge)
-        window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); });
+        window.addEventListener('beforeinstallprompt', function (e) {
+          e.preventDefault(); // suppress auto-banner so we control when it shows
+          window.__QS_INSTALL_PROMPT = e; // save for Install button in Settings
+        });
+        window.addEventListener('appinstalled', function () {
+          window.__QS_INSTALL_PROMPT = null;
+        });
         addScript('indexeddb_sync.js', true);
         addScript('share-catalog.js', true);
         addScript('appss.js', true);

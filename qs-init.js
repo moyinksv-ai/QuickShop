@@ -181,17 +181,10 @@
     addScript('catalog.js', false);
   } else {
     // Admin app — ordered load required (inventory.js depends on __QS_APP from appss.js)
-    // Save the install prompt for later — show it via the Install button in Settings.
-    // Calling preventDefault() suppresses the browser's default banner so we
-    // can show it at the right moment instead of randomly.
-    window.addEventListener('beforeinstallprompt', function (e) {
-      e.preventDefault();
-      window.__QS_INSTALL_PROMPT = e;
-    });
-    // Clear the saved prompt once the app is installed
-    window.addEventListener('appinstalled', function () {
-      window.__QS_INSTALL_PROMPT = null;
-    });
+    // beforeinstallprompt is handled inline in index.html (in the conditional
+    // loader script) so it catches the event before this external file loads.
+    // Attaching it here again would be too late — the event already fired.
+    // See index.html for the handler that saves window.__QS_INSTALL_PROMPT.
     addScript('indexeddb_sync.js', true);
     addScript('share-catalog.js', true);
     addScript('appss.js',         true);
