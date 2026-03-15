@@ -3468,6 +3468,14 @@ function handleTouchEnd() {
             ${currentTheme === 'dark' ? '☀️  Light Mode' : '🌙  Dark Mode'}
           </button>
         </div>
+        ${window.__QS_INSTALL_PROMPT ? `
+        <div class="qs-s-row">
+          <div>
+            <div class="qs-s-row-label">Install App</div>
+            <div class="qs-s-row-sub">Add QuickShop to your home screen</div>
+          </div>
+          <button id="qs-install-btn" class="qs-ghost-btn" style="color:var(--accent-primary);border-color:rgba(99,102,241,0.3);">📲 Install</button>
+        </div>` : ''}
       </div>
 
       <!-- Store data -->
@@ -3589,6 +3597,24 @@ function handleTouchEnd() {
     settingsPanel.querySelectorAll('.qs-theme-toggle-btn').forEach(btn => {
       btn.addEventListener('click', toggleTheme);
     });
+
+    // Wire install button — only present when browser has a deferred prompt
+    const installBtn = settingsPanel.querySelector('#qs-install-btn');
+    if (installBtn) {
+      installBtn.addEventListener('click', async function () {
+        const prompt = window.__QS_INSTALL_PROMPT;
+        if (!prompt) { toast('Install option not available', 'info'); return; }
+        try {
+          await prompt.prompt();
+          const choice = await prompt.userChoice;
+          if (choice.outcome === 'accepted') {
+            window.__QS_INSTALL_PROMPT = null;
+            toast('QuickShop installed ✓', 'success');
+            renderSettingsPanel(); // refresh to hide the install row
+          }
+        } catch (e) { errlog('install prompt failed', e); }
+      });
+    }
 
     // Wire demo / clear / logout
     initDemoAndSettingsHandlers();

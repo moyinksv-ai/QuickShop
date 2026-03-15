@@ -181,7 +181,17 @@
     addScript('catalog.js', false);
   } else {
     // Admin app — ordered load required (inventory.js depends on __QS_APP from appss.js)
-    window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); });
+    // Save the install prompt for later — show it via the Install button in Settings.
+    // Calling preventDefault() suppresses the browser's default banner so we
+    // can show it at the right moment instead of randomly.
+    window.addEventListener('beforeinstallprompt', function (e) {
+      e.preventDefault();
+      window.__QS_INSTALL_PROMPT = e;
+    });
+    // Clear the saved prompt once the app is installed
+    window.addEventListener('appinstalled', function () {
+      window.__QS_INSTALL_PROMPT = null;
+    });
     addScript('indexeddb_sync.js', true);
     addScript('share-catalog.js', true);
     addScript('appss.js',         true);
