@@ -1,6 +1,6 @@
-/* sw.js - QuickShop Service Worker v3.2 (Production Build) */
+/* sw.js - QuickShop Service Worker v3.3 (Production Build) */
 
-const CACHE_NAME = 'qs-cache-v4.3';
+const CACHE_NAME = 'qs-cache-v4.4';
 
 const URLS_TO_CACHE = [
   '/',
@@ -8,17 +8,28 @@ const URLS_TO_CACHE = [
   '/styless.css',
   '/appss.js',
   '/indexeddb_sync.js',
-  '/supabase-config.js',
+  '/share-catalog.js',
+  '/inventory.js',
+  '/qs-init.js',
   '/manifest.json',
-  // Third-party Hardening: Cache CDN assets so the app works fully offline
-  'https://unpkg.com/@zxing/library@latest/umd/index.min.js',
-  'https://cdn.jsdelivr.net/npm/chart.js',
-  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
   'pwa-192.png',
   'pwa-512.png'
+  // NOTE: supabase-config.js is intentionally NOT cached here.
+  // It is generated at build time by build.sh and does not exist as a
+  // static file in the repo. If it were listed here, cache.addAll() would
+  // throw on first SW install (one failed URL aborts the entire install),
+  // which silently breaks PWA installability and prevents the browser from
+  // ever firing beforeinstallprompt.
+  //
+  // CDN scripts (zxing, chart.js, supabase-js) are also excluded:
+  //   - @latest/@2 tags can resolve differently over time and fail
+  //   - They are large and fast to re-fetch on reconnect
+  //   - The app's core offline functionality (IndexedDB, localStorage)
+  //     works without them
 ];
 
 // Install: Populate cache
+// Using {ignoreSearch: false} default — exact URL matching only.
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
@@ -26,7 +37,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activate: Clean up old Firebase or legacy QuickShop caches
+// Activate: Clean up old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
@@ -37,9 +48,9 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch Strategy: Stale-While-Revalidate
+// Fetch Strategy: Cache-first for app shell, network-first for API calls
 self.addEventListener('fetch', (event) => {
-  // 1. Skip non-GET and Supabase API calls (Auth must be live)
+  // Skip non-GET and Supabase API calls (auth + data must always be live)
   if (event.request.method !== 'GET' || event.request.url.includes('supabase.co')) {
     return;
   }
@@ -47,14 +58,18 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       const fetchPromise = fetch(event.request).then((networkResponse) => {
-        // Dynamic caching for product images
-        if (networkResponse && networkResponse.status === 200 && event.request.url.match(/\.(jpg|jpeg|png|gif|webp)/)) {
-          const clonedResponse = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clonedResponse));
+        // Dynamically cache product images
+        if (
+          networkResponse &&
+          networkResponse.status === 200 &&
+          event.request.url.match(/\.(jpg|jpeg|png|gif|webp)/)
+        ) {
+          const cloned = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned));
         }
         return networkResponse;
       }).catch(() => {
-        // Return nothing if network fails and not in cache
+        // Network failed and not in cache — return nothing gracefully
       });
 
       return cachedResponse || fetchPromise;
