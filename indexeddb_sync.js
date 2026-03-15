@@ -36,7 +36,8 @@
 
   var VALID_ACTION_TYPES = Object.freeze([
     'addProduct', 'updateProduct', 'removeProduct',
-    'addSale', 'removeSale', 'addStock'
+    'addSale', 'removeSale', 'addStock',
+    'addNote', 'removeNote'
   ]);
 
   var IS_PROD = (
@@ -115,6 +116,10 @@
     if (['addSale','removeSale'].includes(action.type)) {
       if (typeof item.id !== 'string' || !/^[a-zA-Z0-9_\-]{1,64}$/.test(item.id))
         return 'Sale item has invalid or missing id';
+    }
+    if (['addNote','removeNote'].includes(action.type)) {
+      if (typeof item.id !== 'string' || item.id.length < 1 || item.id.length > 64)
+        return 'Note item has invalid or missing id';
     }
     return null;
   }
@@ -218,7 +223,12 @@
       var sb = await waitForSupabaseReady(3000);
       if (!sb || !sb.client) { warn('Supabase not ready — deferred.'); return; }
       var supabase = sb.client;
-      var user     = sb.user;
+      // __QS_SUPABASE is frozen so sb.user is always null.
+      // Read the authoritative user from __QS_APP.getUser() instead —
+      // it returns currentUser directly from appss.js memory.
+      var user = (window.__QS_APP && typeof window.__QS_APP.getUser === 'function')
+        ? window.__QS_APP.getUser()
+        : sb.user;
       if (!user || !user.id) { warn('No user — deferred.'); return; }
       var userId = user.id;
 
@@ -227,6 +237,8 @@
       var productDeleteIds    = []; var productDeleteActIds = [];
       var saleInsertRows      = []; var saleInsertActIds    = [];
       var saleDeleteIds       = []; var saleDeleteActIds    = [];
+      var noteUpsertRows      = []; var noteUpsertActIds    = [];
+      var noteDeleteIds       = []; var noteDeleteActIds    = [];
       var stockSerial         = [];
       var invalidActIds       = [];
 
@@ -270,6 +282,23 @@
           case 'removeSale': {
             saleDeleteIds.push(act.item.id);
             saleDeleteActIds.push(act.id);
+            break;
+          }
+          case 'addNote': {
+            var n = act.item;
+            noteUpsertRows.push({
+              id:         String(n.id || '').slice(0, 64),
+              user_id:    userId,
+              title:      n.title ? String(n.title).slice(0, 200) : null,
+              content:    String(n.content || '').slice(0, 10000),
+              created_at: n.ts ? new Date(n.ts).toISOString() : new Date().toISOString()
+            });
+            noteUpsertActIds.push(act.id);
+            break;
+          }
+          case 'removeNote': {
+            noteDeleteIds.push(String(act.item.id).slice(0, 64));
+            noteDeleteActIds.push(act.id);
             break;
           }
           case 'addStock': {
@@ -336,6 +365,28 @@
         } catch (e) { console.error('[qsdb] Sale delete threw:', e); }
       }
 
+      // ── Note upserts ─────────────────────────────────────────────
+      if (noteUpsertRows.length > 0) {
+        log('Note upsert batch:', noteUpsertRows.length);
+        try {
+          var rn1 = await supabase.from('notes')
+            .upsert(noteUpsertRows, { onConflict: 'id', ignoreDuplicates: false });
+          if (rn1.error) { console.error('[qsdb] Note upsert failed:', rn1.error); }
+          else { doneActIds = doneActIds.concat(noteUpsertActIds); log('Note upsert OK.'); }
+        } catch (e) { console.error('[qsdb] Note upsert threw:', e); }
+      }
+
+      // ── Note deletes ──────────────────────────────────────────────
+      if (noteDeleteIds.length > 0) {
+        log('Note delete batch:', noteDeleteIds.length);
+        try {
+          var rn2 = await supabase.from('notes').delete()
+            .in('id', noteDeleteIds).eq('user_id', userId);
+          if (rn2.error) { console.error('[qsdb] Note delete failed:', rn2.error); }
+          else { doneActIds = doneActIds.concat(noteDeleteActIds); log('Note delete OK.'); }
+        } catch (e) { console.error('[qsdb] Note delete threw:', e); }
+      }
+
       // ── addStock: serial (read-modify-write, cannot batch) ───────
       for (var si = 0; si < stockSerial.length; si++) {
         var act = stockSerial[si];
@@ -385,7 +436,13 @@
   // Only attempt on load if a session is already present — avoids wasted
   // round-trip + 3-second delay on unauthenticated / first-ever loads.
   window.addEventListener('load', function () {
-    if (window.__QS_SUPABASE && window.__QS_SUPABASE.user) {
+    // __QS_SUPABASE.user is always null (frozen object).
+    // Check __QS_APP.getUser() instead, with fallback to localStorage
+    // session flag for cases where appss.js hasn't initialised yet.
+    var hasUser = (window.__QS_APP && typeof window.__QS_APP.getUser === 'function' && window.__QS_APP.getUser())
+      || (window.__QS_SUPABASE && window.__QS_SUPABASE.user)
+      || localStorage.getItem('qs_session_active') === 'true';
+    if (hasUser) {
       setTimeout(syncPendingToSupabase, 1500);
     }
   });

@@ -199,6 +199,7 @@ function initApp() {
   let state = { products: [], sales: [], changes: [], notes: [], categories: [], logs: [] };
   let isSyncing = false;
   let isSyncInProgress = false;
+  let isSaveStateSyncing = false;
   let editingNoteId = null;
   let editingProductId = null;
   const DEFAULT_CATEGORIES = ['Drinks', 'Snacks', 'Groceries', 'Clothing', 'Others'];
@@ -641,8 +642,8 @@ function handleTouchEnd() {
       localStorage.setItem(localKey, JSON.stringify({...state, lastSync: Date.now()}));
     } catch (e) { errlog('local save failed', e); toast('Failed to save data locally!', 'error'); }
     if (!currentUser || !getClient() || !navigator.onLine) return;
-    if (isSyncing) return;
-    isSyncing = true;
+    if (isSaveStateSyncing) return;
+    isSaveStateSyncing = true;
     try {
       const supabase = getClient();
       for (const note of state.notes) {
@@ -663,7 +664,7 @@ function handleTouchEnd() {
         });
       }
     } catch (e) { errlog('saveState failed', e); toast('Cloud sync failed.', 'error'); }
-    finally { isSyncing = false; }
+    finally { isSaveStateSyncing = false; }
   }
 
   // ── LOCAL STATE SCHEMA VALIDATOR ────────────────────────────────────────────
@@ -806,7 +807,14 @@ function handleTouchEnd() {
       const salesMap = new Map((state.sales || []).map(s => [s.id, s]));
       cloudSales.forEach(s => salesMap.set(s.id, s));
       state.sales = Array.from(salesMap.values());
-      state.notes = cloudNotes.length > 0 ? cloudNotes : state.notes;
+      // Merge notes: cloud is authoritative for known IDs, but preserve
+      // local-only notes (created offline, not yet synced to cloud).
+      if (cloudNotes.length > 0) {
+        const cloudNoteIds = new Set(cloudNotes.map(n => n.id));
+        const localOnlyNotes = (state.notes || []).filter(n => !cloudNoteIds.has(n.id));
+        state.notes = [...cloudNotes, ...localOnlyNotes];
+      }
+      // If cloud returned nothing, keep local state unchanged.
       state.categories = cloudCategories.length > 0 ? cloudCategories : (state.categories.length > 0 ? state.categories : [...DEFAULT_CATEGORIES]);
       state.logs = cloudLogs.length > 0 ? cloudLogs : state.logs;
       toast('Data synced from cloud', 'info', 1500);
@@ -1836,13 +1844,11 @@ function handleTouchEnd() {
           state.notes = state.notes.filter(n => n.id !== noteId);
           renderNotes();
           toast('Note deleted');
-          // FIX 6: Explicit Supabase delete — without this, syncCloudData re-fetches and
-          // resurrects the note (zombie data), overwriting the local deletion.
-          if (currentUser && getClient() && navigator.onLine) {
-            try {
-              const supabase = getClient();
-              await supabase.from('notes').delete().eq('id', noteId).eq('user_id', currentUser.id);
-            } catch(e) { errlog('note delete cloud sync', e); }
+          // Queue removeNote to IndexedDB — handles both online and offline.
+          // Prevents zombie resurrection where cloud note overwrites local delete on next sync.
+          if (window.qsdb && window.qsdb.addPendingChange) {
+            window.qsdb.addPendingChange({ type: 'removeNote', item: { id: noteId } })
+              .catch(e => errlog('note delete queue failed', e));
           }
           saveState();
         }
@@ -1887,6 +1893,15 @@ function handleTouchEnd() {
           renderNotes(); // instant UI update — don't wait for network
           toast(originalBtnText === 'Update Note' ? '✓ Note updated' : '✓ Note saved');
           // ── BACKGROUND SYNC ──
+          // Queue to IndexedDB first — works online AND offline.
+          // On reconnect, indexeddb_sync will push to Supabase automatically.
+          const savedNote = editingNoteId
+            ? state.notes.find(n => n.id === editingNoteId)
+            : state.notes[state.notes.length - 1];
+          if (savedNote && window.qsdb && window.qsdb.addPendingChange) {
+            window.qsdb.addPendingChange({ type: 'addNote', item: savedNote })
+              .catch(e => errlog('note queue failed', e));
+          }
           saveState().catch(e => { errlog('note sync error', e); toast('Sync failed — changes saved locally', 'error'); });
         } finally {
           _noteSaving = false;
