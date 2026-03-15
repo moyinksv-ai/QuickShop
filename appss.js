@@ -36,6 +36,20 @@ function initApp() {
     try { return self.crypto.randomUUID().replace(/-/g, '').slice(0, 20); }
     catch (_) { return 'p' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36); }
   }
+  // noteUid() returns a full RFC-4122 UUID with dashes — required because
+  // the Supabase notes table id column is type UUID, not TEXT.
+  // uid() strips dashes and truncates which is valid for TEXT columns (products/sales)
+  // but throws "invalid input syntax for type uuid" on UUID columns.
+  function noteUid() {
+    try { return self.crypto.randomUUID(); }
+    catch (_) {
+      // Fallback: generate a valid UUID v4 format manually
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0;
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+      });
+    }
+  }
   const _n = function(v) { const num = Number(v || 0); return isNaN(num) ? 0 : num; };
   const _fmt = function(v) { return '₦' + Number(v || 0).toLocaleString('en-NG'); };
   // Expose as read-only globals — external scripts cannot overwrite these
@@ -707,7 +721,7 @@ function handleTouchEnd() {
     const notes = Array.isArray(raw.notes) ? raw.notes.filter(n =>
       n && typeof n === 'object'
     ).map(n => ({
-      id: typeof n.id === 'string' ? safeStr(n.id, MAX_ID) : uid(),
+      id: typeof n.id === 'string' ? safeStr(n.id, MAX_ID) : noteUid(),
       title: safeStr(n.title || '', MAX_NAME),
       content: safeStr(n.content || '', 10000),
       ts: typeof n.ts === 'number' ? n.ts : Date.now()
@@ -1886,7 +1900,7 @@ function handleTouchEnd() {
             editingNoteId = null;
             noteSaveBtn.textContent = 'Save Note';
           } else {
-            state.notes.push({ id: uid(), title, content, ts: Date.now() });
+            state.notes.push({ id: noteUid(), title, content, ts: Date.now() });
           }
           if (noteTitle) noteTitle.value = '';
           if (noteContent) noteContent.value = '';

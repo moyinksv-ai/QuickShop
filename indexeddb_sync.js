@@ -323,6 +323,18 @@
 
       // ── Product upserts ──────────────────────────────────────────
       if (productUpsertRows.length > 0) {
+        // Deduplicate by id — if the same product was queued multiple times,
+        // Postgres throws "cannot affect row a second time" on batch upsert.
+        // Keep the last entry for each id (most recent change wins).
+        var seenProductIds = {};
+        for (var pi = productUpsertRows.length - 1; pi >= 0; pi--) {
+          if (seenProductIds[productUpsertRows[pi].id]) {
+            productUpsertRows.splice(pi, 1);
+            productUpsertActIds.splice(pi, 1);
+          } else {
+            seenProductIds[productUpsertRows[pi].id] = true;
+          }
+        }
         log('Product upsert batch:', productUpsertRows.length);
         try {
           var r1 = await supabase.from('products')
@@ -367,6 +379,16 @@
 
       // ── Note upserts ─────────────────────────────────────────────
       if (noteUpsertRows.length > 0) {
+        // Deduplicate by id — same reason as products above
+        var seenNoteIds = {};
+        for (var ni = noteUpsertRows.length - 1; ni >= 0; ni--) {
+          if (seenNoteIds[noteUpsertRows[ni].id]) {
+            noteUpsertRows.splice(ni, 1);
+            noteUpsertActIds.splice(ni, 1);
+          } else {
+            seenNoteIds[noteUpsertRows[ni].id] = true;
+          }
+        }
         log('Note upsert batch:', noteUpsertRows.length);
         try {
           var rn1 = await supabase.from('notes')
