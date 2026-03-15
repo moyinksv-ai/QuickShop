@@ -206,7 +206,10 @@ function initApp() {
 
   const getSupabase = () => window.__QS_SUPABASE || {};
   const getClient = () => (getSupabase().client || null);
-  const getUser = () => (getSupabase().user || null);
+  // __QS_SUPABASE.user is always null because supabase-config.js freezes
+  // the object before appss.js can write to it. currentUser is the
+  // authoritative source — set by handleAuthUser on every auth event.
+  const getUser = () => currentUser;
 
   const LOCAL_KEY_PREFIX = 'quickshop_stable_v1_';
   let currentUser = null;
