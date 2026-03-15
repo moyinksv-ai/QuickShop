@@ -71,7 +71,13 @@
   // ── Auth helpers ────────────────────────────────────────────────────────────
 
   function getCurrentUserId() {
-    if (window.currentUser && window.currentUser.id) return window.currentUser.id;
+    // window.currentUser is never set — currentUser lives inside appss.js closure.
+    // __QS_APP.getUser() is the correct exposed accessor.
+    // __QS_SUPABASE.user is always null (frozen object).
+    if (window.__QS_APP && typeof window.__QS_APP.getUser === 'function') {
+      var u = window.__QS_APP.getUser();
+      if (u && u.id) return u.id;
+    }
     var sb = window.__QS_SUPABASE;
     if (sb && sb.user && sb.user.id) return sb.user.id;
     return null;
