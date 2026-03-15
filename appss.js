@@ -3468,14 +3468,13 @@ function handleTouchEnd() {
             ${currentTheme === 'dark' ? '☀️  Light Mode' : '🌙  Dark Mode'}
           </button>
         </div>
-        ${window.__QS_INSTALL_PROMPT ? `
-        <div class="qs-s-row">
+        <div class="qs-s-row" id="qs-install-row">
           <div>
             <div class="qs-s-row-label">Install App</div>
-            <div class="qs-s-row-sub">Add QuickShop to your home screen</div>
+            <div class="qs-s-row-sub" id="qs-install-sub">Add QuickShop to your home screen</div>
           </div>
           <button id="qs-install-btn" class="qs-ghost-btn" style="color:var(--accent-primary);border-color:rgba(99,102,241,0.3);">📲 Install</button>
-        </div>` : ''}
+        </div>
       </div>
 
       <!-- Store data -->
@@ -3598,19 +3597,41 @@ function handleTouchEnd() {
       btn.addEventListener('click', toggleTheme);
     });
 
-    // Wire install button — only present when browser has a deferred prompt
+    // Wire install button
     const installBtn = settingsPanel.querySelector('#qs-install-btn');
+    const installSub = settingsPanel.querySelector('#qs-install-sub');
     if (installBtn) {
+      // Update button state based on current prompt availability
+      function updateInstallBtn() {
+        if (window.__QS_INSTALL_PROMPT) {
+          installBtn.disabled = false;
+          installBtn.style.opacity = '1';
+          if (installSub) installSub.textContent = 'Add QuickShop to your home screen';
+        } else {
+          installBtn.disabled = false; // still tappable — shows guidance
+          installBtn.style.opacity = '0.6';
+          if (installSub) installSub.textContent = 'Use browser menu → Add to Home Screen';
+        }
+      }
+      updateInstallBtn();
+
+      // Re-check when prompt becomes available
+      window.addEventListener('beforeinstallprompt', updateInstallBtn);
+
       installBtn.addEventListener('click', async function () {
         const prompt = window.__QS_INSTALL_PROMPT;
-        if (!prompt) { toast('Install option not available', 'info'); return; }
+        if (!prompt) {
+          // Guide user to browser menu as fallback
+          toast('Tap your browser menu → "Add to Home Screen"', 'info', 4000);
+          return;
+        }
         try {
           await prompt.prompt();
           const choice = await prompt.userChoice;
           if (choice.outcome === 'accepted') {
             window.__QS_INSTALL_PROMPT = null;
             toast('QuickShop installed ✓', 'success');
-            renderSettingsPanel(); // refresh to hide the install row
+            renderSettingsPanel();
           }
         } catch (e) { errlog('install prompt failed', e); }
       });
