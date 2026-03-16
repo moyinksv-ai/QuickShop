@@ -915,9 +915,19 @@ function handleTouchEnd() {
           if (!supabase) throw new Error('Supabase not initialized');
           const { data, error } = await supabase.auth.signInWithPassword({ email: email, password: pass });
           if (error) throw error;
-          // Email verification check removed — verification is disabled
-          // in Supabase so email_confirmed_at is null for all users.
-          // Supabase itself handles auth validity.
+          // Smart verification check:
+          // When Supabase email verification is ON and user hasn't confirmed,
+          // both email_confirmed_at and confirmed_at are null.
+          // When verification is OFF, Supabase auto-sets confirmed_at.
+          // So we only block if BOTH are null — meaning verification is
+          // enabled and this user genuinely hasn't confirmed their email.
+          const isConfirmed = data.user.email_confirmed_at || data.user.confirmed_at;
+          if (!isConfirmed) {
+            await supabase.auth.signOut();
+            showVerificationNotice(email);
+            toast('Please verify your email before logging in', 'error');
+            return;
+          }
           localStorage.setItem('qs_session_active', 'true');
           document.body.classList.add('mode-app');
           toast('Login successful');
