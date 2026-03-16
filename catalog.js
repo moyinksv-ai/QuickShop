@@ -157,6 +157,12 @@
         'letter-spacing:-.4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;',
         'line-height:1.2;}',
       '#cat-store-sub{font-size:11px;color:rgba(240,240,246,0.4);',
+      /* tagline strip — between header and chips */
+      '#cat-tagline{padding:10px 16px 4px;text-align:center;',
+        'font-size:12.5px;font-style:italic;font-weight:400;',
+        'color:rgba(240,240,246,0.55);line-height:1.6;',
+        'display:none;}', /* hidden until tagline is set */
+      '#cat-tagline.visible{display:block;}',
         'margin-top:1px;font-weight:500;}',
 
       /* status pill */
@@ -512,6 +518,12 @@
     si.setAttribute('spellcheck', 'false');
     sw.appendChild(si);
     root.appendChild(sw);
+
+    // Tagline strip — hidden until populated
+    var taglineEl = document.createElement('p');
+    taglineEl.id = 'cat-tagline';
+    taglineEl.setAttribute('aria-label', 'Store tagline');
+    root.appendChild(taglineEl);
 
     // Category chips
     var chips = document.createElement('div');
@@ -1618,7 +1630,7 @@
       console.warn('[Catalog] Profile view missing, falling back to profiles table:', vr.error.message);
       return client
         .from('profiles')
-        .select('id, name, business_name')
+        .select('id, name, business_name, tagline')
         .eq('id', storeId)
         .maybeSingle();
     }
@@ -1657,6 +1669,17 @@
     // Update header
     var sname = document.getElementById('cat-store-name');
     if (sname) sname.textContent = storeName;
+
+    // Render tagline if vendor has set one
+    var taglineDiv = document.getElementById('cat-tagline');
+    if (taglineDiv) {
+      var tagline = profile && profile.tagline && profile.tagline.trim();
+      if (tagline) {
+        taglineDiv.textContent = tagline; // textContent — safe, no XSS
+        taglineDiv.classList.add('visible');
+      }
+    }
+
     var ssub = document.getElementById('cat-store-sub');
     if (ssub) ssub.textContent = 'WhatsApp orders';
     var avatar = document.getElementById('cat-avatar');

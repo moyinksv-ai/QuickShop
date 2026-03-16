@@ -64,11 +64,15 @@ function initApp() {
   let toastTimer = null;
 
   // Toast config per type
+  // Solid dark backgrounds — readable on both light and dark themes.
+  // The toast floats above the page so it must not rely on the page
+  // background for contrast. Semi-transparent bgs looked washed out in
+  // light mode (screenshot confirmed).
   const TOAST_CFG = {
-    success: { icon: '✓', accent: '#10b981', bg: 'rgba(16,185,129,0.1)',  border: 'rgba(16,185,129,0.25)',  text: '#6ee7b7' },
-    error:   { icon: '✕', accent: '#ef4444', bg: 'rgba(239,68,68,0.1)',   border: 'rgba(239,68,68,0.25)',   text: '#fca5a5' },
-    warning: { icon: '⚠', accent: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.25)', text: '#fcd34d' },
-    info:    { icon: 'ℹ', accent: '#6366f1', bg: 'rgba(99,102,241,0.1)', border: 'rgba(99,102,241,0.25)', text: '#a5b4fc' },
+    success: { icon: '✓', accent: '#10b981', bg: '#052e16', border: 'rgba(16,185,129,0.4)',  text: '#6ee7b7' },
+    error:   { icon: '✕', accent: '#ef4444', bg: '#1c0a0a', border: 'rgba(239,68,68,0.4)',   text: '#fca5a5' },
+    warning: { icon: '⚠', accent: '#f59e0b', bg: '#1c1007', border: 'rgba(245,158,11,0.4)', text: '#fcd34d' },
+    info:    { icon: 'ℹ', accent: '#818cf8', bg: '#0d0d1f', border: 'rgba(99,102,241,0.4)', text: '#c7d2fe' },
   };
 
   function toast(message, type = 'info', ms = 3200) {
@@ -140,7 +144,7 @@ function initApp() {
       const dismiss = document.createElement('button');
       Object.assign(dismiss.style, {
         background: 'none', border: 'none',
-        color: 'rgba(255,255,255,0.3)', fontSize: '16px',
+        color: 'rgba(255,255,255,0.5)', fontSize: '16px',
         cursor: 'pointer', padding: '0', flexShrink: '0',
         lineHeight: '1', marginLeft: '4px',
       });
@@ -3417,18 +3421,20 @@ function handleTouchEnd() {
     if (!settingsPanel) return;
     settingsPanel.style.background = '';
 
-    // Load avatar from DB (non-blocking — re-render if found after initial paint)
-    if (!state._avatarUrl && user) {
-      getUserProfile(user.id).then(function(profile) {
-        if (profile && profile.avatar_url && !state._avatarUrl) {
-          state._avatarUrl = profile.avatar_url;
-          const avatarEl = settingsPanel.querySelector('#qs-avatar-btn');
-          if (avatarEl) {
-            avatarEl.innerHTML = `<img src="${escapeHtml(profile.avatar_url)}" alt="Profile photo"><div class="qs-sp-cam" aria-hidden="true">📷</div>`;
-          }
+    // Load avatar + tagline from DB (non-blocking)
+    getUserProfile(user.id).then(function(profile) {
+      if (!profile) return;
+      if (profile.avatar_url && !state._avatarUrl) {
+        state._avatarUrl = profile.avatar_url;
+        const avatarEl = settingsPanel.querySelector('#qs-avatar-btn');
+        if (avatarEl) {
+          avatarEl.innerHTML = `<img src="${escapeHtml(profile.avatar_url)}" alt="Profile photo"><div class="qs-sp-cam" aria-hidden="true">📷</div>`;
         }
-      }).catch(function() {});
-    }
+      }
+      // Pre-fill tagline textarea with existing value
+      const taglineInput = settingsPanel.querySelector('#qs-tagline-input');
+      if (taglineInput && profile.tagline) taglineInput.value = profile.tagline;
+    }).catch(function() {});
 
     const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
 
@@ -3479,6 +3485,23 @@ function handleTouchEnd() {
             <div class="qs-s-row-sub" id="qs-install-sub">Add QuickShop to your home screen</div>
           </div>
           <button id="qs-install-btn" class="qs-ghost-btn" style="color:var(--accent-primary);border-color:rgba(99,102,241,0.3);">📲 Install</button>
+        </div>
+      </div>
+
+      <!-- Store profile -->
+      <div class="qs-s-section">
+        <div class="qs-s-section-title">Store Profile</div>
+        <div class="qs-s-row" style="flex-direction:column;align-items:stretch;gap:8px;">
+          <div class="qs-s-row-label">Store Tagline</div>
+          <div class="qs-s-row-sub">Shown on your catalog — max 120 characters</div>
+          <textarea id="qs-tagline-input" maxlength="120" rows="2"
+            placeholder="e.g. Get confidence in a bottle from ALL'S Signature"
+            style="width:100%;box-sizing:border-box;resize:none;
+                   background:var(--card-glass);border:1px solid var(--border-glass);
+                   border-radius:var(--radius-sm);color:var(--text-primary);
+                   font-size:13px;line-height:1.55;padding:10px 12px;
+                   font-family:inherit;transition:border-color .2s;"></textarea>
+          <button id="qs-tagline-save" class="qs-ghost-btn" style="align-self:flex-end;color:#10b981;border-color:rgba(16,185,129,0.3);">Save Tagline</button>
         </div>
       </div>
 
@@ -3601,6 +3624,33 @@ function handleTouchEnd() {
     settingsPanel.querySelectorAll('.qs-theme-toggle-btn').forEach(btn => {
       btn.addEventListener('click', toggleTheme);
     });
+
+    // Wire tagline save
+    const taglineSaveBtn = settingsPanel.querySelector('#qs-tagline-save');
+    if (taglineSaveBtn) {
+      taglineSaveBtn.addEventListener('click', async function () {
+        const taglineInput = settingsPanel.querySelector('#qs-tagline-input');
+        const tagline = (taglineInput ? taglineInput.value : '').trim().slice(0, 120);
+        const u = getUser();
+        const sb = getClient();
+        if (!u || !sb) { toast('Not logged in', 'error'); return; }
+        taglineSaveBtn.disabled = true;
+        taglineSaveBtn.textContent = 'Saving…';
+        try {
+          const { error } = await sb.from('profiles')
+            .update({ tagline: tagline || null })
+            .eq('id', u.id);
+          if (error) throw error;
+          toast('Tagline saved ✓');
+        } catch (e) {
+          errlog('tagline save', e);
+          toast('Failed to save tagline', 'error');
+        } finally {
+          taglineSaveBtn.disabled = false;
+          taglineSaveBtn.textContent = 'Save Tagline';
+        }
+      });
+    }
 
     // Wire install button
     const installBtn = settingsPanel.querySelector('#qs-install-btn');
