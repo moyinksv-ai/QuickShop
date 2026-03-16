@@ -736,14 +736,32 @@
   /* ── 7. STORE RESOLUTION ─────────────────────────────────────────────── */
   // Returns effectiveStoreId string or null.
 
+  // UUID pattern — 8-4-4-4-12 hex chars
+  var _uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
   async function resolveStore(client) {
-    // Prefer direct ?store= param (new URLs — UUID is cryptographically unguessable)
     if (STORE_ID) {
       if (!_validStoreId) {
         showError('Invalid store link. Please ask the seller for a valid link.');
         return null;
       }
-      return STORE_ID;
+
+      // If it looks like a UUID, use it directly as the user_id
+      if (_uuidPattern.test(STORE_ID)) return STORE_ID;
+
+      // Otherwise treat it as a business slug — look up in profiles
+      try {
+        var sr = await client
+          .from('profiles')
+          .select('id')
+          .eq('slug', STORE_ID)
+          .maybeSingle();
+        if (sr.data && sr.data.id) return sr.data.id;
+        showError('Store not found. Please ask the seller for a valid link.');
+        return null;
+      } catch (e) {
+        return null;
+      }
     }
 
     // Fall back to opaque token → share_links table lookup
@@ -755,7 +773,6 @@
         .eq('token', TOKEN)
         .maybeSingle();
       if (r.error || !r.data) return null;
-      // Supabase .gt() and .is() combine as AND, not OR — expiry check done in JS
       if (r.data.expires_at && new Date(r.data.expires_at) < new Date()) {
         showError('This catalog link has expired. Please ask the seller for a new one.');
         return null;

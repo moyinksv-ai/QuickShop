@@ -15,10 +15,9 @@
 (function () {
   'use strict';
 
-  var SHARE_FUNCTION_URL = 'https://wicpvvypqpaljuexmczi.supabase.co/functions/v1/share-products';
-  var BUTTON_ID          = 'shareCatalogBtn';
-  var PHONE_STORAGE_KEY  = 'qs_seller_phone';
-  var FETCH_TIMEOUT_MS   = 10000;
+  var BUTTON_ID         = 'shareCatalogBtn';
+  var PHONE_STORAGE_KEY = 'qs_seller_phone';
+  var BASE_URL          = window.location.origin;
 
   // ── Non-blocking toast ──────────────────────────────────────────────────────
 
@@ -291,73 +290,23 @@
     }
 
     try {
-      var token = await getAccessToken();
-      if (!token) {
-        notify('Session expired \u2014 please log in again.', 'error');
-        return;
-      }
+      var sb = window.__QS_SUPABASE && window.__QS_SUPABASE.client;
+      if (!sb) { notify('Not connected — please try again.', 'error'); return; }
 
-      var controller = new AbortController();
-      var timeoutId  = setTimeout(function () { controller.abort(); }, FETCH_TIMEOUT_MS);
+      var profile = await sb.from('profiles').select('business_name,slug').eq('id', userId).maybeSingle();
+      var businessName = (profile.data && profile.data.business_name) || '';
+      var slug = await getOrCreateSlug(sb, userId, businessName);
 
-      var response;
-      try {
-        response = await fetch(SHARE_FUNCTION_URL, {
-          method:  'POST',
-          headers: {
-            'Authorization': 'Bearer ' + token,
-            'Content-Type':  'application/json',
-          },
-          body:   JSON.stringify({ client_hint: 'share_request' }),
-          signal: controller.signal,
-        });
-      } catch (fetchErr) {
-        if (fetchErr.name === 'AbortError') {
-          notify('Request timed out \u2014 please try again.', 'error');
-        } else {
-          notify('Network error \u2014 check your connection.', 'error');
-        }
-        return;
-      } finally {
-        clearTimeout(timeoutId);
-      }
+      var catalogUrl = BASE_URL
+        + '/?store=' + encodeURIComponent(slug)
+        + '&phone=' + encodeURIComponent(phone);
 
-      if (response.status === 429) {
-        notify('Too many requests \u2014 please wait before generating another link.', 'error');
-        return;
-      }
-
-      if (!response.ok) {
-        var errBody = {};
-        try { errBody = await response.json(); } catch (_) {}
-        var errText = (errBody.error && errBody.error.message)
-          ? String(errBody.error.message).slice(0, 200)
-          : 'Server error ' + response.status;
-        notify(errText, 'error');
-        return;
-      }
-
-      var data = {};
-      try { data = await response.json(); } catch (_) {}
-
-      if (!data.success || !data.data || typeof data.data.share_url !== 'string') {
-        notify('Unexpected response from server.', 'error');
-        return;
-      }
-
-      var safeUrl = validateServerUrl(data.data.share_url);
-      if (!safeUrl) {
-        console.error('[ShareCatalog] rejected unsafe URL from server:', data.data.share_url);
-        notify('Received an invalid link \u2014 please try again.', 'error');
-        return;
-      }
-
-      var catalogUrl = safeUrl
-        + (safeUrl.includes('?') ? '&' : '?')
-        + 'phone=' + encodeURIComponent(phone);
-
-      var message = '\uD83D\uDED2 Check out my product catalog:\n' + catalogUrl;
+      var message = '🛒 Check out my product catalog:\n' + catalogUrl;
       openShareSheet(message);
+
+    } catch (err) {
+      console.error('[ShareCatalog] error:', err);
+      notify('Something went wrong — please try again.', 'error');
 
     } finally {
       if (btn) {
@@ -434,4 +383,22 @@
     btn.addEventListener('click', handleShareClick);
   };
 
-})();
+})();  // ── Slug helpers ────────────────────────────────────────────────────────────────────────────
+
+  function slugify(text) {
+    return String(text || '').toLowerCase().trim()
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'store';
+  }
+
+  async function getOrCreateSlug(sb, userId, businessName) {
+    var ex = await sb.from('profiles').select('slug,business_name').eq('id', userId).maybeSingle();
+    if (ex.data && ex.data.slug) return ex.data.slug;
+    var base = slugify(businessName || (ex.data && ex.data.business_name) || 'store');
+    var slug = base;
+    var clash = await sb.from('profiles').select('id').eq('slug', slug).neq('id', userId).maybeSingle();
+    if (clash.data) slug = base + '-' + userId.replace(/-/g,'').slice(-4);
+    await sb.from('profiles').update({ slug: slug }).eq('id', userId);
+    return slug;
+  }
+
+

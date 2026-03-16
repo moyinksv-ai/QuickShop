@@ -382,7 +382,6 @@
   }
 
   function showAddForm() {
-    populateCategoryDropdown();
     const addForm = $('addForm');
     if (!addForm) return;
     const backdrop = createModalBackdrop('addFormBackdrop', 99998);
@@ -656,9 +655,6 @@
       invDesc: p.description || '' };
     Object.entries(fields).forEach(([id, val]) => { const el = $(id); if (el) el.value = val; });
 
-    const invCategory = $('invCategory');
-    if (invCategory) invCategory.value = p.category || 'Others';
-
     if (p.image) { showImageInSlot(p.image, 'img1'); } else { clearInvImage(); }
     if (p.image2) { showImageInSlot(p.image2, 'img2'); } else { clearInvImage2(); }
 
@@ -668,6 +664,12 @@
     if (cancelProductBtn) cancelProductBtn.style.display   = 'block';
 
     showAddForm();
+
+    // Set category AFTER showAddForm — showAddForm previously called
+    // populateCategoryDropdown() which reset the select to its first option,
+    // wiping the value we set before. Now safe to set here.
+    const invCategory = $('invCategory');
+    if (invCategory) invCategory.value = p.category || 'Others';
     setTimeout(() => { try { const invName = $('invName'); if (invName) invName.focus(); } catch (e) {} }, 220);
   }
 
