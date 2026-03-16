@@ -712,8 +712,9 @@ function handleTouchEnd() {
       cost: safeNum(p.cost),
       qty: safeNum(p.qty),
       category: safeStr(p.category || 'Others', MAX_CAT),
-      image: typeof p.image === 'string' ? safeStr(p.image, 4096) : null,
-      icon: typeof p.icon === 'string' ? safeStr(p.icon, 10) : null,
+      image:  typeof p.image  === 'string' ? safeStr(p.image,  4096) : null,
+      image2: typeof p.image2 === 'string' ? safeStr(p.image2, 4096) : null,
+      icon:   typeof p.icon   === 'string' ? safeStr(p.icon,   10)   : null,
       createdAt: typeof p.createdAt === 'number' ? p.createdAt : Date.now(),
       updatedAt: typeof p.updatedAt === 'number' ? p.updatedAt : Date.now()
     })) : [];
