@@ -91,7 +91,7 @@ function initApp() {
           transform: 'translateY(-24px) scale(0.97)',
           transition: 'opacity 0.28s cubic-bezier(0.34,1.56,0.64,1), transform 0.28s cubic-bezier(0.34,1.56,0.64,1)',
           zIndex: '99999',
-          pointerEvents: 'auto',
+          pointerEvents: 'none', // none when invisible — never blocks taps underneath
           overflow: 'hidden',
           display: 'flex',
           alignItems: 'stretch',
@@ -149,6 +149,7 @@ function initApp() {
       dismiss.addEventListener('click', function () {
         t.style.opacity = '0';
         t.style.transform = 'translateY(-16px) scale(0.96)';
+        t.style.pointerEvents = 'none';
         if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
       });
 
@@ -163,12 +164,14 @@ function initApp() {
         requestAnimationFrame(() => {
           t.style.opacity = '1';
           t.style.transform = 'translateY(0) scale(1)';
+          t.style.pointerEvents = 'auto'; // enable interaction while visible
         });
       });
 
       toastTimer = setTimeout(() => {
         t.style.opacity = '0';
         t.style.transform = 'translateY(-16px) scale(0.96)';
+        t.style.pointerEvents = 'none'; // disable when invisible — stop blocking taps
         toastTimer = null;
       }, ms);
 
@@ -699,6 +702,7 @@ function handleTouchEnd() {
     }).map(p => ({
       id: safeId(p.id),
       name: safeStr(p.name, MAX_NAME),
+      description: typeof p.description === 'string' ? safeStr(p.description, 500) : null,
       barcode: typeof p.barcode === 'string' ? safeStr(p.barcode, 64) : null,
       price: safeNum(p.price),
       cost: safeNum(p.cost),
@@ -794,6 +798,7 @@ function handleTouchEnd() {
       const cloudProducts = (productsRes.data || []).map(p => ({
         id: p.id, name: p.name, barcode: p.barcode, price: p.price, cost: p.cost, qty: p.qty,
         category: p.category || 'Others', image: p.image_url, image2: p.image_url2 || null, icon: p.icon,
+        description: p.description || null,
         createdAt: new Date(p.created_at).getTime(),
         updatedAt: p.updated_at ? new Date(p.updated_at).getTime() : new Date(p.created_at).getTime()
       }));

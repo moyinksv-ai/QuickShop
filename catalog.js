@@ -408,6 +408,51 @@
 
       /* --- util --- */
       '.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}',
+
+      /* --- image swipe strip --- */
+      /* Outer clip — same aspect-ratio as the original thumb */
+      '.cat-swipe-strip{position:relative;width:100%;aspect-ratio:1/1;overflow:hidden;',
+        'background:rgba(255,255,255,0.04);flex-shrink:0;cursor:grab;}',
+      '.cat-swipe-strip:active{cursor:grabbing;}',
+      /* Inner track slides horizontally */
+      '.cat-swipe-track{display:flex;height:100%;',
+        'transition:transform .28s cubic-bezier(.4,0,.2,1);',
+        'will-change:transform;}',
+      '.cat-swipe-track.no-transition{transition:none;}',
+      '.cat-swipe-slide{flex:0 0 100%;height:100%;position:relative;overflow:hidden;}',
+      '.cat-swipe-slide img{width:100%;height:100%;object-fit:cover;display:block;',
+        'pointer-events:none;-webkit-user-drag:none;user-select:none;}',
+      /* Dots stay overlaid on the strip */
+      '.cat-swipe-dots{position:absolute;bottom:7px;left:0;right:0;',
+        'display:flex;justify-content:center;gap:4px;pointer-events:none;z-index:2;}',
+      '.cat-swipe-dot{width:5px;height:5px;border-radius:50%;',
+        'transition:background .2s,transform .2s;display:inline-block;}',
+      '.cat-swipe-dot.on{background:#fff;transform:scale(1.25);}',
+      '.cat-swipe-dot.off{background:rgba(255,255,255,0.35);}',
+      /* Tap hint — fades in then out on first render of dual-image card */
+      '.cat-swipe-hint{position:absolute;bottom:24px;left:0;right:0;',
+        'display:flex;justify-content:center;pointer-events:none;z-index:3;}',
+      '.cat-swipe-hint span{font-size:10px;font-weight:700;letter-spacing:.3px;',
+        'color:rgba(255,255,255,0.7);background:rgba(0,0,0,0.55);',
+        'border-radius:100px;padding:3px 9px;',
+        'animation:cat-hint-fade 2.4s ease forwards;}',
+      '@keyframes cat-hint-fade{0%{opacity:0}15%{opacity:1}70%{opacity:1}100%{opacity:0}}',
+
+      /* --- description expand/collapse --- */
+      '.cat-desc-wrap{border-top:1px solid rgba(255,255,255,0.06);margin:0 10px;}',
+      '.cat-desc-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;',
+        'padding:7px 0;background:none;border:none;cursor:pointer;',
+        'color:rgba(240,240,246,0.45);font-size:10.5px;font-weight:700;',
+        'letter-spacing:.4px;text-transform:uppercase;',
+        '-webkit-tap-highlight-color:transparent;}',
+      '.cat-desc-arrow{font-size:9px;transition:transform .22s;display:inline-block;}',
+      '.cat-desc-arrow.up{transform:rotate(180deg);}',
+      /* Height animation via max-height trick */
+      '.cat-desc-body{max-height:0;overflow:hidden;',
+        'transition:max-height .28s cubic-bezier(.4,0,.2,1);}',
+      '.cat-desc-body.open{max-height:200px;}',
+      '.cat-desc-text{font-size:12px;line-height:1.65;',
+        'color:rgba(240,240,246,0.65);padding:2px 0 10px;}',
     ].join('');
     document.head.appendChild(s);
   }
@@ -775,37 +820,68 @@
     thumb.className = 'cat-thumb';
     thumb.dataset.productId = p.id;
 
-    if (images.length > 0) {
+    if (images.length > 1) {
+      // ── Dual images: swipeable strip ────────────────────────────────────
+      // Replace plain thumb with a swipe-capable strip so images slide
+      // horizontally. Info and description stay anchored — never move.
+      thumb.className = 'cat-swipe-strip';
+      thumb.dataset.productId = p.id;
+
+      var track = document.createElement('div');
+      track.className = 'cat-swipe-track';
+
+      images.forEach(function (src, i) {
+        var slide = document.createElement('div');
+        slide.className = 'cat-swipe-slide';
+        var img = document.createElement('img');
+        img.src     = src;
+        img.alt     = (p.name || '') + (images.length > 1 ? ' — photo ' + (i + 1) : '');
+        img.loading = i === 0 ? 'eager' : 'lazy';
+        slide.appendChild(img);
+        track.appendChild(slide);
+      });
+      thumb.appendChild(track);
+
+      // Dots
+      var swipeDots = document.createElement('div');
+      swipeDots.className = 'cat-swipe-dots';
+      swipeDots.setAttribute('aria-hidden', 'true');
+      images.forEach(function (_, i) {
+        var d = document.createElement('span');
+        d.className = 'cat-swipe-dot ' + (i === 0 ? 'on' : 'off');
+        swipeDots.appendChild(d);
+      });
+      thumb.appendChild(swipeDots);
+
+      // Swipe hint — shows once then fades
+      var hint = document.createElement('div');
+      hint.className = 'cat-swipe-hint';
+      var hintSpan = document.createElement('span');
+      hintSpan.textContent = 'swipe';
+      hint.appendChild(hintSpan);
+      thumb.appendChild(hint);
+
+      // Store metadata for swipe handler and lightbox
+      thumb.dataset.images    = JSON.stringify(images);
+      thumb.dataset.swipeIdx  = '0';
+      thumb.dataset.lightboxAlt = p.name || '';
+
+    } else if (images.length === 1) {
+      // Single image — tap opens lightbox
       var imgEl = document.createElement('img');
-      imgEl.src     = images[0];         // set via property — safe
+      imgEl.src     = images[0];
       imgEl.alt     = p.name || '';
       imgEl.loading = 'lazy';
       imgEl.dataset.imgIndex = '0';
       imgEl.dataset.productId = p.id;
       thumb.appendChild(imgEl);
+      thumb.dataset.lightboxSrc  = images[0];
+      thumb.dataset.lightboxAlt  = p.name || '';
+      thumb.style.cursor = 'zoom-in';
+      thumb.setAttribute('role', 'button');
+      thumb.setAttribute('tabindex', '0');
+      thumb.setAttribute('aria-label', 'View full image of ' + (p.name || 'product'));
 
-      if (images.length > 1) {
-        // Store image list on thumb for cycling
-        thumb.dataset.images = JSON.stringify(images);
-        // Dot indicators
-        var dots = document.createElement('div');
-        dots.className = 'cat-img-dots';
-        dots.setAttribute('aria-hidden', 'true');
-        images.forEach(function (_, i) {
-          var d = document.createElement('span');
-          d.className = 'cat-img-dot ' + (i === 0 ? 'on' : 'off');
-          dots.appendChild(d);
-        });
-        thumb.appendChild(dots);
-      } else {
-        // Single image — tap opens lightbox
-        thumb.dataset.lightboxSrc  = images[0];
-        thumb.dataset.lightboxAlt  = p.name || '';
-        thumb.style.cursor = 'zoom-in';
-        thumb.setAttribute('role', 'button');
-        thumb.setAttribute('tabindex', '0');
-        thumb.setAttribute('aria-label', 'View full image of ' + (p.name || 'product'));
-      }
     } else if (p.icon && p.icon.trim()) {
       var emojiSpan = document.createElement('span');
       emojiSpan.className = 'cat-emoji';
@@ -858,6 +934,45 @@
       info.appendChild(stockEl);
     }
     card.appendChild(info);
+
+    /* ── Description — collapsed, tap to expand ── */
+    if (p.description && p.description.trim()) {
+      var descWrap = document.createElement('div');
+      descWrap.className = 'cat-desc-wrap';
+
+      var descToggle = document.createElement('button');
+      descToggle.className = 'cat-desc-toggle';
+      descToggle.type = 'button';
+      descToggle.setAttribute('aria-expanded', 'false');
+      var toggleText = document.createElement('span');
+      toggleText.textContent = 'Details';
+      var toggleArrow = document.createElement('span');
+      toggleArrow.className = 'cat-desc-arrow';
+      toggleArrow.setAttribute('aria-hidden', 'true');
+      descToggle.appendChild(toggleText);
+      descToggle.appendChild(toggleArrow);
+
+      var descBody = document.createElement('div');
+      descBody.className = 'cat-desc-body';
+      descBody.setAttribute('aria-hidden', 'true');
+      var descText = document.createElement('p');
+      descText.className = 'cat-desc-text';
+      descText.textContent = p.description; // textContent — safe, no XSS
+      descBody.appendChild(descText);
+
+      descToggle.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var expanded = descToggle.getAttribute('aria-expanded') === 'true';
+        descToggle.setAttribute('aria-expanded', String(!expanded));
+        descBody.setAttribute('aria-hidden', String(expanded));
+        descBody.classList.toggle('open', !expanded);
+        toggleArrow.classList.toggle('up', !expanded);
+      });
+
+      descWrap.appendChild(descToggle);
+      descWrap.appendChild(descBody);
+      card.appendChild(descWrap);
+    }
 
     /* ── Add to Cart button ── */
     if (inStock) {
@@ -1178,13 +1293,103 @@
   // Single listener on each container — not per-card. Prevents memory leaks.
 
   function attachEvents(storeName) {
-    /* ── Grid: add-to-cart, thumb tap, keyboard ── */
+    /* ── Grid: add-to-cart, thumb tap, swipe, keyboard ── */
     var grid = document.getElementById('cat-grid');
     if (grid) {
+
+      // ── Swipe gesture handler ──────────────────────────────────────────
+      // Uses pointer events (works for both touch and mouse).
+      // Attached to grid via delegation — one listener, zero per-card cost.
+      var _swipe = null; // active swipe state
+
+      function swipeUpdateTrack(strip, idx, animate) {
+        var track = strip.querySelector('.cat-swipe-track');
+        if (!track) return;
+        if (!animate) track.classList.add('no-transition');
+        track.style.transform = 'translateX(-' + (idx * 100) + '%)';
+        if (!animate) { track.offsetHeight; track.classList.remove('no-transition'); }
+        // Update dots
+        strip.querySelectorAll('.cat-swipe-dot').forEach(function (d, i) {
+          d.className = 'cat-swipe-dot ' + (i === idx ? 'on' : 'off');
+        });
+        strip.dataset.swipeIdx = String(idx);
+      }
+
+      grid.addEventListener('pointerdown', function (e) {
+        var strip = e.target.closest('.cat-swipe-strip');
+        if (!strip) return;
+        var imgs;
+        try { imgs = JSON.parse(strip.dataset.images || '[]'); } catch (_) { return; }
+        if (imgs.length < 2) return;
+        _swipe = {
+          strip:   strip,
+          images:  imgs,
+          startX:  e.clientX,
+          startY:  e.clientY,
+          idx:     parseInt(strip.dataset.swipeIdx || '0', 10),
+          moved:   false,
+          canceled: false
+        };
+        strip.setPointerCapture(e.pointerId);
+      });
+
+      grid.addEventListener('pointermove', function (e) {
+        if (!_swipe || _swipe.canceled) return;
+        var dx = e.clientX - _swipe.startX;
+        var dy = e.clientY - _swipe.startY;
+        // If more vertical than horizontal — cancel swipe, let page scroll
+        if (!_swipe.moved && Math.abs(dy) > Math.abs(dx) + 4) {
+          _swipe.canceled = true;
+          return;
+        }
+        if (Math.abs(dx) > 6) {
+          _swipe.moved = true;
+          e.preventDefault();
+          var track = _swipe.strip.querySelector('.cat-swipe-track');
+          if (track) {
+            var base = _swipe.idx * 100;
+            // Rubber-band at edges
+            var pct = (dx / _swipe.strip.offsetWidth) * 100;
+            if ((_swipe.idx === 0 && dx > 0) || (_swipe.idx === _swipe.images.length - 1 && dx < 0)) {
+              pct = pct * 0.25; // resistance
+            }
+            track.classList.add('no-transition');
+            track.style.transform = 'translateX(' + (-base + pct) + '%)';
+          }
+        }
+      }, { passive: false });
+
+      grid.addEventListener('pointerup', function (e) {
+        if (!_swipe) return;
+        var swipe = _swipe;
+        _swipe = null;
+        if (swipe.canceled) return;
+
+        var dx = e.clientX - swipe.startX;
+
+        if (!swipe.moved || Math.abs(dx) < 30) {
+          // Tap — snap back and open lightbox
+          swipeUpdateTrack(swipe.strip, swipe.idx, true);
+          if (!swipe.moved) {
+            openLightbox(swipe.images, swipe.strip.dataset.lightboxAlt || '', swipe.idx);
+          }
+          return;
+        }
+
+        // Commit swipe
+        var newIdx = swipe.idx;
+        if (dx < -30 && swipe.idx < swipe.images.length - 1) newIdx++;
+        if (dx >  30 && swipe.idx > 0)                        newIdx--;
+        swipeUpdateTrack(swipe.strip, newIdx, true);
+      });
+
+      grid.addEventListener('pointercancel', function () { _swipe = null; });
+
+      // ── Click handler ──────────────────────────────────────────────────
       grid.addEventListener('click', function (e) {
         var target = e.target;
 
-        // Add to cart button (or child of it)
+        // Add to cart
         var addBtn = target.closest('.cat-add-btn');
         if (addBtn && !addBtn.disabled && !addBtn.hasAttribute('disabled')) {
           var pid = addBtn.dataset.productId;
@@ -1197,28 +1402,21 @@
           return;
         }
 
-        // Thumb with dual images — tap opens lightbox (prev/next inside)
-        var thumb = target.closest('.cat-thumb[data-images]');
-        if (thumb) {
-          var imgs;
-          try { imgs = JSON.parse(thumb.dataset.images); } catch (_) { return; }
-          var imgEl = thumb.querySelector('img');
-          var curIdx = imgEl ? (parseInt(imgEl.dataset.imgIndex, 10) || 0) : 0;
-          openLightbox(imgs, thumb.dataset.lightboxAlt || '', curIdx);
-          return;
-        }
-
-        // Thumb with single image — tap opens lightbox
+        // Single image thumb tap — lightbox
         var singleThumb = target.closest('.cat-thumb[data-lightbox-src]');
         if (singleThumb) {
           openLightbox([singleThumb.dataset.lightboxSrc], singleThumb.dataset.lightboxAlt);
+          return;
         }
+
+        // Description toggle — handled by its own listener on the button
+        // (event bubbles, no action needed here)
       });
 
       grid.addEventListener('keydown', function (e) {
         if (e.key !== 'Enter' && e.key !== ' ') return;
         var thumb = e.target.closest('.cat-thumb[data-lightbox-src]');
-        if (thumb) { e.preventDefault(); openLightbox(thumb.dataset.lightboxSrc, thumb.dataset.lightboxAlt); }
+        if (thumb) { e.preventDefault(); openLightbox([thumb.dataset.lightboxSrc], thumb.dataset.lightboxAlt); }
       });
     }
 
@@ -1383,7 +1581,7 @@
       console.warn('[Catalog] View missing, falling back to products table:', vr.error.message);
       return client
         .from('products')
-        .select('id, user_id, name, price, qty, category, image_url, image_url2, icon')
+        .select('id, user_id, name, price, qty, category, image_url, image_url2, icon, description')
         .eq('user_id', storeId)
         .gt('qty', 0)
         .order('name', { ascending: true });

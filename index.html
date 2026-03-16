@@ -1043,23 +1043,86 @@
           <input id="invQty" type="number" placeholder="Stock" min="0" style="flex:1;" />
         </div>
         <div class="add-row"><select id="invCategory" style="flex:1;"></select></div>
+        <!-- Description -->
+        <textarea id="invDesc"
+          placeholder="Product description (optional, shown to customers)"
+          maxlength="500" rows="2"
+          style="width:100%;box-sizing:border-box;resize:none;
+                 background:var(--card-glass);
+                 border:1px solid var(--border-glass);
+                 border-radius:var(--radius-sm);
+                 color:var(--text-primary);
+                 font-size:13px;line-height:1.55;
+                 padding:10px 12px;min-height:60px;
+                 font-family:inherit;
+                 transition:border-color .2s;"></textarea>
+
+        <!-- Photos — hidden native inputs + styled tap targets -->
+        <!-- Single "Add Photos" button picks both at once -->
         <div style="display:flex;flex-direction:column;gap:8px;">
-          <div class="add-row" style="align-items:center;gap:8px;">
-            <label style="font-size:12px;font-weight:600;color:var(--text-muted);white-space:nowrap;">Photo 1</label>
-            <input id="invImg" type="file" accept="image/*" style="flex:1;" />
+
+          <!-- Pick both at once -->
+          <div style="display:flex;gap:8px;">
+            <button id="invPhotoBothBtn" type="button"
+              style="flex:1;padding:10px;background:var(--card-glass);
+                     border:1px dashed var(--border-hi);border-radius:var(--radius-sm);
+                     color:var(--text-secondary);font-size:13px;font-weight:600;
+                     cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+              📷 Add Photos
+            </button>
           </div>
-          <div id="invImgPreview" class="img-preview">
-            <img id="invImgPreviewImg" src="" alt="Preview" style="max-height:80px;border-radius:8px;object-fit:cover;" />
-            <button id="invImgClear" class="btn-undo" type="button" style="font-size:12px;">Remove</button>
+
+
+          <!-- Individual slots shown after picking -->
+          <div style="display:flex;gap:8px;">
+            <!-- Slot 1 -->
+            <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+              <button id="invImg1Btn" type="button"
+                style="width:100%;aspect-ratio:1/1;max-height:90px;
+                       background:var(--card-glass);
+                       border:1px dashed var(--border-glass);
+                       border-radius:var(--radius-sm);
+                       color:var(--text-muted);font-size:11px;font-weight:600;
+                       cursor:pointer;display:flex;align-items:center;
+                       justify-content:center;flex-direction:column;gap:4px;
+                       position:relative;overflow:hidden;">
+                <span id="invImg1BtnIcon" style="font-size:20px;">＋</span>
+                <span>Photo 1</span>
+                <img id="invImgPreviewImg" src="" alt="Preview"
+                  style="display:none;position:absolute;inset:0;width:100%;height:100%;
+                         object-fit:cover;border-radius:var(--radius-sm);" />
+              </button>
+              <button id="invImgClear" type="button" class="btn-undo"
+                style="display:none;font-size:11px;width:100%;padding:4px;">Remove</button>
+            </div>
+            <!-- Slot 2 -->
+            <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+              <button id="invImg2Btn" type="button"
+                style="width:100%;aspect-ratio:1/1;max-height:90px;
+                       background:var(--card-glass);
+                       border:1px dashed var(--border-glass);
+                       border-radius:var(--radius-sm);
+                       color:var(--text-muted);font-size:11px;font-weight:600;
+                       cursor:pointer;display:flex;align-items:center;
+                       justify-content:center;flex-direction:column;gap:4px;
+                       position:relative;overflow:hidden;">
+                <span id="invImg2BtnIcon" style="font-size:20px;">＋</span>
+                <span>Photo 2</span>
+                <img id="invImgPreviewImg2" src="" alt="Preview 2"
+                  style="display:none;position:absolute;inset:0;width:100%;height:100%;
+                         object-fit:cover;border-radius:var(--radius-sm);" />
+              </button>
+              <button id="invImgClear2" type="button" class="btn-undo"
+                style="display:none;font-size:11px;width:100%;padding:4px;">Remove</button>
+            </div>
           </div>
-          <div class="add-row" style="align-items:center;gap:8px;">
-            <label style="font-size:12px;font-weight:600;color:var(--text-muted);white-space:nowrap;">Photo 2</label>
-            <input id="invImg2" type="file" accept="image/*" style="flex:1;" />
-          </div>
-          <div id="invImgPreview2" class="img-preview" style="display:none;">
-            <img id="invImgPreviewImg2" src="" alt="Preview 2" style="max-height:80px;border-radius:8px;object-fit:cover;" />
-            <button id="invImgClear2" class="btn-undo" type="button" style="font-size:12px;">Remove</button>
-          </div>
+
+          <!-- Hidden individual file inputs — kept for inventory.js compatibility -->
+          <input id="invImg"  type="file" accept="image/*" style="display:none" aria-hidden="true" />
+          <input id="invImg2" type="file" accept="image/*" style="display:none" aria-hidden="true" />
+          <!-- Hidden preview wrappers — kept for inventory.js compatibility -->
+          <div id="invImgPreview"  style="display:none;"></div>
+          <div id="invImgPreview2" style="display:none;"></div>
         </div>
         <div class="add-row">
           <button id="addProductBtn" class="save-btn" style="flex:1;">Save Product</button>
@@ -1274,5 +1337,7 @@
       }
     })();
   </script>
+
+
 </body>
 </html>

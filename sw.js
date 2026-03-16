@@ -8,7 +8,7 @@
  * - Non-GET requests are passed through cleanly (no bare return)
  */
 
-const CACHE_NAME = 'qs-cache-v4.5';
+const CACHE_NAME = 'qs-cache-v7';
 
 // Only cache files that are GUARANTEED to exist in every deployment.
 // Any missing file causes cache.addAll() to abort the entire SW install,

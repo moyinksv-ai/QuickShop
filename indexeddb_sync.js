@@ -129,9 +129,10 @@
     function safeNum(v)      { var n = Number(v); return (isFinite(n) && n >= 0) ? n : 0; }
     function safeStr(v, max) { return (typeof v === 'string' ? v : String(v || '')).slice(0, max); }
     return {
-      id:        safeStr(p.id, 64),
-      name:      safeStr((p.name || '').trim() || 'Unnamed', 200),
-      barcode:   p.barcode  != null ? safeStr(p.barcode,  64)   : null,
+      id:          safeStr(p.id, 64),
+      name:        safeStr((p.name || '').trim() || 'Unnamed', 200),
+      description: p.description != null ? safeStr(p.description, 500) : null,
+      barcode:     p.barcode  != null ? safeStr(p.barcode,  64)   : null,
       price:     safeNum(p.price),
       cost:      safeNum(p.cost),
       qty:       Math.max(0, Math.floor(safeNum(p.qty))),
@@ -253,6 +254,7 @@
             productUpsertRows.push({
               id: p.id, user_id: userId,
               name: p.name, barcode: p.barcode || null,
+              description: p.description || null,
               price: p.price, cost: p.cost, qty: p.qty,
               category: p.category,
               image_url:  p.image  || null,

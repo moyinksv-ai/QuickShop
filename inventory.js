@@ -217,94 +217,157 @@
   // IMAGE UPLOAD
   // ══════════════════════════════════════════════════════════════════════════
   function clearInvImage() {
-    const invImg           = $('invImg');
-    const invImgPreview    = $('invImgPreview');
-    const invImgPreviewImg = $('invImgPreviewImg');
-    try { if (invImg) invImg.value = ''; } catch (e) {}
-    if (invImgPreview)    invImgPreview.style.display    = 'none';
-    if (invImgPreviewImg) invImgPreviewImg.src            = '';
+    try { const el = $('invImg'); if (el) { el.removeAttribute('multiple'); el.value = ''; } } catch(e) {}
+    const img  = $('invImgPreviewImg');
+    const clr  = $('invImgClear');
+    const icon = $('invImg1BtnIcon');
+    if (img)  { img.src = ''; img.style.display = 'none'; }
+    if (clr)  clr.style.display = 'none';
+    if (icon) { icon.textContent = '＋'; icon.style.display = ''; }
   }
 
   function clearInvImage2() {
-    const invImg2           = $('invImg2');
-    const invImgPreview2    = $('invImgPreview2');
-    const invImgPreviewImg2 = $('invImgPreviewImg2');
-    try { if (invImg2) invImg2.value = ''; } catch (e) {}
-    if (invImgPreview2)    invImgPreview2.style.display    = 'none';
-    if (invImgPreviewImg2) invImgPreviewImg2.src            = '';
+    try { const el = $('invImg2'); if (el) el.value = ''; } catch(e) {}
+    const img  = $('invImgPreviewImg2');
+    const clr  = $('invImgClear2');
+    const icon = $('invImg2BtnIcon');
+    if (img)  { img.src = ''; img.style.display = 'none'; }
+    if (clr)  clr.style.display = 'none';
+    if (icon) { icon.textContent = '＋'; icon.style.display = ''; }
+  }
+
+  function showImageInSlot(url, slot) {
+    const isSlot1 = slot === 'img1';
+    const imgId   = isSlot1 ? 'invImgPreviewImg'  : 'invImgPreviewImg2';
+    const clrId   = isSlot1 ? 'invImgClear'        : 'invImgClear2';
+    const iconId  = isSlot1 ? 'invImg1BtnIcon'     : 'invImg2BtnIcon';
+    const img  = $(imgId);
+    const clr  = $(clrId);
+    const icon = $(iconId);
+    if (img)  { img.src = url; img.style.display = 'block'; }
+    if (clr)  clr.style.display = 'block';
+    if (icon) icon.style.display = 'none';
+  }
+
+  // ── Per-slot upload state — tracks in-progress uploads independently ──────
+  // This allows both images to upload simultaneously without blocking the form.
+  const _uploadInProgress = { img1: false, img2: false };
+
+  function setSlotUploading(slot, uploading) {
+    _uploadInProgress[slot] = uploading;
+    const previewId = slot === 'img1' ? 'invImgPreview'  : 'invImgPreview2';
+    const preview   = $(previewId);
+    if (!preview) return;
+    let spinner = preview.querySelector('.qs-slot-spinner');
+    if (uploading) {
+      if (!spinner) {
+        spinner = document.createElement('div');
+        spinner.className = 'qs-slot-spinner';
+        spinner.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.45);border-radius:8px;z-index:2;';
+        spinner.innerHTML = '<div style="width:22px;height:22px;border:3px solid rgba(255,255,255,0.2);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;"></div>';
+        preview.style.position = 'relative';
+        preview.appendChild(spinner);
+      }
+      preview.style.display = 'flex';
+    } else {
+      if (spinner) spinner.remove();
+    }
+  }
+
+  function isAnyUploadInProgress() {
+    return _uploadInProgress.img1 || _uploadInProgress.img2;
+  }
+
+  async function uploadImageToSlot(file, slot) {
+    const sb = client();
+    const u  = user();
+    if (!sb || !u) { toast('Not logged in.', 'error'); return null; }
+    if (file.size > 5 * 1024 * 1024) { toast('Image too large (max 5 MB).', 'error'); return null; }
+
+    setSlotUploading(slot, true);
+    try {
+      const blob     = await compressImage(file);
+      const prefix   = slot === 'img2' ? '2_' : '';
+      const fileName = u.id + '/' + prefix + Date.now() + '_' + Math.random().toString(36).slice(2,6) + '.jpg';
+      const { error } = await sb.storage.from('user_images').upload(fileName, blob, { contentType: 'image/jpeg', upsert: false });
+      if (error) throw error;
+      const { data: urlData } = sb.storage.from('user_images').getPublicUrl(fileName);
+      return urlData.publicUrl;
+    } catch (err) {
+      errlog('Image upload failed (' + slot + ')', err);
+      toast('Upload failed: ' + (err.message || 'unknown'), 'error');
+      return null;
+    } finally {
+      setSlotUploading(slot, false);
+    }
   }
 
   function initImageUploadHandler() {
-    // ── Image 1 ──────────────────────────────────────────────────────────────
-    const invImg = $('invImg');
-    if (invImg) {
-      invImg.addEventListener('change', async function (e) {
-        const file = e.target.files && e.target.files[0];
-        if (!file) { clearInvImage(); return; }
-        if (file.size > 5 * 1024 * 1024) { toast('Image too large (max 5 MB).', 'error'); e.target.value = ''; return; }
-        const sb = client();
-        const u  = user();
-        if (!sb || !u) { toast('Not logged in.', 'error'); return; }
-        showLoading(true, 'Uploading image…');
-        try {
-          const blob     = await compressImage(file);
-          const fileName = u.id + '/' + Date.now() + '.jpg';
-          const { error } = await sb.storage.from('user_images').upload(fileName, blob, { contentType: 'image/jpeg', upsert: false });
-          if (error) throw error;
-          const { data: urlData } = sb.storage.from('user_images').getPublicUrl(fileName);
-          const invImgPreviewImg = $('invImgPreviewImg');
-          const invImgPreview    = $('invImgPreview');
-          if (invImgPreviewImg) invImgPreviewImg.src          = urlData.publicUrl;
-          if (invImgPreview)    invImgPreview.style.display   = 'flex';
-          toast('Image uploaded ✓');
-        } catch (err) {
-          errlog('Image upload failed', err);
-          toast('Upload failed: ' + (err.message || 'unknown'), 'error');
-          clearInvImage();
-        } finally { showLoading(false); }
-      });
-    }
-    const invImgClear = $('invImgClear');
-    if (invImgClear) invImgClear.addEventListener('click', function (e) { e.preventDefault(); clearInvImage(); });
 
-    // ── Image 2 ──────────────────────────────────────────────────────────────
-    const invImg2 = $('invImg2');
-    if (invImg2) {
-      invImg2.addEventListener('change', async function (e) {
-        const file = e.target.files && e.target.files[0];
-        if (!file) { clearInvImage2(); return; }
-        if (file.size > 5 * 1024 * 1024) { toast('Image too large (max 5 MB).', 'error'); e.target.value = ''; return; }
-        const sb = client();
-        const u  = user();
-        if (!sb || !u) { toast('Not logged in.', 'error'); return; }
-        showLoading(true, 'Uploading image 2…');
-        try {
-          const blob     = await compressImage(file);
-          const fileName = u.id + '/2_' + Date.now() + '.jpg';
-          const { error } = await sb.storage.from('user_images').upload(fileName, blob, { contentType: 'image/jpeg', upsert: false });
-          if (error) throw error;
-          const { data: urlData } = sb.storage.from('user_images').getPublicUrl(fileName);
-          const invImgPreviewImg2 = $('invImgPreviewImg2');
-          const invImgPreview2    = $('invImgPreview2');
-          if (invImgPreviewImg2) invImgPreviewImg2.src        = urlData.publicUrl;
-          if (invImgPreview2)    invImgPreview2.style.display = 'flex';
-          toast('Second image uploaded ✓');
-        } catch (err) {
-          errlog('Image2 upload failed', err);
-          toast('Upload failed: ' + (err.message || 'unknown'), 'error');
-          clearInvImage2();
-        } finally { showLoading(false); }
+    // ── Helper: upload a file and show result in slot ─────────────────────
+    async function handleFileForSlot(file, slot) {
+      if (!file) return;
+      const url = await uploadImageToSlot(file, slot);
+      if (url) showImageInSlot(url, slot);
+      else { if (slot === 'img1') clearInvImage(); else clearInvImage2(); }
+    }
+
+    // ── "Add Photos" — reuses invImg with multiple=true ───────────────────
+    // Avoids a separate hidden input entirely. invImg is already proven to
+    // work on Android. We temporarily enable multiple, open the picker,
+    // then handle 1 or 2 files and restore single mode.
+    const bothBtn   = $('invPhotoBothBtn');
+    const img1Input = $('invImg');
+    if (bothBtn && img1Input) {
+      bothBtn.addEventListener('click', function () {
+        img1Input.setAttribute('multiple', '');
+        img1Input.click();
       });
     }
-    const invImgClear2 = $('invImgClear2');
-    if (invImgClear2) invImgClear2.addEventListener('click', function (e) { e.preventDefault(); clearInvImage2(); });
+
+    // ── Slot 1 tap — picks individual file (or both if multiple enabled) ──
+    const img1Btn   = $('invImg1Btn');
+    if (img1Btn && img1Input) {
+      img1Btn.addEventListener('click', function () {
+        img1Input.removeAttribute('multiple'); // single mode for slot tap
+        img1Input.click();
+      });
+      img1Input.addEventListener('change', async function (e) {
+        const files = e.target.files;
+        if (!files || !files.length) return;
+        const tasks = [];
+        if (files[0]) tasks.push(handleFileForSlot(files[0], 'img1'));
+        if (files[1]) tasks.push(handleFileForSlot(files[1], 'img2')); // from "Add Photos"
+        await Promise.all(tasks);
+        // Restore to single mode after use
+        img1Input.removeAttribute('multiple');
+        img1Input.value = '';
+      });
+    }
+
+    // ── Slot 2 tap — picks individual file ───────────────────────────────
+    const img2Btn   = $('invImg2Btn');
+    const img2Input = $('invImg2');
+    if (img2Btn && img2Input) {
+      img2Btn.addEventListener('click', function () { img2Input.click(); });
+      img2Input.addEventListener('change', async function (e) {
+        const file = e.target.files && e.target.files[0];
+        await handleFileForSlot(file, 'img2');
+      });
+    }
+
+    // ── Remove buttons ────────────────────────────────────────────────────
+    const clr1 = $('invImgClear');
+    if (clr1) clr1.addEventListener('click', function (e) { e.preventDefault(); clearInvImage(); });
+    const clr2 = $('invImgClear2');
+    if (clr2) clr2.addEventListener('click', function (e) { e.preventDefault(); clearInvImage2(); });
   }
 
   // ══════════════════════════════════════════════════════════════════════════
   // ADD / EDIT FORM
   // ══════════════════════════════════════════════════════════════════════════
   function clearAddForm() {
-    ['invId','invName','invBarcode','invPrice','invCost','invQty'].forEach(id => {
+    ['invId','invName','invBarcode','invPrice','invCost','invQty','invDesc'].forEach(id => {
       const el = $(id); if (el) el.value = '';
     });
     const invCategory = $('invCategory');
@@ -395,12 +458,20 @@
         const invImgPreviewImg  = $('invImgPreviewImg');
         const invImgPreviewImg2 = $('invImgPreviewImg2');
 
+        // Guard: don't save while an image upload is still in progress
+        if (isAnyUploadInProgress()) {
+          toast('Please wait — image is still uploading…', 'info');
+          return;
+        }
+
+        const invDesc = $('invDesc');
         const name     = ((invName     && invName.value)    || '').trim();
         const barcode  = ((invBarcode  && invBarcode.value) || '').trim();
         const price    = window.n(invPrice    && invPrice.value);
         const cost     = window.n(invCost     && invCost.value);
         const qty      = window.n(invQty      && invQty.value);
         const category = (invCategory && invCategory.value) || 'Others';
+        const desc     = ((invDesc && invDesc.value) || '').trim().slice(0, 500);
         const image    = (invImgPreviewImg  && invImgPreviewImg.src  && invImgPreviewImg.src  !== window.location.href) ? invImgPreviewImg.src  : null;
         const image2   = (invImgPreviewImg2 && invImgPreviewImg2.src && invImgPreviewImg2.src !== window.location.href) ? invImgPreviewImg2.src : null;
 
@@ -426,9 +497,10 @@
             product.cost      = cost;
             product.qty       = qty;
             product.category  = category;
-            product.image     = image;
-            product.image2    = image2 || null;
-            product.updatedAt = Date.now();
+            product.image       = image;
+            product.image2      = image2 || null;
+            product.description = desc || null;
+            product.updatedAt   = Date.now();
             syncType = 'updateProduct';
             addActivityLog('Edit', 'Updated product: ' + name);
             toast('Product updated ✓');
@@ -439,6 +511,7 @@
             product = {
               id: uid(), name, price, cost, qty: qty || 0, category,
               image, image2: image2 || null, icon: null,
+              description: desc || null,
               barcode: barcode || null, createdAt: Date.now(), updatedAt: Date.now()
             };
             s.products.push(product);
@@ -579,23 +652,15 @@
     populateCategoryDropdown();
 
     const fields = { invId: p.id, invName: p.name || '', invBarcode: p.barcode || '',
-      invPrice: p.price || '', invCost: p.cost || '', invQty: p.qty || 0 };
+      invPrice: p.price || '', invCost: p.cost || '', invQty: p.qty || 0,
+      invDesc: p.description || '' };
     Object.entries(fields).forEach(([id, val]) => { const el = $(id); if (el) el.value = val; });
 
     const invCategory = $('invCategory');
     if (invCategory) invCategory.value = p.category || 'Others';
 
-    if (p.image) {
-      const img = $('invImgPreviewImg'), prev = $('invImgPreview');
-      if (img)  img.src                = p.image;
-      if (prev) prev.style.display     = 'flex';
-    } else { clearInvImage(); }
-
-    if (p.image2) {
-      const img2 = $('invImgPreviewImg2'), prev2 = $('invImgPreview2');
-      if (img2)  img2.src              = p.image2;
-      if (prev2) prev2.style.display   = 'flex';
-    } else { clearInvImage2(); }
+    if (p.image) { showImageInSlot(p.image, 'img1'); } else { clearInvImage(); }
+    if (p.image2) { showImageInSlot(p.image2, 'img2'); } else { clearInvImage2(); }
 
     const addProductBtn    = $('addProductBtn');
     const cancelProductBtn = $('cancelProductBtn');
