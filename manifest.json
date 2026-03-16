@@ -1,7 +1,8 @@
 {
+  "id": "/",
   "name": "QuickShop",
   "short_name": "QuickShop",
-  "description": "Inventory, Sales, and Notes",
+  "description": "Inventory, Sales, and Notes — offline-first",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -21,5 +22,7 @@
       "sizes": "512x512",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "screenshots": [],
+  "categories": ["business", "productivity"]
 }

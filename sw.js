@@ -1,104 +1,141 @@
-/* sw.js - QuickShop Service Worker v3.4
+/* sw.js — QuickShop Service Worker v4.0
  *
- * Changes from v3.3:
- * - Cache list only includes files guaranteed to exist at deploy time
- * - Fetch handler now explicitly handles navigation requests (required by
- *   Chrome 144+ for PWA installability — SW must intercept navigations)
- * - Offline fallback returns cached index.html for all navigation failures
- * - Non-GET requests are passed through cleanly (no bare return)
+ * ARCHITECTURE: Runtime-first caching (no precache list)
+ * ─────────────────────────────────────────────────────
+ * Previous versions tried to cache a list of files on install.
+ * If any single file failed (network hiccup, Vercel cold start,
+ * missing file), the entire SW install aborted silently — the app
+ * never qualified as installable and beforeinstallprompt never fired.
+ *
+ * This version caches nothing on install. Instead, every file is
+ * cached the first time it's fetched (runtime caching). The app
+ * becomes fully offline-capable after the first complete page load.
+ * SW install can never fail because there is nothing to pre-fetch.
+ *
+ * STRATEGIES PER RESOURCE TYPE:
+ * ─────────────────────────────────────────────────────
+ *  App shell (HTML, JS, CSS, icons, manifest)
+ *    → Stale-while-revalidate: serve from cache instantly, update
+ *      in background. User always gets fast load. New version
+ *      activates on next page open.
+ *
+ *  Product images (jpg, jpeg, png, gif, webp, avif)
+ *    → Cache-first: images never change once uploaded to Supabase
+ *      storage. Serve from cache forever, only fetch if not cached.
+ *
+ *  Supabase API + auth (supabase.co)
+ *    → Network-only: auth and data must always be live. Never cache.
+ *
+ *  Navigation requests (page loads)
+ *    → Network-first with cache fallback to index.html.
+ *      Ensures the app opens offline after first visit.
  */
 
-const CACHE_NAME = 'qs-cache-v8';
+var CACHE_NAME    = 'qs-v4.0';
+var IMAGE_CACHE   = 'qs-images-v4.0';
 
-// Only cache files that are GUARANTEED to exist in every deployment.
-// Any missing file causes cache.addAll() to abort the entire SW install,
-// which silently breaks PWA installability (no beforeinstallprompt ever fires).
-const URLS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/styless.css',
-  '/appss.js',
-  '/indexeddb_sync.js',
-  '/share-catalog.js',
-  '/inventory.js',
-  '/catalog.js',
-  '/qs-init.js',
-  '/manifest.json',
-  '/pwa-192.png',
-  '/pwa-512.png'
-];
-
-// ── Install ───────────────────────────────────────────────────────────────────
-self.addEventListener('install', function (event) {
+/* ── Install ─────────────────────────────────────────────────────────────────
+ * Nothing to pre-cache. Skip waiting so this SW activates immediately
+ * without waiting for existing tabs to close. */
+self.addEventListener('install', function () {
   self.skipWaiting();
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(function (cache) {
-      // addAll fails atomically — if any URL returns non-200, install aborts.
-      // Every URL above must exist in the deployment.
-      return cache.addAll(URLS_TO_CACHE);
-    })
-  );
 });
 
-// ── Activate ──────────────────────────────────────────────────────────────────
+/* ── Activate ────────────────────────────────────────────────────────────────
+ * Delete every cache that doesn't match our current names.
+ * Claim all clients so this SW controls existing tabs immediately. */
 self.addEventListener('activate', function (event) {
   event.waitUntil(
     caches.keys().then(function (keys) {
       return Promise.all(
-        keys.map(function (key) {
-          if (key !== CACHE_NAME) return caches.delete(key);
+        keys.filter(function (key) {
+          return key !== CACHE_NAME && key !== IMAGE_CACHE;
+        }).map(function (key) {
+          return caches.delete(key);
         })
       );
     }).then(function () {
-      // Claim all open clients immediately so new SW controls existing tabs
       return self.clients.claim();
     })
   );
 });
 
-// ── Fetch ─────────────────────────────────────────────────────────────────────
+/* ── Fetch ───────────────────────────────────────────────────────────────────*/
 self.addEventListener('fetch', function (event) {
   var request = event.request;
+  var url     = request.url;
 
-  // Always pass through non-GET requests (POST, PUT, DELETE etc.)
+  /* 1. Non-GET — pass through untouched */
   if (request.method !== 'GET') return;
 
-  // Always pass through Supabase API calls — auth and data must be live
-  if (request.url.includes('supabase.co') || request.url.includes('supabase.in')) return;
+  /* 2. Supabase API + auth — always network, never cache */
+  if (url.includes('supabase.co') || url.includes('supabase.in')) return;
 
-  // ── Navigation requests (page loads) ──────────────────────────────────────
-  // Chrome 144+ requires the SW to handle navigate-mode requests for the site
-  // to qualify as a PWA. Return cached index.html as offline fallback.
+  /* 3. Chrome extensions / non-http — ignore */
+  if (!url.startsWith('http')) return;
+
+  /* 4. Navigation (page loads) — network-first, fall back to cached index.html
+   *    This is what makes the app open offline after first visit. */
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).catch(function () {
-        return caches.match('/index.html');
+      fetch(request)
+        .then(function (response) {
+          /* Cache the fresh page for offline use */
+          var clone = response.clone();
+          caches.open(CACHE_NAME).then(function (cache) {
+            cache.put(request, clone);
+          });
+          return response;
+        })
+        .catch(function () {
+          /* Offline — serve cached version of this URL or fall back to index.html */
+          return caches.match(request)
+            .then(function (cached) {
+              return cached || caches.match('/index.html');
+            });
+        })
+    );
+    return;
+  }
+
+  /* 5. Product images — cache-first (images never change once uploaded) */
+  if (url.match(/\.(jpg|jpeg|png|gif|webp|avif)(\?|$)/i) &&
+      !url.includes(self.location.origin)) {
+    event.respondWith(
+      caches.open(IMAGE_CACHE).then(function (cache) {
+        return cache.match(request).then(function (cached) {
+          if (cached) return cached;
+          return fetch(request).then(function (response) {
+            if (response && response.status === 200) {
+              cache.put(request, response.clone());
+            }
+            return response;
+          }).catch(function () {
+            return new Response('', { status: 408, statusText: 'Offline' });
+          });
+        });
       })
     );
     return;
   }
 
-  // ── All other GET requests: cache-first, network fallback ─────────────────
+  /* 6. App shell (JS, CSS, icons, manifest, local images)
+   *    Stale-while-revalidate: serve cached instantly, update in background */
   event.respondWith(
-    caches.match(request).then(function (cachedResponse) {
-      if (cachedResponse) return cachedResponse;
+    caches.open(CACHE_NAME).then(function (cache) {
+      return cache.match(request).then(function (cached) {
+        var fetchPromise = fetch(request).then(function (response) {
+          if (response && response.status === 200) {
+            cache.put(request, response.clone());
+          }
+          return response;
+        }).catch(function () {
+          /* Network failed — cached version already returned above if it existed */
+          return new Response('', { status: 408, statusText: 'Offline' });
+        });
 
-      return fetch(request).then(function (networkResponse) {
-        // Dynamically cache product images from Supabase storage
-        if (
-          networkResponse &&
-          networkResponse.status === 200 &&
-          request.url.match(/\.(jpg|jpeg|png|gif|webp)/i)
-        ) {
-          var cloned = networkResponse.clone();
-          caches.open(CACHE_NAME).then(function (cache) {
-            cache.put(request, cloned);
-          });
-        }
-        return networkResponse;
-      }).catch(function () {
-        // Network failed, not in cache — return nothing gracefully
-        return new Response('', { status: 408, statusText: 'Offline' });
+        /* Return cached immediately if available, otherwise wait for network */
+        return cached || fetchPromise;
       });
     })
   );
