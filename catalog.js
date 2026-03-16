@@ -157,13 +157,19 @@
         'letter-spacing:-.4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;',
         'line-height:1.2;}',
       '#cat-store-sub{font-size:11px;color:rgba(240,240,246,0.4);',
-      /* tagline strip — between header and chips */
-      '#cat-tagline{padding:10px 16px 4px;text-align:center;',
-        'font-size:12.5px;font-style:italic;font-weight:400;',
-        'color:rgba(240,240,246,0.55);line-height:1.6;',
-        'display:none;}', /* hidden until tagline is set */
-      '#cat-tagline.visible{display:block;}',
         'margin-top:1px;font-weight:500;}',
+
+      /* tagline strip — sits between search bar and category chips */
+      '#cat-tagline{',
+        'display:none;', /* hidden until tagline set */
+        'padding:8px 20px 6px;',
+        'text-align:center;',
+        'font-size:13px;font-style:italic;font-weight:400;',
+        'color:rgba(240,240,246,0.6);line-height:1.65;',
+        'border-bottom:1px solid rgba(255,255,255,0.05);',
+        'margin:0;',
+      '}',
+      '#cat-tagline.visible{display:block;}',
 
       /* status pill */
       '#cat-status{display:inline-flex;align-items:center;gap:5px;',
