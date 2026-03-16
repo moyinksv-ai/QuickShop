@@ -767,17 +767,37 @@
       // If it looks like a UUID, use it directly as the user_id
       if (_uuidPattern.test(STORE_ID)) return STORE_ID;
 
-      // Otherwise treat it as a business slug — look up in profiles
+      // Treat as business slug — try public_catalog_profiles view first
+      // (anon SELECT granted on view), fall back to profiles table
       try {
+        // Try view first — anon readable
         var sr = await client
+          .from('public_catalog_profiles')
+          .select('id')
+          .eq('slug', STORE_ID)
+          .maybeSingle();
+
+        if (!sr.error && sr.data && sr.data.id) return sr.data.id;
+
+        // View failed or returned nothing — try profiles table directly
+        // This works if anon SELECT policy exists on profiles
+        var sr2 = await client
           .from('profiles')
           .select('id')
           .eq('slug', STORE_ID)
           .maybeSingle();
-        if (sr.data && sr.data.id) return sr.data.id;
-        showError('Store not found. Please ask the seller for a valid link.');
+
+        if (!sr2.error && sr2.data && sr2.data.id) return sr2.data.id;
+
+        // Log actual errors for debugging
+        if (sr.error)  console.error('[Catalog] View slug lookup:', sr.error.message);
+        if (sr2.error) console.error('[Catalog] Table slug lookup:', sr2.error.message);
+
+        showError('Store not found. Please ask the seller for a new link.');
         return null;
       } catch (e) {
+        console.error('[Catalog] Slug lookup threw:', e);
+        showError('Could not load store. Please check your connection.');
         return null;
       }
     }
