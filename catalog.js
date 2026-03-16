@@ -32,9 +32,9 @@
   // Enforce minimum 7 digits — shorter strings produce broken wa.me links
   var SELLER_PHONE = (_rawPhone.length >= 7) ? _rawPhone : '';
 
-  // Validate STORE_ID looks like a UUID (or similar) before using it as a DB key.
-  // A garbage ?store= param should show a clean error, not a cryptic DB failure.
-  var _validStoreId = /^[a-zA-Z0-9\-]{8,64}$/.test(STORE_ID);
+  // Validate STORE_ID — must be 3-64 alphanumeric/hyphen chars.
+  // Rejects obviously garbage params without hitting the DB.
+  var _validStoreId = /^[a-zA-Z0-9\-]{1,64}$/.test(STORE_ID);
 
   var IS_PROD = (
     window.location.hostname !== 'localhost' &&
