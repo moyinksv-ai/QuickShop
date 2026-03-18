@@ -4,7 +4,6 @@
 * Author: Claude (Anthropic)
 * Date: 2025-01-22
 */
-
 function waitForSupabaseReady(timeoutMs = 3000) {
   return new Promise((resolve) => {
     if (window.__QS_SUPABASE && window.__QS_SUPABASE.client) return resolve(window.__QS_SUPABASE);

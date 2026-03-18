@@ -715,20 +715,33 @@
     const productToRemove  = Object.assign({}, p);
     // Collect sale IDs before wiping local state so we can queue their deletion
     const orphanedSaleIds  = s.sales.filter(x => x.productId === id).map(x => x.id);
+
+    // ── Mutate state first ──────────────────────────────────────────
     s.products = s.products.filter(x => x.id !== id);
     s.sales    = s.sales.filter(x => x.productId !== id);
     s.changes  = (s.changes || []).filter(x => x.productId !== id);
-    if (window.qsdb && window.qsdb.addPendingChange) {
-      await window.qsdb.addPendingChange({ type: 'removeProduct', item: productToRemove });
-      // Queue each orphaned sale for deletion from Supabase.
-      // Without this they re-appear after the next cloud sync.
-      for (const saleId of orphanedSaleIds) {
-        await window.qsdb.addPendingChange({ type: 'removeSale', item: { id: saleId } });
-      }
-    }
-    addActivityLog('Delete', 'Deleted product: ' + p.name);
+
+    // ── Re-render IMMEDIATELY after state mutation ──────────────────
+    // Must happen before any await so the product disappears instantly.
+    // Previously renders were after awaited IndexedDB calls — if the
+    // queue threw, renders never fired and the product stayed visible.
     renderInventory(); renderProducts(); renderDashboard(); renderChips();
     toast('Product deleted');
+    addActivityLog('Delete', 'Deleted product: ' + p.name);
+
+    // ── Queue to IndexedDB in background (non-blocking) ────────────
+    if (window.qsdb && window.qsdb.addPendingChange) {
+      try {
+        await window.qsdb.addPendingChange({ type: 'removeProduct', item: productToRemove });
+        for (const saleId of orphanedSaleIds) {
+          await window.qsdb.addPendingChange({ type: 'removeSale', item: { id: saleId } });
+        }
+      } catch (e) {
+        errlog('delete queue failed', e);
+        // UI already updated — product is gone from view.
+        // saveState() below will persist the deletion to localStorage.
+      }
+    }
     saveState().catch(e => errlog('delete sync', e));
   }
 
