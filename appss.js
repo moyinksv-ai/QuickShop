@@ -3508,6 +3508,38 @@ function handleTouchEnd() {
         </div>
       </div>
 
+      <!-- Account Details -->
+      <div class="qs-s-section">
+        <div class="qs-s-section-title">Account Details</div>
+        <div class="qs-s-row" style="flex-direction:column;align-items:stretch;gap:8px;">
+          <div class="qs-s-row-label">Full Name</div>
+          <input id="qs-account-name" type="text" maxlength="80"
+            placeholder="Your full name"
+            value="${escapeHtml(fullName)}"
+            style="width:100%;box-sizing:border-box;
+                   background:var(--card-glass);border:1px solid var(--border-glass);
+                   border-radius:var(--radius-sm);color:var(--text-primary);
+                   font-size:13px;padding:10px 12px;font-family:inherit;
+                   transition:border-color .2s;" />
+        </div>
+        <div class="qs-s-row" style="flex-direction:column;align-items:stretch;gap:8px;margin-top:4px;">
+          <div class="qs-s-row-label">Business Name</div>
+          <div class="qs-s-row-sub">Used on your catalog header and share link</div>
+          <input id="qs-account-business" type="text" maxlength="80"
+            placeholder="Your store or business name"
+            value="${escapeHtml(businessName)}"
+            style="width:100%;box-sizing:border-box;
+                   background:var(--card-glass);border:1px solid var(--border-glass);
+                   border-radius:var(--radius-sm);color:var(--text-primary);
+                   font-size:13px;padding:10px 12px;font-family:inherit;
+                   transition:border-color .2s;" />
+        </div>
+        <div style="padding:4px 0 0;display:flex;justify-content:flex-end;">
+          <button id="qs-account-save" class="qs-ghost-btn"
+            style="color:#10b981;border-color:rgba(16,185,129,0.3);">Save Changes</button>
+        </div>
+      </div>
+
       <!-- Store profile -->
       <div class="qs-s-section">
         <div class="qs-s-section-title">Store Profile</div>
@@ -3668,6 +3700,73 @@ function handleTouchEnd() {
         } finally {
           taglineSaveBtn.disabled = false;
           taglineSaveBtn.textContent = 'Save Tagline';
+        }
+      });
+    }
+
+    // Wire account details save
+    const accountSaveBtn = settingsPanel.querySelector('#qs-account-save');
+    if (accountSaveBtn) {
+      accountSaveBtn.addEventListener('click', async function () {
+        const nameInput     = settingsPanel.querySelector('#qs-account-name');
+        const businessInput = settingsPanel.querySelector('#qs-account-business');
+        const newName     = (nameInput     ? nameInput.value     : '').trim().slice(0, 80);
+        const newBusiness = (businessInput ? businessInput.value : '').trim().slice(0, 80);
+
+        const u  = getUser();
+        const sb = getClient();
+        if (!u || !sb) { toast('Not logged in', 'error'); return; }
+
+        // Require at least one field filled
+        if (!newName && !newBusiness) {
+          toast('Please enter at least a name or business name', 'error');
+          return;
+        }
+
+        accountSaveBtn.disabled = true;
+        accountSaveBtn.textContent = 'Saving…';
+
+        try {
+          // 1. Update Supabase Auth user_metadata
+          const { data: authData, error: authErr } = await sb.auth.updateUser({
+            data: {
+              full_name:     newName     || null,
+              business_name: newBusiness || null,
+            }
+          });
+          if (authErr) throw authErr;
+
+          // 2. Update profiles table (keeps it in sync with auth metadata)
+          await setUserProfile(u.id, {
+            name:         newName     || '',
+            businessName: newBusiness || '',
+            email:        u.email     || '',
+            createdAt:    Date.now(),
+          });
+
+          // 3. If business name changed, clear slug so it regenerates
+          // on next Share Catalog tap with the new name.
+          const oldBusiness = (u.user_metadata && u.user_metadata.business_name) || '';
+          if (newBusiness && newBusiness !== oldBusiness) {
+            await sb.from('profiles').update({ slug: null }).eq('id', u.id);
+          }
+
+          // 4. Update currentUser in memory so the header re-renders immediately.
+          // Supabase will also fire USER_UPDATED → handleAuthUser, but that's async.
+          // We patch directly so the vendor sees the change instantly.
+          if (authData && authData.user) {
+            currentUser = authData.user;
+          }
+
+          toast('Account updated ✓', 'success');
+          renderSettingsPanel(); // re-renders header with new name/initials
+
+        } catch (e) {
+          errlog('account save', e);
+          toast('Failed to save: ' + (e.message || 'unknown error'), 'error');
+        } finally {
+          accountSaveBtn.disabled = false;
+          accountSaveBtn.textContent = 'Save Changes';
         }
       });
     }
