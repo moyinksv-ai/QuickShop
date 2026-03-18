@@ -470,7 +470,7 @@
         const cost     = window.n(invCost     && invCost.value);
         const qty      = window.n(invQty      && invQty.value);
         const category = (invCategory && invCategory.value) || 'Others';
-        const desc     = ((invDesc && invDesc.value) || '').trim().slice(0, 300);
+        const desc     = ((invDesc && invDesc.value) || '').trim().slice(0, 500);
         const image    = (invImgPreviewImg  && invImgPreviewImg.src  && invImgPreviewImg.src  !== window.location.href) ? invImgPreviewImg.src  : null;
         const image2   = (invImgPreviewImg2 && invImgPreviewImg2.src && invImgPreviewImg2.src !== window.location.href) ? invImgPreviewImg2.src : null;
 
@@ -1024,4 +1024,3 @@
   document.dispatchEvent(new Event('qs:inventory:ready'));
 
 })();
-

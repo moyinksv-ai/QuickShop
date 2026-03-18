@@ -4,6 +4,7 @@
 * Author: Claude (Anthropic)
 * Date: 2025-01-22
 */
+
 function waitForSupabaseReady(timeoutMs = 3000) {
   return new Promise((resolve) => {
     if (window.__QS_SUPABASE && window.__QS_SUPABASE.client) return resolve(window.__QS_SUPABASE);
@@ -705,7 +706,7 @@ function handleTouchEnd() {
     }).map(p => ({
       id: safeId(p.id),
       name: safeStr(p.name, MAX_NAME),
-      description: typeof p.description === 'string' ? safeStr(p.description, 300) : null,
+      description: typeof p.description === 'string' ? safeStr(p.description, 500) : null,
       barcode: typeof p.barcode === 'string' ? safeStr(p.barcode, 64) : null,
       price: safeNum(p.price),
       cost: safeNum(p.cost),
@@ -1217,6 +1218,14 @@ function handleTouchEnd() {
       } catch(e) { errlog('bootstrap product push failed', e); }
     }
     document.dispatchEvent(new Event('qs:user:auth'));
+
+    // If settings panel is active, re-render it now that currentUser is set.
+    // Without this, navigating to settings before auth resolves leaves
+    // the panel blank permanently until the vendor navigates away and back.
+    const settingsPanel = $('settingsPanel');
+    if (settingsPanel && settingsPanel.classList.contains('active')) {
+      renderSettingsPanel();
+    }
   }
 
   function handleAuthLogout() {
@@ -3484,7 +3493,15 @@ function handleTouchEnd() {
 
   function renderSettingsPanel() {
     const user = currentUser;
-    if (!user) return;
+    if (!user) {
+      // Auth not yet resolved — show loading state so panel is never blank
+      const sp = $('settingsPanel');
+      if (sp && !sp.querySelector('#qs-sticky-profile')) {
+        sp.innerHTML = '<div style="padding:40px 16px;text-align:center;' +
+          'color:var(--text-muted);font-size:13px;">Loading account…</div>';
+      }
+      return;
+    }
 
     const meta = user.user_metadata || {};
     const businessName = meta.business_name || '';
