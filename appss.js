@@ -3463,26 +3463,6 @@ function handleTouchEnd() {
           transform: rotate(90deg);
         }
         /* Share button rendered inside action row — inherit sizing */
-        #qs-share-btn-area {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-        }
-        #qs-share-btn-area [data-share-wrapper] {
-          flex: 1;
-          margin: 0 !important;
-        }
-        #qs-share-btn-area .save-btn {
-          flex: 1;
-          height: 100%;
-          flex-direction: column;
-          font-size: 11.5px !important;
-          padding: 11px 6px !important;
-          border-radius: var(--radius-sm) !important;
-          letter-spacing: .2px;
-          gap: 4px !important;
-          min-height: 0 !important;
-        }
 
         /* Slide-down drawers */
         .qs-drawer {
@@ -3582,7 +3562,12 @@ function handleTouchEnd() {
           <span>Edit Store</span>
           <span class="qs-action-arrow">›</span>
         </button>
-        <div id="qs-share-btn-area"></div>
+        <button id="qs-action-share" class="qs-action-btn" type="button"
+          aria-label="Share your catalog to WhatsApp"
+          style="background:rgba(99,102,241,0.15);border-color:rgba(99,102,241,0.4);color:var(--accent-primary);">
+          <span class="qs-action-icon">📤</span>
+          <span>Share Catalog</span>
+        </button>
       </div>
 
       <!-- ── Edit Account drawer (hidden by default) ────────────────── -->
@@ -3733,7 +3718,7 @@ function handleTouchEnd() {
 
       <!-- ── About overlay (full panel, slides up) ──────────────────── -->
       <div id="qs-about-overlay"
-        style="position:absolute;inset:0;z-index:50;
+        style="position:fixed;inset:0;z-index:9999;
                background:var(--bg-primary, #09090b);
                transform:translateY(100%);
                transition:transform .32s cubic-bezier(.16,1,.3,1);
@@ -3989,15 +3974,12 @@ function handleTouchEnd() {
     if (contactDevBtn) {
       contactDevBtn.addEventListener('click', function () {
         const msg = encodeURIComponent(
-          'Hello Moses,
-
-I am a QuickShop vendor reaching out for support.
-
-My name: 
-My store: 
-Issue / feedback: 
-
-Thank you.'
+          'Hello Moses,' +
+          '\n\nI am a QuickShop vendor reaching out for support.' +
+          '\n\nMy name: ' +
+          '\nMy store: ' +
+          '\nIssue / feedback: ' +
+          '\n\nThank you.'
         );
         window.open('https://wa.me/2347035023138?text=' + msg, '_blank', 'noopener,noreferrer');
       });
@@ -4044,10 +4026,24 @@ Thank you.'
     // Render categories into the store drawer slot
     renderCategoryEditor();
 
-    // Render Share Catalog button into the action row slot
-    if (typeof window.renderShareButton === 'function') {
-      const area = settingsPanel.querySelector('#qs-share-btn-area');
-      if (area) window.renderShareButton(area);
+    // Wire Share Catalog action button — calls share-catalog.js handleShareClick directly
+    const actionShareBtn = settingsPanel.querySelector('#qs-action-share');
+    if (actionShareBtn) {
+      actionShareBtn.addEventListener('click', function () {
+        // share-catalog.js exposes window.__QS_SHARE_CLICK for direct invocation
+        if (typeof window.__QS_SHARE_CLICK === 'function') {
+          window.__QS_SHARE_CLICK();
+        } else if (typeof window.renderShareButton === 'function') {
+          // Fallback: render the original button into a hidden container and click it
+          const tmp = document.createElement('div');
+          tmp.style.cssText = 'position:absolute;left:-9999px;pointer-events:none;';
+          document.body.appendChild(tmp);
+          window.renderShareButton(tmp);
+          const btn = tmp.querySelector('button');
+          if (btn) btn.click();
+          setTimeout(function() { tmp.remove(); }, 5000);
+        }
+      });
     }
 
     // Load tagline into textarea (non-blocking)

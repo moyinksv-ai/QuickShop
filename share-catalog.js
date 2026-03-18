@@ -319,6 +319,9 @@
 
   // ── Render share button ─────────────────────────────────────────────────────
 
+  // Expose handleShareClick for direct invocation from settings action row button
+  window.__QS_SHARE_CLICK = function() { handleShareClick(null); };
+
   window.renderShareButton = function renderShareButton(container) {
     if (!container) return;
 
