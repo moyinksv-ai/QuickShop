@@ -117,6 +117,15 @@
       .slice(0, 2).join('').toUpperCase() || '?';
   }
 
+  // Validates image URL before setting as img.src.
+  // Prevents javascript: URI injection on older browsers.
+  // Only accepts https:// URLs or data: URIs (for compressed blobs).
+  function safeImgSrc(url) {
+    if (typeof url !== 'string') return '';
+    if (url.startsWith('https://') || url.startsWith('data:image/')) return url;
+    return '';
+  }
+
   /* ── 4. CSS INJECTION — scoped under #qs-catalog, injected once ────────── */
 
   function injectCSS() {
@@ -450,21 +459,86 @@
         'animation:cat-hint-fade 2.4s ease forwards;}',
       '@keyframes cat-hint-fade{0%{opacity:0}15%{opacity:1}70%{opacity:1}100%{opacity:0}}',
 
-      /* --- description expand/collapse --- */
-      '.cat-desc-wrap{border-top:1px solid rgba(255,255,255,0.06);margin:0 10px;}',
-      '.cat-desc-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;',
-        'padding:7px 0;background:none;border:none;cursor:pointer;',
-        'color:rgba(240,240,246,0.45);font-size:10.5px;font-weight:700;',
-        'letter-spacing:.4px;text-transform:uppercase;',
+      /* --- description preview + see more link --- */
+      '.cat-desc-preview{padding:4px 10px 8px;',
+        'font-size:12px;line-height:1.6;color:rgba(240,240,246,0.6);',
+        'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;',
+        'overflow:hidden;}',
+      '.cat-see-more{display:block;padding:0 10px 10px;',
+        'font-size:11.5px;font-weight:700;color:#a78bfa;',
+        'background:none;border:none;cursor:pointer;text-align:left;',
+        'letter-spacing:.2px;-webkit-tap-highlight-color:transparent;}',
+      '.cat-see-more:active{opacity:.7;}',
+
+      /* --- product detail overlay --- */
+      '#cat-detail{position:fixed;inset:0;z-index:400;',
+        'background:#0e0e14;',
+        'transform:translateY(100%);',
+        'transition:transform .32s cubic-bezier(.16,1,.3,1);',
+        'display:flex;flex-direction:column;overflow:hidden;}',
+      '#cat-detail.open{transform:translateY(0);}',
+      '#cat-detail-hdr{display:flex;align-items:center;gap:10px;',
+        'padding:12px 16px;flex-shrink:0;',
+        'border-bottom:1px solid rgba(255,255,255,0.07);}',
+      '#cat-detail-back{background:rgba(255,255,255,0.07);border:none;',
+        'border-radius:10px;color:#fff;font-size:13px;font-weight:600;',
+        'cursor:pointer;padding:7px 14px;display:flex;align-items:center;gap:6px;',
         '-webkit-tap-highlight-color:transparent;}',
-      '.cat-desc-arrow{font-size:9px;transition:transform .22s;display:inline-block;}',
-      '.cat-desc-arrow.up{transform:rotate(180deg);}',
-      /* Height animation via max-height trick */
-      '.cat-desc-body{max-height:0;overflow:hidden;',
-        'transition:max-height .28s cubic-bezier(.4,0,.2,1);}',
-      '.cat-desc-body.open{max-height:200px;}',
-      '.cat-desc-text{font-size:12px;line-height:1.65;',
-        'color:rgba(240,240,246,0.65);padding:2px 0 10px;}',
+      '#cat-detail-back:active{background:rgba(255,255,255,0.14);}',
+      '#cat-detail-scroll{flex:1;overflow-y:auto;',
+        '-webkit-overflow-scrolling:touch;}',
+      /* Hero swipe strip on detail page */
+      '#cat-detail-hero{position:relative;width:100%;aspect-ratio:4/3;',
+        'background:rgba(255,255,255,0.04);flex-shrink:0;cursor:grab;}',
+      '#cat-detail-hero:active{cursor:grabbing;}',
+      '#cat-detail-hero .cat-swipe-track{height:100%;}',
+      '#cat-detail-hero-single{width:100%;aspect-ratio:4/3;',
+        'object-fit:cover;display:block;cursor:zoom-in;}',
+      '#cat-detail-hero-emoji{width:100%;aspect-ratio:4/3;',
+        'display:flex;align-items:center;justify-content:center;',
+        'font-size:72px;background:rgba(255,255,255,0.04);}',
+      /* Detail info section */
+      '#cat-detail-info{padding:16px 16px 0;}',
+      '#cat-detail-cat{font-size:10px;font-weight:700;letter-spacing:.7px;',
+        'text-transform:uppercase;color:rgba(240,240,246,0.35);margin-bottom:4px;}',
+      '#cat-detail-name{font-size:20px;font-weight:900;color:#fff;',
+        'letter-spacing:-.4px;line-height:1.25;margin-bottom:8px;}',
+      '#cat-detail-price{font-size:22px;font-weight:800;color:#a78bfa;',
+        'letter-spacing:-.4px;margin-bottom:6px;}',
+      '#cat-detail-stock{font-size:12px;font-weight:700;color:#10b981;margin-bottom:12px;}',
+      '#cat-detail-stock.low{color:#f59e0b;}',
+      '#cat-detail-stock.oos{color:#ef4444;}',
+      /* Description on detail page */
+      '#cat-detail-desc{font-size:14px;line-height:1.7;',
+        'color:rgba(240,240,246,0.72);',
+        'padding:12px 16px;',
+        'border-top:1px solid rgba(255,255,255,0.06);}',
+      /* Purchase controls */
+      '#cat-detail-buy{padding:16px;flex-shrink:0;',
+        'border-top:1px solid rgba(255,255,255,0.07);',
+        'background:#0e0e14;',
+        'padding-bottom:max(16px,env(safe-area-inset-bottom));}',
+      '#cat-detail-qty-row{display:flex;align-items:center;gap:12px;margin-bottom:12px;}',
+      '#cat-detail-qty-label{font-size:13px;font-weight:600;',
+        'color:rgba(240,240,246,0.5);flex:1;}',
+      '#cat-detail-qty-controls{display:flex;align-items:center;gap:10px;}',
+      '.cat-dqbtn{width:34px;height:34px;border-radius:10px;border:none;',
+        'background:rgba(255,255,255,0.09);color:#fff;',
+        'font-size:18px;font-weight:700;cursor:pointer;',
+        'display:flex;align-items:center;justify-content:center;',
+        '-webkit-tap-highlight-color:transparent;}',
+      '.cat-dqbtn:active{background:rgba(255,255,255,0.18);}',
+      '.cat-dqbtn:disabled{opacity:.28;cursor:not-allowed;}',
+      '#cat-detail-qty-val{font-size:16px;font-weight:800;color:#fff;',
+        'min-width:28px;text-align:center;}',
+      '#cat-detail-add-btn{width:100%;padding:15px;border-radius:14px;border:none;',
+        'background:rgba(124,58,237,0.2);color:#a78bfa;',
+        'font-size:15px;font-weight:800;cursor:pointer;',
+        'transition:all .15s;letter-spacing:-.2px;',
+        '-webkit-tap-highlight-color:transparent;}',
+      '#cat-detail-add-btn.in-cart{background:rgba(16,185,129,0.15);color:#34d399;}',
+      '#cat-detail-add-btn:active{opacity:.85;}',
+      '#cat-detail-add-btn:disabled{opacity:.4;cursor:not-allowed;}',
     ].join('');
     document.head.appendChild(s);
   }
@@ -827,6 +901,399 @@
   var allProducts    = [];
   var searchQuery    = '';
 
+  /* ── PRODUCT DETAIL OVERLAY ─────────────────────────────────────────────
+   * Full-screen slide-up overlay. z-index 400 (above cart drawer 300,
+   * below lightbox 500). Owns its own swipe strip for hero images.
+   * Cart state shared with grid via cartAdd/cartSetQty/refreshCartUI.
+   * All user content set via textContent — never innerHTML. */
+
+  var _detailProduct = null; // currently displayed product
+  var _detailQty     = 1;    // quantity selector state
+  var _detailSwipe   = null; // active swipe gesture state on hero
+
+  function buildDetailOverlay() {
+    if (document.getElementById('cat-detail')) return;
+
+    var overlay = document.createElement('div');
+    overlay.id = 'cat-detail';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-label', 'Product details');
+
+    // Header: back button
+    var hdr = document.createElement('div');
+    hdr.id = 'cat-detail-hdr';
+    var back = document.createElement('button');
+    back.id = 'cat-detail-back';
+    back.type = 'button';
+    back.setAttribute('aria-label', 'Back to store');
+    back.innerHTML = '← Back to store'; // ← arrow
+    back.addEventListener('click', closeDetailOverlay);
+    hdr.appendChild(back);
+    overlay.appendChild(hdr);
+
+    // Scrollable body
+    var scroll = document.createElement('div');
+    scroll.id = 'cat-detail-scroll';
+
+    // Hero (image area — filled dynamically by openDetailOverlay)
+    var hero = document.createElement('div');
+    hero.id = 'cat-detail-hero';
+    scroll.appendChild(hero);
+
+    // Info section
+    var info = document.createElement('div');
+    info.id = 'cat-detail-info';
+
+    var catEl = document.createElement('div');    catEl.id = 'cat-detail-cat';
+    var nameEl = document.createElement('div');   nameEl.id = 'cat-detail-name';
+    var priceEl = document.createElement('div');  priceEl.id = 'cat-detail-price';
+    var stockEl = document.createElement('div');  stockEl.id = 'cat-detail-stock';
+
+    info.appendChild(catEl);
+    info.appendChild(nameEl);
+    info.appendChild(priceEl);
+    info.appendChild(stockEl);
+    scroll.appendChild(info);
+
+    // Description (hidden if product has none)
+    var descEl = document.createElement('div');
+    descEl.id = 'cat-detail-desc';
+    scroll.appendChild(descEl);
+
+    overlay.appendChild(scroll);
+
+    // Purchase controls (sticky bottom)
+    var buy = document.createElement('div');
+    buy.id = 'cat-detail-buy';
+
+    var qtyRow = document.createElement('div');
+    qtyRow.id = 'cat-detail-qty-row';
+    var qtyLabel = document.createElement('div');
+    qtyLabel.id = 'cat-detail-qty-label';
+    qtyLabel.textContent = 'Quantity';
+    var qtyCtrls = document.createElement('div');
+    qtyCtrls.id = 'cat-detail-qty-controls';
+
+    var minusBtn = document.createElement('button');
+    minusBtn.className = 'cat-dqbtn';
+    minusBtn.id = 'cat-dq-minus';
+    minusBtn.type = 'button';
+    minusBtn.textContent = '−'; // −
+    minusBtn.setAttribute('aria-label', 'Decrease quantity');
+
+    var qtyVal = document.createElement('span');
+    qtyVal.id = 'cat-detail-qty-val';
+    qtyVal.textContent = '1';
+
+    var plusBtn = document.createElement('button');
+    plusBtn.className = 'cat-dqbtn';
+    plusBtn.id = 'cat-dq-plus';
+    plusBtn.type = 'button';
+    plusBtn.textContent = '+';
+    plusBtn.setAttribute('aria-label', 'Increase quantity');
+
+    qtyCtrls.appendChild(minusBtn);
+    qtyCtrls.appendChild(qtyVal);
+    qtyCtrls.appendChild(plusBtn);
+    qtyRow.appendChild(qtyLabel);
+    qtyRow.appendChild(qtyCtrls);
+    buy.appendChild(qtyRow);
+
+    var addBtn = document.createElement('button');
+    addBtn.id = 'cat-detail-add-btn';
+    addBtn.type = 'button';
+    buy.appendChild(addBtn);
+
+    overlay.appendChild(buy);
+
+    // Wire qty buttons
+    minusBtn.addEventListener('click', function () {
+      if (!_detailProduct) return;
+      _detailQty = Math.max(1, _detailQty - 1);
+      updateDetailQtyUI();
+    });
+    plusBtn.addEventListener('click', function () {
+      if (!_detailProduct) return;
+      var maxStock = (typeof _detailProduct.qty === 'number') ? _detailProduct.qty : 999;
+      _detailQty = Math.min(_detailQty + 1, maxStock);
+      updateDetailQtyUI();
+    });
+
+    // Wire add-to-cart button
+    addBtn.addEventListener('click', function () {
+      if (!_detailProduct) return;
+      var inCart = cart.has(_detailProduct.id);
+      if (inCart) {
+        // Already in cart — update qty to selected qty
+        cartSetQty(_detailProduct.id, _detailQty);
+      } else {
+        cartAdd(_detailProduct);
+        // Set correct qty if > 1
+        if (_detailQty > 1) cartSetQty(_detailProduct.id, _detailQty);
+      }
+      updateDetailAddBtnUI();
+      refreshCartUI(); // sync grid buttons
+    });
+
+    // Swipe on hero (same pointer-event pattern as grid cards)
+    hero.addEventListener('pointerdown', function (e) {
+      var track = hero.querySelector('.cat-swipe-track');
+      if (!track) return;
+      var imgs = _detailProduct ? [_detailProduct.image_url, _detailProduct.image_url2].filter(Boolean) : [];
+      if (imgs.length < 2) return;
+      _detailSwipe = {
+        startX: e.clientX, startY: e.clientY,
+        idx: parseInt(hero.dataset.swipeIdx || '0', 10),
+        moved: false, canceled: false
+      };
+      hero.setPointerCapture(e.pointerId);
+    });
+
+    hero.addEventListener('pointermove', function (e) {
+      if (!_detailSwipe || _detailSwipe.canceled) return;
+      var dx = e.clientX - _detailSwipe.startX;
+      var dy = e.clientY - _detailSwipe.startY;
+      if (!_detailSwipe.moved && Math.abs(dy) > Math.abs(dx) + 4) {
+        _detailSwipe.canceled = true; return;
+      }
+      if (Math.abs(dx) > 6) {
+        _detailSwipe.moved = true;
+        e.preventDefault();
+        var track = hero.querySelector('.cat-swipe-track');
+        if (track) {
+          var imgs = _detailProduct ? [_detailProduct.image_url, _detailProduct.image_url2].filter(Boolean) : [];
+          var base = _detailSwipe.idx * 100;
+          var pct = (dx / hero.offsetWidth) * 100;
+          if ((_detailSwipe.idx === 0 && dx > 0) || (_detailSwipe.idx === imgs.length - 1 && dx < 0)) pct *= 0.25;
+          track.classList.add('no-transition');
+          track.style.transform = 'translateX(' + (-base + pct) + '%)';
+        }
+      }
+    }, { passive: false });
+
+    hero.addEventListener('pointerup', function (e) {
+      if (!_detailSwipe) return;
+      var sw = _detailSwipe; _detailSwipe = null;
+      if (sw.canceled) return;
+      var dx = e.clientX - sw.startX;
+      var imgs = _detailProduct ? [_detailProduct.image_url, _detailProduct.image_url2].filter(Boolean) : [];
+      var newIdx = sw.idx;
+      if (!sw.moved || Math.abs(dx) < 30) {
+        detailSwipeUpdateTrack(sw.idx, true);
+        if (!sw.moved && imgs.length > 0) openLightbox(imgs, (_detailProduct && _detailProduct.name) || '', sw.idx);
+        return;
+      }
+      if (dx < -30 && sw.idx < imgs.length - 1) newIdx++;
+      if (dx > 30 && sw.idx > 0)                newIdx--;
+      detailSwipeUpdateTrack(newIdx, true);
+    });
+
+    hero.addEventListener('pointercancel', function () { _detailSwipe = null; });
+
+    // Escape key + Tab focus trap — mirrors cart overlay pattern
+    overlay.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { closeDetailOverlay(); return; }
+      if (e.key !== 'Tab') return;
+      var focusable = overlay.querySelectorAll(
+        'button:not([disabled]),input:not([disabled]),[tabindex="0"]'
+      );
+      if (!focusable.length) return;
+      var first = focusable[0];
+      var last  = focusable[focusable.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+      } else {
+        if (document.activeElement === last)  { e.preventDefault(); first.focus(); }
+      }
+    });
+
+    // Close on Android back gesture (popstate)
+    window.addEventListener('popstate', function () {
+      if (document.getElementById('cat-detail') &&
+          document.getElementById('cat-detail').classList.contains('open')) {
+        closeDetailOverlay();
+      }
+    });
+
+    document.getElementById('qs-catalog').appendChild(overlay);
+  }
+
+  function detailSwipeUpdateTrack(idx, animate) {
+    var hero = document.getElementById('cat-detail-hero');
+    if (!hero) return;
+    var track = hero.querySelector('.cat-swipe-track');
+    if (!track) return;
+    if (!animate) track.classList.add('no-transition');
+    track.style.transform = 'translateX(-' + (idx * 100) + '%)';
+    if (!animate) { track.offsetHeight; track.classList.remove('no-transition'); }
+    hero.querySelectorAll('.cat-swipe-dot').forEach(function (d, i) {
+      d.className = 'cat-swipe-dot ' + (i === idx ? 'on' : 'off');
+    });
+    hero.dataset.swipeIdx = String(idx);
+  }
+
+  function updateDetailQtyUI() {
+    var qtyVal = document.getElementById('cat-detail-qty-val');
+    var minusBtn = document.getElementById('cat-dq-minus');
+    var plusBtn  = document.getElementById('cat-dq-plus');
+    if (qtyVal) qtyVal.textContent = String(_detailQty);
+    var maxStock = _detailProduct && typeof _detailProduct.qty === 'number'
+      ? _detailProduct.qty : 999;
+    if (minusBtn) minusBtn.disabled = (_detailQty <= 1);
+    if (plusBtn)  plusBtn.disabled  = (_detailQty >= maxStock);
+  }
+
+  function updateDetailAddBtnUI() {
+    if (!_detailProduct) return;
+    var addBtn = document.getElementById('cat-detail-add-btn');
+    if (!addBtn) return;
+    var inCart = cart.has(_detailProduct.id);
+    addBtn.classList.toggle('in-cart', inCart);
+    addBtn.textContent = inCart ? '✓ In Cart — Update Qty' : '+ Add to Cart';
+    var inStock = typeof _detailProduct.qty !== 'number' || _detailProduct.qty > 0;
+    addBtn.disabled = !inStock;
+  }
+
+  function openDetailOverlay(product) {
+    buildDetailOverlay(); // idempotent
+    _detailProduct = product;
+    _detailQty = cart.has(product.id) ? (cart.get(product.id).qty || 1) : 1;
+
+    var hero = document.getElementById('cat-detail-hero');
+    var images = [product.image_url, product.image_url2].filter(Boolean);
+
+    // Build hero content
+    hero.innerHTML = ''; // safe — no user data here, only img elements
+    hero.dataset.swipeIdx = '0';
+
+    if (images.length > 1) {
+      // Swipe strip
+      var track = document.createElement('div');
+      track.className = 'cat-swipe-track';
+      images.forEach(function (src, i) {
+        var slide = document.createElement('div');
+        slide.className = 'cat-swipe-slide';
+        var img = document.createElement('img');
+        img.src = safeImgSrc(src);
+        img.alt = (product.name || '') + ' photo ' + (i + 1);
+        img.loading = i === 0 ? 'eager' : 'lazy';
+        img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;';
+        slide.appendChild(img);
+        track.appendChild(slide);
+      });
+      hero.appendChild(track);
+      var dots = document.createElement('div');
+      dots.className = 'cat-swipe-dots';
+      dots.setAttribute('aria-hidden', 'true');
+      images.forEach(function (_, i) {
+        var d = document.createElement('span');
+        d.className = 'cat-swipe-dot ' + (i === 0 ? 'on' : 'off');
+        dots.appendChild(d);
+      });
+      hero.appendChild(dots);
+    } else if (images.length === 1) {
+      var singleImg = document.createElement('img');
+      singleImg.id = 'cat-detail-hero-single';
+      singleImg.src = images[0];
+      singleImg.alt = product.name || '';
+      singleImg.loading = 'eager';
+      singleImg.addEventListener('click', function () {
+        openLightbox([images[0]], product.name || '');
+      });
+      hero.appendChild(singleImg);
+    } else if (product.icon && product.icon.trim()) {
+      var emojiDiv = document.createElement('div');
+      emojiDiv.id = 'cat-detail-hero-emoji';
+      emojiDiv.setAttribute('aria-hidden', 'true');
+      emojiDiv.textContent = product.icon;
+      hero.appendChild(emojiDiv);
+    } else {
+      var monoDiv = document.createElement('div');
+      monoDiv.id = 'cat-detail-hero-emoji';
+      monoDiv.setAttribute('aria-hidden', 'true');
+      monoDiv.textContent = mono(product.name);
+      monoDiv.style.fontSize = '48px';
+      hero.appendChild(monoDiv);
+    }
+
+    // Populate info — textContent only
+    var catEl   = document.getElementById('cat-detail-cat');
+    var nameEl  = document.getElementById('cat-detail-name');
+    var priceEl = document.getElementById('cat-detail-price');
+    var stockEl = document.getElementById('cat-detail-stock');
+    var descEl  = document.getElementById('cat-detail-desc');
+
+    if (catEl)   catEl.textContent   = product.category || 'General';
+    if (nameEl)  nameEl.textContent  = product.name || 'Product';
+    if (priceEl) priceEl.textContent = fmt(product.price || 0);
+
+    var qty = product.qty;
+    if (typeof qty !== 'number') {
+      stockEl.textContent = 'In stock'; stockEl.className = '';
+    } else if (qty <= 0) {
+      stockEl.textContent = 'Out of stock'; stockEl.className = 'oos';
+    } else if (qty <= 3) {
+      stockEl.textContent = 'Only ' + qty + ' left'; stockEl.className = 'low';
+    } else {
+      stockEl.textContent = qty + ' in stock'; stockEl.className = '';
+    }
+    stockEl.id = 'cat-detail-stock';
+
+    // Description — show only if exists
+    if (descEl) {
+      if (product.description && product.description.trim()) {
+        descEl.textContent = product.description;
+        descEl.style.display = '';
+      } else {
+        descEl.textContent = '';
+        descEl.style.display = 'none';
+      }
+    }
+
+    // Qty controls
+    updateDetailQtyUI();
+    updateDetailAddBtnUI();
+
+    // Scroll to top
+    var scroll = document.getElementById('cat-detail-scroll');
+    if (scroll) scroll.scrollTop = 0;
+
+    // Open overlay.
+    // Use replaceState if already open (customer switched products) so we
+    // never accumulate more than one history entry per catalog session.
+    // Use pushState on first open so Android back button closes the overlay.
+    var overlay = document.getElementById('cat-detail');
+    var alreadyOpen = overlay.classList.contains('open');
+    overlay.classList.add('open');
+    overlay.setAttribute('aria-hidden', 'false');
+    if (alreadyOpen) {
+      history.replaceState({ detailOpen: true }, '');
+    } else {
+      history.pushState({ detailOpen: true }, '');
+    }
+
+    // Focus back button for accessibility
+    var backBtn = document.getElementById('cat-detail-back');
+    if (backBtn) setTimeout(function () { backBtn.focus(); }, 320);
+  }
+
+  function closeDetailOverlay() {
+    var overlay = document.getElementById('cat-detail');
+    if (!overlay) return;
+    overlay.classList.remove('open');
+    overlay.setAttribute('aria-hidden', 'true');
+    _detailProduct = null;
+    _detailQty = 1;
+    _detailSwipe = null;
+  }
+
+  /* ── 8. RENDER CATEGORY CHIPS ───────────────────────────────────────── */
+
+  var activeCategory = 'All';
+  var allProducts    = [];
+  var searchQuery    = '';
+
   function renderChips(categories) {
     var container = document.getElementById('cat-chips');
     if (!container) return;
@@ -889,7 +1356,7 @@
         var slide = document.createElement('div');
         slide.className = 'cat-swipe-slide';
         var img = document.createElement('img');
-        img.src     = src;
+        img.src     = safeImgSrc(src);
         img.alt     = (p.name || '') + (images.length > 1 ? ' — photo ' + (i + 1) : '');
         img.loading = i === 0 ? 'eager' : 'lazy';
         slide.appendChild(img);
@@ -990,43 +1457,24 @@
     }
     card.appendChild(info);
 
-    /* ── Description — collapsed, tap to expand ── */
+    /* ── Description — 2-line preview + "See more" → detail page ──────────
+     * Card height stays fixed. Description never expands inside the grid.
+     * "See more" opens the full-screen product detail overlay.
+     * textContent used throughout — no innerHTML with user data (XSS safe). */
     if (p.description && p.description.trim()) {
-      var descWrap = document.createElement('div');
-      descWrap.className = 'cat-desc-wrap';
+      var descPreview = document.createElement('p');
+      descPreview.className = 'cat-desc-preview';
+      descPreview.textContent = p.description; // 2-line clamp via CSS
 
-      var descToggle = document.createElement('button');
-      descToggle.className = 'cat-desc-toggle';
-      descToggle.type = 'button';
-      descToggle.setAttribute('aria-expanded', 'false');
-      var toggleText = document.createElement('span');
-      toggleText.textContent = 'Details';
-      var toggleArrow = document.createElement('span');
-      toggleArrow.className = 'cat-desc-arrow';
-      toggleArrow.setAttribute('aria-hidden', 'true');
-      descToggle.appendChild(toggleText);
-      descToggle.appendChild(toggleArrow);
+      var seeMore = document.createElement('button');
+      seeMore.className = 'cat-see-more';
+      seeMore.type = 'button';
+      seeMore.textContent = 'See more ›'; // › character
+      seeMore.dataset.productId = p.id;
+      seeMore.setAttribute('aria-label', 'See full details for ' + (p.name || 'product'));
 
-      var descBody = document.createElement('div');
-      descBody.className = 'cat-desc-body';
-      descBody.setAttribute('aria-hidden', 'true');
-      var descText = document.createElement('p');
-      descText.className = 'cat-desc-text';
-      descText.textContent = p.description; // textContent — safe, no XSS
-      descBody.appendChild(descText);
-
-      descToggle.addEventListener('click', function (e) {
-        e.stopPropagation();
-        var expanded = descToggle.getAttribute('aria-expanded') === 'true';
-        descToggle.setAttribute('aria-expanded', String(!expanded));
-        descBody.setAttribute('aria-hidden', String(expanded));
-        descBody.classList.toggle('open', !expanded);
-        toggleArrow.classList.toggle('up', !expanded);
-      });
-
-      descWrap.appendChild(descToggle);
-      descWrap.appendChild(descBody);
-      card.appendChild(descWrap);
+      card.appendChild(descPreview);
+      card.appendChild(seeMore);
     }
 
     /* ── Add to Cart button ── */
@@ -1120,6 +1568,9 @@
     if (overlay && overlay.classList.contains('open')) {
       renderCartItems();
     }
+
+    // Sync detail overlay add button if open
+    if (_detailProduct) updateDetailAddBtnUI();
   }
 
   function buildCartRow(p, qty) {
@@ -1464,8 +1915,15 @@
           return;
         }
 
-        // Description toggle — handled by its own listener on the button
-        // (event bubbles, no action needed here)
+        // "See more" button — opens product detail overlay
+        var seeMoreBtn = target.closest('.cat-see-more');
+        if (seeMoreBtn) {
+          e.stopPropagation();
+          var pid = seeMoreBtn.dataset.productId;
+          var product = allProducts.find(function (p) { return p.id === pid; });
+          if (product) openDetailOverlay(product);
+          return;
+        }
       });
 
       grid.addEventListener('keydown', function (e) {
@@ -1713,7 +2171,7 @@
       if (profile && profile.avatar_url) {
         // Show real logo/photo
         var avImg = document.createElement('img');
-        avImg.src = profile.avatar_url;
+        avImg.src = safeImgSrc(profile.avatar_url);
         avImg.alt = storeName;
         avatar.innerHTML = '';
         avatar.appendChild(avImg);
@@ -1798,6 +2256,40 @@
                 }
               });
               refreshCartUI();
+
+              // If the product detail overlay is open, refresh it with
+              // updated data so stock badge, qty cap, and add button are live.
+              if (_detailProduct) {
+                var freshProduct = allProducts.find(function(p) { return p.id === _detailProduct.id; });
+                if (freshProduct) {
+                  // Update the reference and re-render info fields
+                  _detailProduct = freshProduct;
+                  // Re-render stock badge
+                  var stockEl = document.getElementById('cat-detail-stock');
+                  if (stockEl) {
+                    var qty = freshProduct.qty;
+                    if (typeof qty !== 'number') {
+                      stockEl.textContent = 'In stock'; stockEl.className = '';
+                    } else if (qty <= 0) {
+                      stockEl.textContent = 'Out of stock'; stockEl.className = 'oos';
+                    } else if (qty <= 3) {
+                      stockEl.textContent = 'Only ' + qty + ' left'; stockEl.className = 'low';
+                    } else {
+                      stockEl.textContent = qty + ' in stock'; stockEl.className = '';
+                    }
+                    stockEl.id = 'cat-detail-stock'; // preserve id after className reset
+                  }
+                  // Cap _detailQty to new stock
+                  if (typeof freshProduct.qty === 'number') {
+                    _detailQty = Math.min(_detailQty, Math.max(1, freshProduct.qty));
+                  }
+                  updateDetailQtyUI();
+                  updateDetailAddBtnUI();
+                } else {
+                  // Product removed entirely — close detail and show message
+                  closeDetailOverlay();
+                }
+              }
             });
           }
         )
@@ -1808,6 +2300,15 @@
       console.warn('[Catalog] Realtime subscription failed:', e);
     }
   }
+
+  // Global error boundary — catches unhandled promise rejections
+  // (e.g. silent failures in the realtime subscription handler).
+  // Logs in dev, fails silently in prod to avoid alarming customers.
+  window.addEventListener('unhandledrejection', function (ev) {
+    console.error('[Catalog] Unhandled rejection:', ev.reason);
+    // Do not show a toast — customers should not see internal errors.
+    // Vendor will see it in browser devtools if needed.
+  });
 
   // Run when DOM is ready
   if (document.readyState === 'loading') {

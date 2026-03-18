@@ -31,7 +31,7 @@
  *      Ensures the app opens offline after first visit.
  */
 
-var CACHE_NAME    = 'qs-v4.5';
+var CACHE_NAME    = 'qs-v4.0';
 var IMAGE_CACHE   = 'qs-images-v4.0';
 
 /* ── Install ─────────────────────────────────────────────────────────────────
@@ -68,8 +68,15 @@ self.addEventListener('fetch', function (event) {
   /* 1. Non-GET — pass through untouched */
   if (request.method !== 'GET') return;
 
-  /* 2. Supabase API + auth — always network, never cache */
-  if (url.includes('supabase.co') || url.includes('supabase.in')) return;
+  /* 2. Supabase API / auth / realtime — always network, never cache.
+   *    EXCEPTION: Supabase Storage image URLs (/storage/v1/object/public/)
+   *    are permanent CDN URLs that never change after upload. These must be
+   *    allowed through to the cache-first image handler below (rule 5).
+   *    Without this exception, all product photos go network-only and the
+   *    catalog cannot display images offline. */
+  var isSupabase = url.includes('supabase.co') || url.includes('supabase.in');
+  var isSupabaseStorage = isSupabase && url.includes('/storage/v1/object/');
+  if (isSupabase && !isSupabaseStorage) return; // API/auth/realtime only
 
   /* 3. Chrome extensions / non-http — ignore */
   if (!url.startsWith('http')) return;

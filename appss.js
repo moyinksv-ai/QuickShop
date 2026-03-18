@@ -706,7 +706,7 @@ function handleTouchEnd() {
     }).map(p => ({
       id: safeId(p.id),
       name: safeStr(p.name, MAX_NAME),
-      description: typeof p.description === 'string' ? safeStr(p.description, 500) : null,
+      description: typeof p.description === 'string' ? safeStr(p.description, 300) : null,
       barcode: typeof p.barcode === 'string' ? safeStr(p.barcode, 64) : null,
       price: safeNum(p.price),
       cost: safeNum(p.cost),
@@ -1173,7 +1173,12 @@ function handleTouchEnd() {
   async function handleAuthUser(user) {
     currentUser = user;
     setSupabaseUser(user);
-    if (!user.email_confirmed_at) {
+    // Smart check: only block if BOTH fields are null.
+    // When verification is OFF, Supabase auto-sets confirmed_at even if
+    // email_confirmed_at is null. Checking only email_confirmed_at blocks
+    // all users when verification is disabled.
+    const isUserConfirmed = user.email_confirmed_at || user.confirmed_at;
+    if (!isUserConfirmed) {
       localStorage.removeItem('qs_session_active');
       document.body.classList.remove('mode-app');
       const loginScreen = $('loginScreen'), appScreen = document.querySelector('.app');
@@ -3433,10 +3438,17 @@ function handleTouchEnd() {
     getUserProfile(user.id).then(function(profile) {
       if (!profile) return;
       if (profile.avatar_url && !state._avatarUrl) {
-        state._avatarUrl = profile.avatar_url;
-        const avatarEl = settingsPanel.querySelector('#qs-avatar-btn');
-        if (avatarEl) {
-          avatarEl.innerHTML = `<img src="${escapeHtml(profile.avatar_url)}" alt="Profile photo"><div class="qs-sp-cam" aria-hidden="true">📷</div>`;
+        // Validate https:// scheme before storing or injecting into DOM.
+        // escapeHtml() alone does not block javascript: URIs as attribute values.
+        // This mirrors the safeImgSrc() pattern in catalog.js.
+        const safeAvatarFromDb = (typeof profile.avatar_url === 'string' &&
+          profile.avatar_url.startsWith('https://')) ? profile.avatar_url : '';
+        if (safeAvatarFromDb) {
+          state._avatarUrl = safeAvatarFromDb;
+          const avatarEl = settingsPanel.querySelector('#qs-avatar-btn');
+          if (avatarEl) {
+            avatarEl.innerHTML = `<img src="${escapeHtml(safeAvatarFromDb)}" alt="Profile photo"><div class="qs-sp-cam" aria-hidden="true">📷</div>`;
+          }
         }
       }
       // Pre-fill tagline textarea with existing value

@@ -470,7 +470,7 @@
         const cost     = window.n(invCost     && invCost.value);
         const qty      = window.n(invQty      && invQty.value);
         const category = (invCategory && invCategory.value) || 'Others';
-        const desc     = ((invDesc && invDesc.value) || '').trim().slice(0, 500);
+        const desc     = ((invDesc && invDesc.value) || '').trim().slice(0, 300);
         const image    = (invImgPreviewImg  && invImgPreviewImg.src  && invImgPreviewImg.src  !== window.location.href) ? invImgPreviewImg.src  : null;
         const image2   = (invImgPreviewImg2 && invImgPreviewImg2.src && invImgPreviewImg2.src !== window.location.href) ? invImgPreviewImg2.src : null;
 
@@ -543,6 +543,34 @@
 
     // Cancel button closes the modal
     if (cancelProductBtn) cancelProductBtn.addEventListener('click', hideAddForm);
+
+    // Live character counter for description textarea
+    // Shows "N / 300", turns amber at 260+, red at 290+
+    const invDescEl = $('invDesc');
+    if (invDescEl) {
+      // Create counter element and insert below textarea
+      let descCounter = $('invDesc-counter');
+      if (!descCounter) {
+        descCounter = document.createElement('div');
+        descCounter.id = 'invDesc-counter';
+        descCounter.style.cssText = 'font-size:11px;font-weight:600;text-align:right;' +
+          'margin-top:-4px;transition:color .15s;color:var(--text-muted);';
+        invDescEl.parentNode.insertBefore(descCounter, invDescEl.nextSibling);
+      }
+
+      function updateDescCounter() {
+        var len = invDescEl.value.length;
+        var max = 300;
+        descCounter.textContent = len + ' / ' + max;
+        if (len >= 290)      descCounter.style.color = 'var(--danger, #ef4444)';
+        else if (len >= 260) descCounter.style.color = 'var(--accent-amber, #f59e0b)';
+        else                 descCounter.style.color = 'var(--text-muted)';
+      }
+
+      invDescEl.addEventListener('input', updateDescCounter);
+      // Initial count on edit (may be pre-filled)
+      updateDescCounter();
+    }
   }
 
   // ══════════════════════════════════════════════════════════════════════════

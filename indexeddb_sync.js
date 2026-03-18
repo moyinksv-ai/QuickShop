@@ -131,7 +131,7 @@
     return {
       id:          safeStr(p.id, 64),
       name:        safeStr((p.name || '').trim() || 'Unnamed', 200),
-      description: p.description != null ? safeStr(p.description, 500) : null,
+      description: p.description != null ? safeStr(p.description, 300) : null,
       barcode:     p.barcode  != null ? safeStr(p.barcode,  64)   : null,
       price:     safeNum(p.price),
       cost:      safeNum(p.cost),
