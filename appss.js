@@ -1919,6 +1919,11 @@ function handleTouchEnd() {
         noteSaveBtn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px"><span style="width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;display:inline-block"></span> Saving…</span>';
         try {
           // ── OPTIMISTIC: mutate state, clear form, render immediately ──
+          // Capture editingNoteId BEFORE clearing it.
+          // Previously editingNoteId was set to null before the savedNote
+          // lookup below, so edited notes were never found and the wrong
+          // note (the last one) was queued to IndexedDB.
+          const editedNoteId = editingNoteId;
           if (editingNoteId) {
             const note = state.notes.find(n=>n.id===editingNoteId);
             if (note) { note.title = title; note.content = content; note.ts = Date.now(); }
@@ -1934,8 +1939,9 @@ function handleTouchEnd() {
           // ── BACKGROUND SYNC ──
           // Queue to IndexedDB first — works online AND offline.
           // On reconnect, indexeddb_sync will push to Supabase automatically.
-          const savedNote = editingNoteId
-            ? state.notes.find(n => n.id === editingNoteId)
+          // Use editedNoteId (captured above) not editingNoteId (now null).
+          const savedNote = editedNoteId
+            ? state.notes.find(n => n.id === editedNoteId)
             : state.notes[state.notes.length - 1];
           if (savedNote && window.qsdb && window.qsdb.addPendingChange) {
             window.qsdb.addPendingChange({ type: 'addNote', item: savedNote })
@@ -3413,6 +3419,83 @@ function handleTouchEnd() {
           100% { transform: scale(2.2); opacity: 0; }
         }
         /* Scrollable body below sticky */
+        /* Action row */
+        .qs-action-row {
+          display: flex;
+          gap: 8px;
+          padding: 12px 16px 4px;
+          align-items: stretch;
+        }
+        .qs-action-btn {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 4px;
+          padding: 11px 6px;
+          background: var(--card-glass);
+          border: 1px solid var(--border-glass);
+          border-radius: var(--radius-sm);
+          color: var(--text-primary);
+          font-size: 11.5px;
+          font-weight: 700;
+          cursor: pointer;
+          letter-spacing: .2px;
+          transition: background .15s, border-color .15s;
+          -webkit-tap-highlight-color: transparent;
+          position: relative;
+        }
+        .qs-action-btn:active { background: rgba(255,255,255,0.1); }
+        .qs-action-btn[aria-expanded="true"] {
+          border-color: rgba(99,102,241,0.5);
+          background: rgba(99,102,241,0.1);
+          color: var(--accent-primary);
+        }
+        .qs-action-icon { font-size: 18px; line-height: 1; }
+        .qs-action-arrow {
+          font-size: 13px;
+          color: var(--text-muted);
+          transition: transform .28s cubic-bezier(.4,0,.2,1);
+          display: inline-block;
+        }
+        .qs-action-btn[aria-expanded="true"] .qs-action-arrow {
+          transform: rotate(90deg);
+        }
+        /* Share button rendered inside action row — inherit sizing */
+        #qs-share-btn-area {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+        }
+        #qs-share-btn-area [data-share-wrapper] {
+          flex: 1;
+          margin: 0 !important;
+        }
+        #qs-share-btn-area .save-btn {
+          flex: 1;
+          height: 100%;
+          flex-direction: column;
+          font-size: 11.5px !important;
+          padding: 11px 6px !important;
+          border-radius: var(--radius-sm) !important;
+          letter-spacing: .2px;
+          gap: 4px !important;
+          min-height: 0 !important;
+        }
+
+        /* Slide-down drawers */
+        .qs-drawer {
+          overflow: hidden;
+          max-height: 0;
+          transition: max-height .32s cubic-bezier(.4,0,.2,1);
+        }
+        .qs-drawer.open { max-height: 700px; }
+        .qs-drawer-inner {
+          padding: 0 16px 4px;
+          border-bottom: 1px solid var(--border-glass);
+        }
+
         .qs-settings-body {
           padding-top: 12px;
         }
@@ -3487,7 +3570,92 @@ function handleTouchEnd() {
       <!-- Scrollable settings body -->
       <div class="qs-settings-body">
 
-      <!-- Appearance -->
+      <!-- ── Action row: 3 top-level buttons ───────────────────────── -->
+      <div class="qs-action-row">
+        <button id="qs-btn-edit-account" class="qs-action-btn" aria-expanded="false">
+          <span class="qs-action-icon">✏️</span>
+          <span>Edit Account</span>
+          <span class="qs-action-arrow">›</span>
+        </button>
+        <button id="qs-btn-edit-store" class="qs-action-btn" aria-expanded="false">
+          <span class="qs-action-icon">🏪</span>
+          <span>Edit Store</span>
+          <span class="qs-action-arrow">›</span>
+        </button>
+        <div id="qs-share-btn-area"></div>
+      </div>
+
+      <!-- ── Edit Account drawer (hidden by default) ────────────────── -->
+      <div id="qs-drawer-account" class="qs-drawer" aria-hidden="true">
+        <div class="qs-drawer-inner">
+          <div class="qs-s-section" style="margin:0;border-radius:0;border-top:none;">
+            <div style="display:flex;flex-direction:column;gap:12px;padding:4px 0 8px;">
+              <div>
+                <div class="qs-s-row-label" style="margin-bottom:6px;">Full Name</div>
+                <input id="qs-account-name" type="text" maxlength="80"
+                  placeholder="Your full name"
+                  value="${escapeHtml(fullName)}"
+                  style="width:100%;box-sizing:border-box;
+                         background:var(--card-glass);border:1px solid var(--border-glass);
+                         border-radius:var(--radius-sm);color:var(--text-primary);
+                         font-size:13px;padding:10px 12px;font-family:inherit;
+                         transition:border-color .2s;" />
+              </div>
+              <div>
+                <div class="qs-s-row-label" style="margin-bottom:4px;">Business Name</div>
+                <div class="qs-s-row-sub" style="margin-bottom:6px;">Shown on your catalog header and share link</div>
+                <input id="qs-account-business" type="text" maxlength="80"
+                  placeholder="Your store or business name"
+                  value="${escapeHtml(businessName)}"
+                  style="width:100%;box-sizing:border-box;
+                         background:var(--card-glass);border:1px solid var(--border-glass);
+                         border-radius:var(--radius-sm);color:var(--text-primary);
+                         font-size:13px;padding:10px 12px;font-family:inherit;
+                         transition:border-color .2s;" />
+              </div>
+              <div style="display:flex;justify-content:flex-end;">
+                <button id="qs-account-save" class="qs-ghost-btn"
+                  style="color:#10b981;border-color:rgba(16,185,129,0.3);">Save Changes</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Edit Store drawer (hidden by default) ──────────────────── -->
+      <div id="qs-drawer-store" class="qs-drawer" aria-hidden="true">
+        <div class="qs-drawer-inner">
+          <div class="qs-s-section" style="margin:0;border-radius:0;border-top:none;">
+            <!-- Tagline -->
+            <div style="display:flex;flex-direction:column;gap:6px;padding-bottom:14px;border-bottom:1px solid var(--border-glass);">
+              <div class="qs-s-row-label">Store Tagline</div>
+              <div class="qs-s-row-sub">Shown on your catalog — max 120 characters</div>
+              <textarea id="qs-tagline-input" maxlength="120" rows="2"
+                placeholder="e.g. Get confidence in a bottle from ALL'S Signature"
+                style="width:100%;box-sizing:border-box;resize:none;
+                       background:var(--card-glass);border:1px solid var(--border-glass);
+                       border-radius:var(--radius-sm);color:var(--text-primary);
+                       font-size:13px;line-height:1.55;padding:10px 12px;
+                       font-family:inherit;transition:border-color .2s;"></textarea>
+              <div style="display:flex;justify-content:flex-end;">
+                <button id="qs-tagline-save" class="qs-ghost-btn"
+                  style="color:#10b981;border-color:rgba(16,185,129,0.3);">Save Tagline</button>
+              </div>
+            </div>
+            <!-- Categories -->
+            <div style="padding-top:14px;">
+              <div class="qs-s-row-label" style="margin-bottom:10px;">Categories</div>
+              <div id="qs-cat-list"></div>
+              <div class="qs-add-cat-row">
+                <input id="newCategoryName" class="qs-add-cat-input" type="text" placeholder="New category name…" />
+                <button id="addCategoryBtn" class="qs-add-cat-btn">+ Add</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Appearance ─────────────────────────────────────────────── -->
       <div class="qs-s-section">
         <div class="qs-s-section-title">Appearance</div>
         <div class="qs-s-row">
@@ -3508,56 +3676,7 @@ function handleTouchEnd() {
         </div>
       </div>
 
-      <!-- Account Details -->
-      <div class="qs-s-section">
-        <div class="qs-s-section-title">Account Details</div>
-        <div class="qs-s-row" style="flex-direction:column;align-items:stretch;gap:8px;">
-          <div class="qs-s-row-label">Full Name</div>
-          <input id="qs-account-name" type="text" maxlength="80"
-            placeholder="Your full name"
-            value="${escapeHtml(fullName)}"
-            style="width:100%;box-sizing:border-box;
-                   background:var(--card-glass);border:1px solid var(--border-glass);
-                   border-radius:var(--radius-sm);color:var(--text-primary);
-                   font-size:13px;padding:10px 12px;font-family:inherit;
-                   transition:border-color .2s;" />
-        </div>
-        <div class="qs-s-row" style="flex-direction:column;align-items:stretch;gap:8px;margin-top:4px;">
-          <div class="qs-s-row-label">Business Name</div>
-          <div class="qs-s-row-sub">Used on your catalog header and share link</div>
-          <input id="qs-account-business" type="text" maxlength="80"
-            placeholder="Your store or business name"
-            value="${escapeHtml(businessName)}"
-            style="width:100%;box-sizing:border-box;
-                   background:var(--card-glass);border:1px solid var(--border-glass);
-                   border-radius:var(--radius-sm);color:var(--text-primary);
-                   font-size:13px;padding:10px 12px;font-family:inherit;
-                   transition:border-color .2s;" />
-        </div>
-        <div style="padding:4px 0 0;display:flex;justify-content:flex-end;">
-          <button id="qs-account-save" class="qs-ghost-btn"
-            style="color:#10b981;border-color:rgba(16,185,129,0.3);">Save Changes</button>
-        </div>
-      </div>
-
-      <!-- Store profile -->
-      <div class="qs-s-section">
-        <div class="qs-s-section-title">Store Profile</div>
-        <div class="qs-s-row" style="flex-direction:column;align-items:stretch;gap:8px;">
-          <div class="qs-s-row-label">Store Tagline</div>
-          <div class="qs-s-row-sub">Shown on your catalog — max 120 characters</div>
-          <textarea id="qs-tagline-input" maxlength="120" rows="2"
-            placeholder="e.g. Get confidence in a bottle from ALL'S Signature"
-            style="width:100%;box-sizing:border-box;resize:none;
-                   background:var(--card-glass);border:1px solid var(--border-glass);
-                   border-radius:var(--radius-sm);color:var(--text-primary);
-                   font-size:13px;line-height:1.55;padding:10px 12px;
-                   font-family:inherit;transition:border-color .2s;"></textarea>
-          <button id="qs-tagline-save" class="qs-ghost-btn" style="align-self:flex-end;color:#10b981;border-color:rgba(16,185,129,0.3);">Save Tagline</button>
-        </div>
-      </div>
-
-      <!-- Store data -->
+      <!-- ── Store Data ─────────────────────────────────────────────── -->
       <div class="qs-s-section">
         <div class="qs-s-section-title">Store Data</div>
         <div class="qs-s-row">
@@ -3583,40 +3702,101 @@ function handleTouchEnd() {
         </div>
       </div>
 
-      <!-- Categories -->
-      <div class="qs-s-section">
-        <div class="qs-s-section-title">Categories</div>
-        <div id="qs-cat-list"></div>
-        <div class="qs-add-cat-row">
-          <input id="newCategoryName" class="qs-add-cat-input" type="text" placeholder="New category name…" />
-          <button id="addCategoryBtn" class="qs-add-cat-btn">+ Add</button>
-        </div>
-      </div>
-
-      <!-- Activity log -->
+      <!-- ── Activity Log (always visible) ─────────────────────────── -->
       <div class="qs-s-section">
         <div id="activityLogArea"></div>
       </div>
 
-      <!-- About -->
+      <!-- ── About (tappable → full overlay) ───────────────────────── -->
       <div class="qs-s-section">
-        <div class="qs-s-section-title">About</div>
-        <div class="qs-s-row">
+        <button id="qs-about-btn" class="qs-s-row"
+          style="width:100%;background:none;border:none;cursor:pointer;text-align:left;
+                 -webkit-tap-highlight-color:transparent;"
+          aria-label="About QuickShop">
           <div>
-            <div class="qs-s-row-label">QuickShop</div>
-            <div class="qs-s-row-sub">Offline-first inventory &amp; sales · v2.5</div>
+            <div class="qs-s-row-label">About QuickShop</div>
+            <div class="qs-s-row-sub">Version 2.5 · Built for traders</div>
           </div>
-          <div style="font-size:20px;">⚡</div>
-        </div>
-        <div id="qs-share-btn-area" style="padding:0 16px 14px;"></div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:18px;">⚡</span>
+            <span style="font-size:16px;color:var(--text-muted);opacity:0.6;">›</span>
+          </div>
+        </button>
       </div>
 
-      <!-- Sign out -->
+      <!-- ── Sign out ───────────────────────────────────────────────── -->
       <div style="padding:4px 0 20px;">
         <button id="btnLogout" class="qs-danger-btn">Sign Out</button>
       </div>
 
       </div><!-- /.qs-settings-body -->
+
+      <!-- ── About overlay (full panel, slides up) ──────────────────── -->
+      <div id="qs-about-overlay"
+        style="position:absolute;inset:0;z-index:50;
+               background:var(--bg-primary, #09090b);
+               transform:translateY(100%);
+               transition:transform .32s cubic-bezier(.16,1,.3,1);
+               display:flex;flex-direction:column;overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;
+                    border-bottom:1px solid var(--border-glass);flex-shrink:0;">
+          <button id="qs-about-back" type="button"
+            style="background:rgba(255,255,255,0.07);border:none;border-radius:10px;
+                   color:var(--text-primary);font-size:13px;font-weight:600;
+                   cursor:pointer;padding:7px 14px;
+                   -webkit-tap-highlight-color:transparent;">← Back</button>
+          <span style="font-size:15px;font-weight:700;color:var(--text-primary);">About</span>
+        </div>
+        <div style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:32px 24px 40px;">
+          <div style="text-align:center;margin-bottom:28px;">
+            <div style="font-size:52px;margin-bottom:10px;">⚡</div>
+            <div style="font-size:26px;font-weight:900;color:var(--text-primary);
+                        letter-spacing:-.5px;margin-bottom:4px;">QuickShop</div>
+            <div style="font-size:12px;color:var(--text-muted);font-weight:600;
+                        letter-spacing:.4px;text-transform:uppercase;">Version 2.5</div>
+          </div>
+          <div style="font-size:15px;line-height:1.75;color:var(--text-secondary);
+                      margin-bottom:24px;text-align:center;">
+            Your shop. Your profits. In your pocket.
+          </div>
+          <div style="font-size:13.5px;line-height:1.8;color:var(--text-muted);margin-bottom:32px;">
+            Built for traders who work in the real world — market sellers, boutique owners,
+            fragrance vendors. Manage your stock, record your sales, and share a catalog
+            your customers can order from directly on WhatsApp.
+            Works offline. No app install needed. No subscription required.
+          </div>
+
+          <div style="border-top:1px solid var(--border-glass);padding-top:24px;margin-bottom:24px;">
+            <div style="font-size:11px;font-weight:700;letter-spacing:.6px;
+                        text-transform:uppercase;color:var(--text-muted);margin-bottom:14px;">
+              Support
+            </div>
+            <button id="qs-contact-dev-btn" type="button"
+              style="width:100%;display:flex;align-items:center;gap:14px;
+                     background:rgba(37,211,102,0.1);
+                     border:1px solid rgba(37,211,102,0.25);
+                     border-radius:14px;padding:14px 16px;cursor:pointer;
+                     -webkit-tap-highlight-color:transparent;text-align:left;">
+              <span style="font-size:24px;flex-shrink:0;">💬</span>
+              <div>
+                <div style="font-size:14px;font-weight:700;color:#25d366;margin-bottom:2px;">
+                  Contact Developer
+                </div>
+                <div style="font-size:12px;color:var(--text-muted);line-height:1.5;">
+                  WhatsApp Moses directly for support, feedback, or questions
+                </div>
+              </div>
+            </button>
+          </div>
+
+          <div style="border-top:1px solid var(--border-glass);padding-top:20px;text-align:center;">
+            <div style="font-size:12px;color:var(--text-muted);line-height:1.8;">
+              © 2026 Moses Olayinka Ogundahunsi<br>
+              <span style="color:var(--accent-primary);font-weight:600;">quickshopper.vercel.app</span>
+            </div>
+          </div>
+        </div>
+      </div>
     `;
 
     // Wire avatar upload
@@ -3641,8 +3821,6 @@ function handleTouchEnd() {
           if (upErr) throw upErr;
           const { data: urlData } = sb.storage.from('user_images').getPublicUrl(fileName);
           const avatarUrl = urlData.publicUrl;
-          // Validate URL scheme before injecting into DOM — escapeHtml alone does
-          // not block javascript: URIs if set as an attribute value.
           const safeAvatarUrl = (typeof avatarUrl === 'string' && avatarUrl.startsWith('https://')) ? avatarUrl : '';
           if (!safeAvatarUrl) throw new Error('Avatar URL is not a valid https URL');
           await setUserProfile(u.id, {
@@ -3652,7 +3830,6 @@ function handleTouchEnd() {
             createdAt: Date.now(),
             avatarUrl: safeAvatarUrl
           });
-          // Update in-memory state and re-render avatar immediately
           state._avatarUrl = safeAvatarUrl;
           const imgEl = avatarBtn.querySelector('img');
           if (imgEl) {
@@ -3676,6 +3853,50 @@ function handleTouchEnd() {
     settingsPanel.querySelectorAll('.qs-theme-toggle-btn').forEach(btn => {
       btn.addEventListener('click', toggleTheme);
     });
+
+    // ── Drawer toggle helper ──────────────────────────────────────────────
+    // Only one drawer open at a time — opening one closes the other.
+    function toggleDrawer(drawerId, btnId) {
+      const drawer  = settingsPanel.querySelector('#' + drawerId);
+      const btn     = settingsPanel.querySelector('#' + btnId);
+      const otherDrawerIds = ['qs-drawer-account', 'qs-drawer-store'].filter(id => id !== drawerId);
+      if (!drawer || !btn) return;
+      const isOpen = drawer.classList.contains('open');
+      // Close all drawers first
+      otherDrawerIds.forEach(id => {
+        const d = settingsPanel.querySelector('#' + id);
+        const otherId = id === 'qs-drawer-account' ? 'qs-btn-edit-account' : 'qs-btn-edit-store';
+        const b = settingsPanel.querySelector('#' + otherId);
+        if (d) { d.classList.remove('open'); d.setAttribute('aria-hidden', 'true'); }
+        if (b) b.setAttribute('aria-expanded', 'false');
+      });
+      // Toggle target
+      if (isOpen) {
+        drawer.classList.remove('open');
+        drawer.setAttribute('aria-hidden', 'true');
+        btn.setAttribute('aria-expanded', 'false');
+      } else {
+        drawer.classList.add('open');
+        drawer.setAttribute('aria-hidden', 'false');
+        btn.setAttribute('aria-expanded', 'true');
+      }
+    }
+
+    // Wire Edit Account button
+    const editAccountBtn = settingsPanel.querySelector('#qs-btn-edit-account');
+    if (editAccountBtn) {
+      editAccountBtn.addEventListener('click', function () {
+        toggleDrawer('qs-drawer-account', 'qs-btn-edit-account');
+      });
+    }
+
+    // Wire Edit Store button
+    const editStoreBtn = settingsPanel.querySelector('#qs-btn-edit-store');
+    if (editStoreBtn) {
+      editStoreBtn.addEventListener('click', function () {
+        toggleDrawer('qs-drawer-store', 'qs-btn-edit-store');
+      });
+    }
 
     // Wire tagline save
     const taglineSaveBtn = settingsPanel.querySelector('#qs-tagline-save');
@@ -3712,55 +3933,31 @@ function handleTouchEnd() {
         const businessInput = settingsPanel.querySelector('#qs-account-business');
         const newName     = (nameInput     ? nameInput.value     : '').trim().slice(0, 80);
         const newBusiness = (businessInput ? businessInput.value : '').trim().slice(0, 80);
-
         const u  = getUser();
         const sb = getClient();
         if (!u || !sb) { toast('Not logged in', 'error'); return; }
-
-        // Require at least one field filled
         if (!newName && !newBusiness) {
           toast('Please enter at least a name or business name', 'error');
           return;
         }
-
         accountSaveBtn.disabled = true;
         accountSaveBtn.textContent = 'Saving…';
-
         try {
-          // 1. Update Supabase Auth user_metadata
           const { data: authData, error: authErr } = await sb.auth.updateUser({
-            data: {
-              full_name:     newName     || null,
-              business_name: newBusiness || null,
-            }
+            data: { full_name: newName || null, business_name: newBusiness || null }
           });
           if (authErr) throw authErr;
-
-          // 2. Update profiles table (keeps it in sync with auth metadata)
           await setUserProfile(u.id, {
-            name:         newName     || '',
-            businessName: newBusiness || '',
-            email:        u.email     || '',
-            createdAt:    Date.now(),
+            name: newName || '', businessName: newBusiness || '',
+            email: u.email || '', createdAt: Date.now(),
           });
-
-          // 3. If business name changed, clear slug so it regenerates
-          // on next Share Catalog tap with the new name.
           const oldBusiness = (u.user_metadata && u.user_metadata.business_name) || '';
           if (newBusiness && newBusiness !== oldBusiness) {
             await sb.from('profiles').update({ slug: null }).eq('id', u.id);
           }
-
-          // 4. Update currentUser in memory so the header re-renders immediately.
-          // Supabase will also fire USER_UPDATED → handleAuthUser, but that's async.
-          // We patch directly so the vendor sees the change instantly.
-          if (authData && authData.user) {
-            currentUser = authData.user;
-          }
-
+          if (authData && authData.user) currentUser = authData.user;
           toast('Account updated ✓', 'success');
-          renderSettingsPanel(); // re-renders header with new name/initials
-
+          renderSettingsPanel();
         } catch (e) {
           errlog('account save', e);
           toast('Failed to save: ' + (e.message || 'unknown error'), 'error');
@@ -3771,31 +3968,61 @@ function handleTouchEnd() {
       });
     }
 
+    // Wire About button → overlay
+    const aboutBtn     = settingsPanel.querySelector('#qs-about-btn');
+    const aboutOverlay = settingsPanel.querySelector('#qs-about-overlay');
+    const aboutBack    = settingsPanel.querySelector('#qs-about-back');
+    if (aboutBtn && aboutOverlay) {
+      aboutBtn.addEventListener('click', function () {
+        aboutOverlay.style.transform = 'translateY(0)';
+        if (aboutBack) setTimeout(() => aboutBack.focus(), 320);
+      });
+    }
+    if (aboutBack && aboutOverlay) {
+      aboutBack.addEventListener('click', function () {
+        aboutOverlay.style.transform = 'translateY(100%)';
+      });
+    }
+
+    // Wire Contact Developer button
+    const contactDevBtn = settingsPanel.querySelector('#qs-contact-dev-btn');
+    if (contactDevBtn) {
+      contactDevBtn.addEventListener('click', function () {
+        const msg = encodeURIComponent(
+          'Hello Moses,
+
+I am a QuickShop vendor reaching out for support.
+
+My name: 
+My store: 
+Issue / feedback: 
+
+Thank you.'
+        );
+        window.open('https://wa.me/2347035023138?text=' + msg, '_blank', 'noopener,noreferrer');
+      });
+    }
+
     // Wire install button
     const installBtn = settingsPanel.querySelector('#qs-install-btn');
     const installSub = settingsPanel.querySelector('#qs-install-sub');
     if (installBtn) {
-      // Update button state based on current prompt availability
       function updateInstallBtn() {
         if (window.__QS_INSTALL_PROMPT) {
           installBtn.disabled = false;
           installBtn.style.opacity = '1';
           if (installSub) installSub.textContent = 'Add QuickShop to your home screen';
         } else {
-          installBtn.disabled = false; // still tappable — shows guidance
+          installBtn.disabled = false;
           installBtn.style.opacity = '0.6';
           if (installSub) installSub.textContent = 'Use browser menu → Add to Home Screen';
         }
       }
       updateInstallBtn();
-
-      // Re-check when prompt becomes available
       window.addEventListener('beforeinstallprompt', updateInstallBtn);
-
       installBtn.addEventListener('click', async function () {
         const prompt = window.__QS_INSTALL_PROMPT;
         if (!prompt) {
-          // Guide user to browser menu as fallback
           toast('Tap your browser menu → "Add to Home Screen"', 'info', 4000);
           return;
         }
@@ -3814,13 +4041,28 @@ function handleTouchEnd() {
     // Wire demo / clear / logout
     initDemoAndSettingsHandlers();
 
-    // Render categories into the new slot
+    // Render categories into the store drawer slot
     renderCategoryEditor();
 
-    // Share button
+    // Render Share Catalog button into the action row slot
     if (typeof window.renderShareButton === 'function') {
-      const area = $('qs-share-btn-area');
+      const area = settingsPanel.querySelector('#qs-share-btn-area');
       if (area) window.renderShareButton(area);
+    }
+
+    // Load tagline into textarea (non-blocking)
+    const u = getUser();
+    if (u) {
+      const taglineInput = settingsPanel.querySelector('#qs-tagline-input');
+      if (taglineInput && !taglineInput.value) {
+        getClient() && getClient().from('profiles')
+          .select('tagline').eq('id', u.id).maybeSingle()
+          .then(function(r) {
+            if (r.data && r.data.tagline && taglineInput) {
+              taglineInput.value = r.data.tagline;
+            }
+          }).catch(function(){});
+      }
     }
 
     // ── Status badge: reflect real network state ──────────────────────
