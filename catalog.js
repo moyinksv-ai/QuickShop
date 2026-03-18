@@ -486,10 +486,18 @@
         '-webkit-tap-highlight-color:transparent;}',
       '#cat-detail-back:active{background:rgba(255,255,255,0.14);}',
       '#cat-detail-scroll{flex:1;overflow-y:auto;',
-        '-webkit-overflow-scrolling:touch;}',
+        '-webkit-overflow-scrolling:touch;',
+        /* pan-y: scroll container only responds to vertical gestures.
+         * Horizontal swipes inside the hero are handled by pointer events. */
+        'touch-action:pan-y;}',
       /* Hero swipe strip on detail page */
       '#cat-detail-hero{position:relative;width:100%;aspect-ratio:4/3;',
-        'background:rgba(255,255,255,0.04);flex-shrink:0;cursor:grab;}',
+        'background:rgba(255,255,255,0.04);flex-shrink:0;cursor:grab;',
+        /* touch-action:none gives pointer events full control of this element.
+         * Without this, Android Chrome treats pointermove as passive and ignores
+         * e.preventDefault(), causing the scroll container to capture horizontal
+         * swipes and scroll the page sideways instead of swiping the image. */
+        'touch-action:none;}',
       '#cat-detail-hero:active{cursor:grabbing;}',
       '#cat-detail-hero .cat-swipe-track{height:100%;}',
       '#cat-detail-hero-single{width:100%;aspect-ratio:4/3;',
@@ -1059,7 +1067,7 @@
       }
       if (Math.abs(dx) > 6) {
         _detailSwipe.moved = true;
-        e.preventDefault();
+        e.preventDefault(); // only works because listener is { passive: false }
         var track = hero.querySelector('.cat-swipe-track');
         if (track) {
           var imgs = _detailProduct ? [_detailProduct.image_url, _detailProduct.image_url2].filter(Boolean) : [];
@@ -1071,7 +1079,6 @@
         }
       }
     }, { passive: false });
-
     hero.addEventListener('pointerup', function (e) {
       if (!_detailSwipe) return;
       var sw = _detailSwipe; _detailSwipe = null;
@@ -1864,7 +1871,6 @@
           }
         }
       }, { passive: false });
-
       grid.addEventListener('pointerup', function (e) {
         if (!_swipe) return;
         var swipe = _swipe;
