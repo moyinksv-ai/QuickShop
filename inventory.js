@@ -1024,3 +1024,4 @@
   document.dispatchEvent(new Event('qs:inventory:ready'));
 
 })();
+

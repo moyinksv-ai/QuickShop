@@ -69,7 +69,6 @@
           same ID specificity, but we come AFTER the stylesheet in cascade order,
           so same-specificity + !important = our rule wins. */
     #loginScreen { display: none !important; }
-
     /* 2. When a CTA button is clicked, JS adds .qs-show-auth to <body>.
           body.qs-show-auth has higher specificity than plain #loginScreen,
           so this wins over rule 1 above. Forced column defeats 680px breakpoint. */
