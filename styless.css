@@ -480,7 +480,7 @@ body.ai-open { overflow: hidden; position: fixed; width: 100%; height: 100%; }
 #aiCard .ai-actions button { flex: 1; }
 
 /* ── PRODUCT LIST ────────────────────────────────────────────────── */
-.list { display: flex; flex-direction: column; gap: 10px; padding-bottom: calc(var(--nav-h) + 20px + env(safe-area-inset-bottom)); }
+.list { display: flex; flex-direction: column; gap: 10px; padding-bottom: calc(var(--nav-h) + 40px + env(safe-area-inset-bottom)); }
 
 .product-card {
   display: flex; gap: 10px; align-items: flex-start;
@@ -506,7 +506,7 @@ body.ai-open { overflow: hidden; position: fixed; width: 100%; height: 100%; }
 
 .btn-sell { background: var(--accent-emerald); color: #fff; border-radius: var(--radius-sm); padding: 8px 10px; font-weight: 700; border: 0; font-size: 13px; width: 100%; cursor: pointer; transition: var(--transition); box-shadow: var(--shadow-emerald); }
 .btn-sell:hover { background: var(--accent-emerald-hover); transform: translateY(-1px); box-shadow: var(--shadow-emerald-lg); }
-.btn-sell:active { transform: translateY(0); }
+.btn-sell:active { transform: scale(0.94); }
 
 .btn-undo { background: transparent; border: 1px solid var(--border-glass); padding: 5px 8px; border-radius: var(--radius-sm); font-size: 11.5px; color: var(--text-secondary); cursor: pointer; transition: var(--transition); font-weight: 600; }
 .btn-undo:hover { background: var(--card-glass); border-color: var(--border-hi); color: var(--text-primary); }
@@ -585,7 +585,7 @@ select option { background: var(--bg-glass); color: var(--text-primary); }
   box-shadow: var(--shadow-indigo); white-space: nowrap;
 }
 .save-btn:hover { background: var(--accent-primary-hover); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(99,102,241,0.42); }
-.save-btn:active { transform: translateY(0); }
+.save-btn:active { transform: scale(0.96); }
 
 /* ── MODAL ───────────────────────────────────────────────────────── */
 .modal-backdrop { position: fixed; left: 0; top: 0; width: 100%; height: 100%; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.82); z-index: 99990; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); animation: fadeIn 0.2s ease; }
@@ -612,14 +612,14 @@ body.keyboard-open .modal { top: 8vh !important; }
 
 /* ── PANELS — consistent spacing ─────────────────────────────────── */
 .panel { display: none; min-height: calc(100vh - var(--topbar-h) - var(--nav-h)); overflow-anchor: none; padding-top: 16px; }
-.panel.active { display: block; animation: fadeIn 0.22s ease; }
+.panel.active { display: block; animation: panelEnter 0.28s cubic-bezier(0.16,1,0.3,1) both; }
 /* Panels with sticky-header-wrapper should NOT have extra top padding — the header creates it */
 #inventoryPanel { padding-top: 0; }
-#settingsPanel { padding-bottom: calc(var(--nav-h) + 20px + env(safe-area-inset-bottom)) !important; padding-top: 0; }
+#settingsPanel { padding-bottom: calc(var(--nav-h) + 40px + env(safe-area-inset-bottom)) !important; padding-top: 0; }
 /* overflow-y:auto intentionally removed — it breaks position:sticky.
    The page scrolls (same as all other panels). Sticky profile bar sticks
    to top:var(--topbar-h) relative to the page scroll container. */
-#notesPanel #notesList { padding-bottom: calc(var(--nav-h) + 16px + env(safe-area-inset-bottom)); }
+#notesPanel #notesList { padding-bottom: calc(var(--nav-h) + 40px + env(safe-area-inset-bottom)); }
 /* Home panel: chips need top breathing room */
 #homePanel { padding-top: 14px; }
 #homePanel .chips { margin-top: 2px; margin-bottom: 14px; }
@@ -721,14 +721,62 @@ table tr:last-child td { border-bottom: none; }
 .note-meta { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
 
 /* ── BOTTOM NAV ──────────────────────────────────────────────────── */
-.bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; height: var(--nav-h); display: flex; align-items: center; justify-content: center; background: var(--bg-glass); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: 0 -1px 0 var(--border-glass); z-index: 300; border-top: 1px solid var(--border-glass); }
-body.keyboard-open .bottom-nav { transform: translateY(110%); opacity: 0; pointer-events: none; }
-.nav { max-width: 480px; display: flex; gap: 2px; justify-content: space-between; padding: 6px 10px; width: 100%; }
-.nav-btn { display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--text-muted); font-size: 10px; background: transparent; border: 0; padding: 6px 5px; border-radius: var(--radius-sm); cursor: pointer; transition: var(--transition); flex: 1 1 0px; min-width: 0; font-weight: 600; }
-.nav-btn:hover { background: var(--card-glass); color: var(--text-secondary); }
-.nav-btn.active { color: var(--accent-primary); font-weight: 700; background: rgba(99,102,241,0.1); }
-.nav-btn svg { transition: transform 0.22s ease; }
-.nav-btn.active svg { transform: scale(1.1); }
+.bottom-nav {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  height: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(18, 18, 26, 0.82);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 28px;
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.55),
+    0 2px 8px rgba(0,0,0,0.3),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+  z-index: 300;
+  padding: 6px 8px;
+}
+body.keyboard-open .bottom-nav { transform: translateY(calc(110% + env(safe-area-inset-bottom, 0px))); opacity: 0; pointer-events: none; transition: transform 0.22s ease, opacity 0.22s ease; }
+.nav { max-width: 480px; display: flex; gap: 4px; justify-content: space-between; width: 100%; }
+.nav-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-muted);
+  font-size: 10px;
+  background: transparent;
+  border: 0;
+  padding: 8px 5px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: color 0.18s, background 0.18s, transform 0.14s cubic-bezier(0.34,1.56,0.64,1);
+  flex: 1 1 0px;
+  min-width: 0;
+  font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+}
+.nav-btn:active { transform: scale(0.88); }
+.nav-btn.active {
+  color: var(--accent-primary);
+  font-weight: 700;
+  background: rgba(99,102,241,0.14);
+}
+.nav-btn svg {
+  transition: transform 0.26s cubic-bezier(0.34,1.56,0.64,1);
+  filter: drop-shadow(0 0 0px rgba(99,102,241,0));
+  transition: transform 0.26s cubic-bezier(0.34,1.56,0.64,1), filter 0.26s ease;
+}
+.nav-btn.active svg {
+  transform: scale(1.18) translateY(-1px);
+  filter: drop-shadow(0 0 6px rgba(99,102,241,0.55));
+}
 
 /* ── UTILITY ─────────────────────────────────────────────────────── */
 .small { font-size: 12.5px; color: var(--text-muted); }
@@ -860,6 +908,7 @@ input[type="file"]::file-selector-button:hover { background: var(--accent-primar
 * { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.08) transparent; }
 
 /* ── ANIMATIONS ──────────────────────────────────────────────────── */
+@keyframes panelEnter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes fadeIn   { from { opacity: 0; }                              to { opacity: 1; } }
 @keyframes scaleIn  { from { transform: scale(0.93); opacity: 0; }      to { transform: scale(1); opacity: 1; } }
 @keyframes slideIn  { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }

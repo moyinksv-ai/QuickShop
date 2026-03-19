@@ -3763,72 +3763,6 @@ function handleTouchEnd() {
 
       </div><!-- /.qs-settings-body -->
 
-      <!-- ── About overlay (full panel, slides up) ──────────────────── -->
-      <div id="qs-about-overlay"
-        style="position:fixed;inset:0;z-index:9999;
-               background:var(--bg-primary, #09090b);
-               transform:translateY(100%);
-               transition:transform .32s cubic-bezier(.16,1,.3,1);
-               display:flex;flex-direction:column;overflow:hidden;">
-        <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;
-                    border-bottom:1px solid var(--border-glass);flex-shrink:0;">
-          <button id="qs-about-back" type="button"
-            style="background:rgba(255,255,255,0.07);border:none;border-radius:10px;
-                   color:var(--text-primary);font-size:13px;font-weight:600;
-                   cursor:pointer;padding:7px 14px;
-                   -webkit-tap-highlight-color:transparent;">← Back</button>
-          <span style="font-size:15px;font-weight:700;color:var(--text-primary);">About</span>
-        </div>
-        <div style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:32px 24px 40px;">
-          <div style="text-align:center;margin-bottom:28px;">
-            <div style="font-size:52px;margin-bottom:10px;">⚡</div>
-            <div style="font-size:26px;font-weight:900;color:var(--text-primary);
-                        letter-spacing:-.5px;margin-bottom:4px;">QuickShop</div>
-            <div style="font-size:12px;color:var(--text-muted);font-weight:600;
-                        letter-spacing:.4px;text-transform:uppercase;">Version 2.5</div>
-          </div>
-          <div style="font-size:15px;line-height:1.75;color:var(--text-secondary);
-                      margin-bottom:24px;text-align:center;">
-            Your shop. Your profits. In your pocket.
-          </div>
-          <div style="font-size:13.5px;line-height:1.8;color:var(--text-muted);margin-bottom:32px;">
-            Built for traders who work in the real world — market sellers, boutique owners,
-            fragrance vendors. Manage your stock, record your sales, and share a catalog
-            your customers can order from directly on WhatsApp.
-            Works offline. No app install needed. No subscription required.
-          </div>
-
-          <div style="border-top:1px solid var(--border-glass);padding-top:24px;margin-bottom:24px;">
-            <div style="font-size:11px;font-weight:700;letter-spacing:.6px;
-                        text-transform:uppercase;color:var(--text-muted);margin-bottom:14px;">
-              Support
-            </div>
-            <button id="qs-contact-dev-btn" type="button"
-              style="width:100%;display:flex;align-items:center;gap:14px;
-                     background:rgba(37,211,102,0.1);
-                     border:1px solid rgba(37,211,102,0.25);
-                     border-radius:14px;padding:14px 16px;cursor:pointer;
-                     -webkit-tap-highlight-color:transparent;text-align:left;">
-              <span style="font-size:24px;flex-shrink:0;">💬</span>
-              <div>
-                <div style="font-size:14px;font-weight:700;color:#25d366;margin-bottom:2px;">
-                  Contact Developer
-                </div>
-                <div style="font-size:12px;color:var(--text-muted);line-height:1.5;">
-                  WhatsApp Moses directly for support, feedback, or questions
-                </div>
-              </div>
-            </button>
-          </div>
-
-          <div style="border-top:1px solid var(--border-glass);padding-top:20px;text-align:center;">
-            <div style="font-size:12px;color:var(--text-muted);line-height:1.8;">
-              © 2026 Moses Olayinka Ogundahunsi<br>
-              <span style="color:var(--accent-primary);font-weight:600;">quickshopper.vercel.app</span>
-            </div>
-          </div>
-        </div>
-      </div>
     `;
 
     // Wire avatar upload
@@ -4001,37 +3935,134 @@ function handleTouchEnd() {
     }
 
     // Wire About button → overlay
-    const aboutBtn     = settingsPanel.querySelector('#qs-about-btn');
-    const aboutOverlay = settingsPanel.querySelector('#qs-about-overlay');
-    const aboutBack    = settingsPanel.querySelector('#qs-about-back');
-    if (aboutBtn && aboutOverlay) {
-      aboutBtn.addEventListener('click', function () {
-        aboutOverlay.style.transform = 'translateY(0)';
-        if (aboutBack) setTimeout(() => aboutBack.focus(), 320);
-      });
-    }
-    if (aboutBack && aboutOverlay) {
-      aboutBack.addEventListener('click', function () {
-        aboutOverlay.style.transform = 'translateY(100%)';
-      });
-    }
+    // Overlay is built once on document.body so position:fixed is never
+    // broken by a CSS transform on a parent (.panel.active has panelEnter
+    // animation which previously created a stacking context and trapped
+    // the fixed overlay inside the panel bounds).
+    const aboutBtn = settingsPanel.querySelector('#qs-about-btn');
 
-    // Wire Contact Developer button
-    const contactDevBtn = settingsPanel.querySelector('#qs-contact-dev-btn');
-    if (contactDevBtn) {
-      contactDevBtn.addEventListener('click', function () {
+    function buildAboutOverlay() {
+      const existing = document.getElementById('qs-about-overlay');
+      if (existing) return existing;
+
+      const ov = document.createElement('div');
+      ov.id = 'qs-about-overlay';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:9999;' +
+        'background:var(--bg-primary,#09090b);' +
+        'transform:translateY(100%);' +
+        'transition:transform .32s cubic-bezier(.16,1,.3,1);' +
+        'display:flex;flex-direction:column;overflow:hidden;';
+
+      const hdr = document.createElement('div');
+      hdr.style.cssText = 'display:flex;align-items:center;gap:10px;padding:14px 16px;' +
+        'border-bottom:1px solid var(--border-glass);flex-shrink:0;';
+      const backBtn = document.createElement('button');
+      backBtn.id = 'qs-about-back';
+      backBtn.type = 'button';
+      backBtn.textContent = '\u2190 Back';
+      backBtn.style.cssText = 'background:rgba(255,255,255,0.07);border:none;border-radius:10px;' +
+        'color:var(--text-primary);font-size:13px;font-weight:600;cursor:pointer;padding:7px 14px;' +
+        '-webkit-tap-highlight-color:transparent;';
+      backBtn.addEventListener('click', function () { ov.style.transform = 'translateY(100%)'; });
+      const hdrTitle = document.createElement('span');
+      hdrTitle.style.cssText = 'font-size:15px;font-weight:700;color:var(--text-primary);';
+      hdrTitle.textContent = 'About';
+      hdr.appendChild(backBtn);
+      hdr.appendChild(hdrTitle);
+      ov.appendChild(hdr);
+
+      const body = document.createElement('div');
+      body.style.cssText = 'flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:32px 24px 40px;';
+
+      // Hero — all hardcoded copy, no user data
+      const hero = document.createElement('div');
+      hero.style.cssText = 'text-align:center;margin-bottom:28px;';
+      const bolt = document.createElement('div');
+      bolt.style.cssText = 'font-size:52px;margin-bottom:10px;';
+      bolt.textContent = '\u26A1';
+      const appName = document.createElement('div');
+      appName.style.cssText = 'font-size:26px;font-weight:900;color:var(--text-primary);letter-spacing:-.5px;margin-bottom:4px;';
+      appName.textContent = 'QuickShop';
+      const ver = document.createElement('div');
+      ver.style.cssText = 'font-size:12px;color:var(--text-muted);font-weight:600;letter-spacing:.4px;text-transform:uppercase;';
+      ver.textContent = 'Version 2.5';
+      hero.appendChild(bolt); hero.appendChild(appName); hero.appendChild(ver);
+      body.appendChild(hero);
+
+      const tag = document.createElement('div');
+      tag.style.cssText = 'font-size:15px;line-height:1.75;color:var(--text-secondary);margin-bottom:24px;text-align:center;';
+      tag.textContent = 'Your shop. Your profits. In your pocket.';
+      body.appendChild(tag);
+
+      const desc = document.createElement('div');
+      desc.style.cssText = 'font-size:13.5px;line-height:1.8;color:var(--text-muted);margin-bottom:32px;';
+      desc.textContent = 'Built for traders who work in the real world \u2014 market sellers, boutique owners, ' +
+        'fragrance vendors. Manage your stock, record your sales, and share a catalog ' +
+        'your customers can order from directly on WhatsApp. ' +
+        'Works offline. No app install needed. No subscription required.';
+      body.appendChild(desc);
+
+      const sup = document.createElement('div');
+      sup.style.cssText = 'border-top:1px solid var(--border-glass);padding-top:24px;margin-bottom:24px;';
+      const supLabel = document.createElement('div');
+      supLabel.style.cssText = 'font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text-muted);margin-bottom:14px;';
+      supLabel.textContent = 'Support';
+      sup.appendChild(supLabel);
+
+      const contactBtn = document.createElement('button');
+      contactBtn.id = 'qs-contact-dev-btn';
+      contactBtn.type = 'button';
+      contactBtn.style.cssText = 'width:100%;display:flex;align-items:center;gap:14px;' +
+        'background:rgba(37,211,102,0.1);border:1px solid rgba(37,211,102,0.25);' +
+        'border-radius:14px;padding:14px 16px;cursor:pointer;-webkit-tap-highlight-color:transparent;text-align:left;';
+      const icon = document.createElement('span');
+      icon.style.cssText = 'font-size:24px;flex-shrink:0;';
+      icon.textContent = '\uD83D\uDCAC'; // 💬
+      const ctxt = document.createElement('div');
+      const ctitle = document.createElement('div');
+      ctitle.style.cssText = 'font-size:14px;font-weight:700;color:#25d366;margin-bottom:2px;';
+      ctitle.textContent = 'Contact Developer';
+      const csub = document.createElement('div');
+      csub.style.cssText = 'font-size:12px;color:var(--text-muted);line-height:1.5;';
+      csub.textContent = 'WhatsApp Moses directly for support, feedback, or questions';
+      ctxt.appendChild(ctitle); ctxt.appendChild(csub);
+      contactBtn.appendChild(icon); contactBtn.appendChild(ctxt);
+      contactBtn.addEventListener('click', function () {
         const msg = encodeURIComponent(
           'Hello Moses,' +
           '\n\nI am a QuickShop vendor reaching out for support.' +
-          '\n\nMy name: ' +
-          '\nMy store: ' +
-          '\nIssue / feedback: ' +
+          '\n\nMy name: \nMy store: \nIssue / feedback: ' +
           '\n\nThank you.'
         );
         window.open('https://wa.me/2347035023138?text=' + msg, '_blank', 'noopener,noreferrer');
       });
+      sup.appendChild(contactBtn);
+      body.appendChild(sup);
+
+      const footer = document.createElement('div');
+      footer.style.cssText = 'border-top:1px solid var(--border-glass);padding-top:20px;text-align:center;';
+      const fcopy = document.createElement('div');
+      fcopy.style.cssText = 'font-size:12px;color:var(--text-muted);line-height:1.8;';
+      fcopy.textContent = '\u00A9 2026 Moses Olayinka Ogundahunsi';
+      const flink = document.createElement('div');
+      flink.style.cssText = 'color:var(--accent-primary);font-weight:600;';
+      flink.textContent = 'quickshopper.vercel.app';
+      footer.appendChild(fcopy); footer.appendChild(flink);
+      body.appendChild(footer);
+      ov.appendChild(body);
+
+      document.body.appendChild(ov);
+      return ov;
     }
 
+    if (aboutBtn) {
+      aboutBtn.addEventListener('click', function () {
+        const ov = buildAboutOverlay();
+        ov.style.transform = 'translateY(0)';
+        const back = document.getElementById('qs-about-back');
+        if (back) setTimeout(function() { back.focus(); }, 320);
+      });
+    }
     // Wire install button
     const installBtn = settingsPanel.querySelector('#qs-install-btn');
     const installSub = settingsPanel.querySelector('#qs-install-sub');
