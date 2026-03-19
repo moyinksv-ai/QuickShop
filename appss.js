@@ -1607,7 +1607,17 @@ function handleTouchEnd() {
     // Optimistic: render immediately, sync in background
     renderInventory(); renderProducts(); renderDashboard();
     toast(`Added ${qty} to ${p.name}`);
-    if (window.qsdb && window.qsdb.addPendingChange) await window.qsdb.addPendingChange(change);
+    // Persist to localStorage immediately before async queue
+    try {
+      const localKey = currentUser ? LOCAL_KEY_PREFIX + currentUser.id : LOCAL_KEY_PREFIX + 'anon';
+      localStorage.setItem(localKey, JSON.stringify({...state, lastSync: Date.now()}));
+    } catch (e) { errlog('restock localStorage failed', e); }
+
+    if (window.qsdb && window.qsdb.addPendingChange) {
+      try {
+        await window.qsdb.addPendingChange(change);
+      } catch (e) { errlog('restock queue failed', e); }
+    }
     saveState().catch(e => errlog('restock sync', e));
   }
 
@@ -1619,13 +1629,34 @@ function handleTouchEnd() {
     state.sales.push(newSale);
     state.changes.push({ type: 'sell', productId, qty, ts: newSale.ts });
     addActivityLog('Sale', `Sold ${qty} x ${p.name} (${fmt(newSale.price * qty)})`);
-    // Optimistic: render immediately, sync in background
+
+    // ── Render immediately — sale is in state, UI must update now ────
     renderInventory(); renderProducts(); renderDashboard();
     toast(`Sold ${qty} × ${p.name}`);
+
+    // ── Persist to localStorage FIRST ────────────────────────────────
+    // saveState() writes to localStorage synchronously before any async
+    // IndexedDB or Supabase calls. This guarantees the sale survives a
+    // reload or pull-to-refresh even if the queue fails.
+    try {
+      const localKey = currentUser ? LOCAL_KEY_PREFIX + currentUser.id : LOCAL_KEY_PREFIX + 'anon';
+      localStorage.setItem(localKey, JSON.stringify({...state, lastSync: Date.now()}));
+    } catch (e) { errlog('sell localStorage failed', e); }
+
+    // ── Queue to IndexedDB for cloud sync (non-blocking) ─────────────
     if (window.qsdb && window.qsdb.addPendingChange) {
-      await window.qsdb.addPendingChange({ type: 'addSale', item: newSale });
-      await window.qsdb.addPendingChange({ type: 'updateProduct', item: p });
+      try {
+        await window.qsdb.addPendingChange({ type: 'addSale', item: newSale });
+        await window.qsdb.addPendingChange({ type: 'updateProduct', item: p });
+      } catch (e) {
+        errlog('sell queue failed', e);
+        // Sale is already in localStorage — it will not be lost.
+        // syncCloudData will push it when the user is back online
+        // via the saveState → Supabase path.
+      }
     }
+
+    // Full saveState for notes/logs/categories (non-blocking)
     saveState().catch(e => errlog('sell sync', e));
   }
 
