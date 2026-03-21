@@ -552,6 +552,46 @@
     .ql-reveal-delay-1{transition-delay:.08s}
     .ql-reveal-delay-2{transition-delay:.16s}
     .ql-reveal-delay-3{transition-delay:.24s}
+
+    /* ── HOW IT WORKS ── */
+    #qs-landing .ql-steps{display:flex;flex-direction:column;gap:0}
+    #qs-landing .ql-step{
+      display:flex;gap:20px;align-items:flex-start;
+      padding:24px 0;
+    }
+    #qs-landing .ql-step-num{
+      font-size:11px;font-weight:800;letter-spacing:1.5px;
+      color:var(--c-accent);opacity:.7;
+      background:rgba(99,102,241,.08);
+      border:1px solid rgba(99,102,241,.15);
+      border-radius:8px;padding:6px 10px;
+      flex-shrink:0;margin-top:2px;
+      min-width:38px;text-align:center;
+    }
+    #qs-landing .ql-step-body{flex:1}
+    #qs-landing .ql-step-title{
+      font-size:16px;font-weight:700;color:#fff;
+      letter-spacing:-.3px;margin-bottom:8px;
+    }
+    #qs-landing .ql-step-desc{
+      font-size:14px;color:var(--c-muted);line-height:1.75;
+      margin:0 0 10px;
+    }
+    #qs-landing .ql-step-tip{
+      font-size:12px;color:rgba(255,255,255,.3);
+      line-height:1.55;font-style:italic;
+    }
+    #qs-landing .ql-step-connector{
+      width:1px;height:24px;
+      background:linear-gradient(to bottom,rgba(99,102,241,.25),transparent);
+      margin-left:28px;
+    }
+
+    /* ── FRICTION REDUCER ── */
+    #qs-landing .ql-final-friction{
+      font-size:13px;color:rgba(255,255,255,.38);
+      margin:10px 0 4px;font-style:italic;
+    }
   </style>
 </head>
 <body>
@@ -628,12 +668,12 @@
               <span class="ql-metric-l">Offline-ready</span>
             </div>
             <div class="ql-metric">
-              <span class="ql-metric-n" style="color:#818cf8">0s</span>
-              <span class="ql-metric-l">Setup time</span>
+              <span class="ql-metric-n" style="color:#f59e0b">₦0</span>
+              <span class="ql-metric-l">Free forever</span>
             </div>
             <div class="ql-metric">
-              <span class="ql-metric-n" style="color:#f59e0b">Free</span>
-              <span class="ql-metric-l">To start</span>
+              <span class="ql-metric-n" style="color:#818cf8">PWA</span>
+              <span class="ql-metric-l">No app store</span>
             </div>
           </div>
 
@@ -643,8 +683,6 @@
           </div>
 
           <div class="ql-social-proof ql-anim-5">
-            <span>Free forever</span>
-            <span class="ql-dot-sep">·</span>
             <span>No credit card</span>
             <span class="ql-dot-sep">·</span>
             <span>Installs like an app</span>
@@ -684,7 +722,50 @@
 
       <div class="ql-divider" style="margin-top:48px;"></div>
 
-      <!-- ── FEATURES ─────────────────────────────────────── -->
+      <!-- ── HOW IT WORKS ─────────────────────────────────── -->
+      <section class="ql-section" aria-label="How it works">
+        <div class="ql-eyebrow ql-reveal">How it works</div>
+        <h2 class="ql-h2 ql-reveal ql-reveal-delay-1">From first product to first sale in under 5 minutes.</h2>
+        <p class="ql-h2-sub ql-reveal ql-reveal-delay-2">No manual. No tutorial. Just three steps and you're running.</p>
+
+        <div class="ql-steps">
+
+          <div class="ql-step ql-reveal ql-reveal-delay-1">
+            <div class="ql-step-num">01</div>
+            <div class="ql-step-body">
+              <div class="ql-step-title">Add your products</div>
+              <p class="ql-step-desc">Name, price, quantity. Add a photo if you want. Scan the barcode or type it in. Each product takes about 30 seconds. When you're done, your full inventory is live and searchable.</p>
+              <div class="ql-step-tip">💡 You can import a CSV if you already have a product list</div>
+            </div>
+          </div>
+
+          <div class="ql-step-connector" aria-hidden="true"></div>
+
+          <div class="ql-step ql-reveal ql-reveal-delay-2">
+            <div class="ql-step-num">02</div>
+            <div class="ql-step-body">
+              <div class="ql-step-title">Record sales as they happen</div>
+              <p class="ql-step-desc">Tap a product, enter how many you sold, confirm. Stock drops automatically. Revenue and profit update in real time. Works the same whether you're online or not — everything syncs when you reconnect.</p>
+              <div class="ql-step-tip">💡 Scan barcodes at checkout for even faster recording</div>
+            </div>
+          </div>
+
+          <div class="ql-step-connector" aria-hidden="true"></div>
+
+          <div class="ql-step ql-reveal ql-reveal-delay-3">
+            <div class="ql-step-num">03</div>
+            <div class="ql-step-body">
+              <div class="ql-step-title">Share your catalog on WhatsApp</div>
+              <p class="ql-step-desc">Go to Settings → Share Catalog. Copy the link. Paste it anywhere — WhatsApp, Instagram, a group chat. Customers tap the link, see your full product list with photos and prices, and message you directly to order. No app download. No account needed on their end.</p>
+              <div class="ql-step-tip">💡 Your catalog updates automatically when you add or edit products</div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <div class="ql-divider"></div>
+
       <section class="ql-section" aria-label="Features">
         <div class="ql-eyebrow ql-reveal">What you get</div>
         <h2 class="ql-h2 ql-reveal ql-reveal-delay-1">Three things that make a real difference every trading day.</h2>
@@ -749,25 +830,6 @@
             </div>
           </div>
         </div>
-
-        <div class="ql-stats ql-reveal ql-reveal-delay-1">
-          <div class="ql-stat">
-            <div class="ql-stat-n" style="color:#34d399;">100%</div>
-            <div class="ql-stat-d">Offline-capable<br>no WiFi required</div>
-          </div>
-          <div class="ql-stat">
-            <div class="ql-stat-n" style="color:#818cf8;">0s</div>
-            <div class="ql-stat-d">Setup time<br>open and go</div>
-          </div>
-          <div class="ql-stat">
-            <div class="ql-stat-n" style="color:#f59e0b;">Free</div>
-            <div class="ql-stat-d">Core plan<br>no card, no expiry</div>
-          </div>
-          <div class="ql-stat">
-            <div class="ql-stat-n" style="color:#fff;">PWA</div>
-            <div class="ql-stat-d">Installs like an app<br>no store needed</div>
-          </div>
-        </div>
       </section>
 
       <div class="ql-divider"></div>
@@ -822,6 +884,7 @@
           <h2 class="ql-final-h">Your stock isn't going<br>to track itself.</h2>
           <p class="ql-final-sub">Less than 2 minutes to set up. Free to start. See exactly where your business stands — right now.</p>
           <button class="ql-final-btn" id="qs-final">Create Your Free Account</button>
+          <p class="ql-final-friction">Add your first product in under 60 seconds. No tutorial needed.</p>
           <div class="ql-final-note">No credit card &nbsp;·&nbsp; No expiry &nbsp;·&nbsp; Cancel anytime</div>
         </div>
       </section>
