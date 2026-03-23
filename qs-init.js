@@ -181,10 +181,20 @@
     addScript('catalog.js', false);
   } else {
     // Admin app — ordered load required (inventory.js depends on __QS_APP from appss.js)
-    // beforeinstallprompt is handled inline in index.html (in the conditional
-    // loader script) so it catches the event before this external file loads.
-    // Attaching it here again would be too late — the event already fired.
-    // See index.html for the handler that saves window.__QS_INSTALL_PROMPT.
+    //
+    // beforeinstallprompt / appinstalled must be registered HERE, not in a
+    // dynamically-inserted script. qs-init.js is a static <script src> tag
+    // and executes synchronously during HTML parse — well before the browser
+    // fires beforeinstallprompt (which only fires after the load event AND
+    // after the SW is active). Static scripts are always in time.
+    window.addEventListener('beforeinstallprompt', function (e) {
+      e.preventDefault(); // suppress auto-banner; we show our own Install button
+      window.__QS_INSTALL_PROMPT = e;
+    });
+    window.addEventListener('appinstalled', function () {
+      window.__QS_INSTALL_PROMPT = null;
+    });
+
     addScript('indexeddb_sync.js', true);
     addScript('share-catalog.js', true);
     addScript('appss.js',         true);

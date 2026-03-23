@@ -795,7 +795,8 @@ function handleTouchEnd() {
       const supabase = getClient();
       const [productsRes, salesRes, notesRes, categoriesRes, logsRes] = await Promise.all([
         supabase.from('products').select('*').eq('user_id', user.id),
-        supabase.from('sales').select('*').eq('user_id', user.id),
+        supabase.from('sales').select('*').eq('user_id', user.id)
+          .gte('sale_date', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()),
         supabase.from('notes').select('*').eq('user_id', user.id),
         supabase.from('categories').select('*').eq('user_id', user.id),
         supabase.from('audit_logs').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(200)
@@ -831,7 +832,12 @@ function handleTouchEnd() {
       state.products = Array.from(productMap.values()).filter(p =>
         cloudProductIds.has(p.id) || pendingProductIds.has(p.id)
       );
-      const salesMap = new Map((state.sales || []).map(s => [s.id, s]));
+      // Sales merge: cloud returns only the last 90 days. Preserve local sales
+      // outside that window — they are valid for historical reports and exports.
+      const salesCutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
+      const salesMap = new Map(
+        (state.sales || []).filter(s => s.ts < salesCutoff).map(s => [s.id, s])
+      );
       cloudSales.forEach(s => salesMap.set(s.id, s));
       state.sales = Array.from(salesMap.values());
       // Merge notes: cloud is authoritative for known IDs, but preserve
@@ -1281,6 +1287,7 @@ function handleTouchEnd() {
   }
 
   function renderChips() {
+    try {
     const chipsEl = $('chips');
     if (!chipsEl) return;
     chipsEl.innerHTML = '';
@@ -1293,12 +1300,14 @@ function handleTouchEnd() {
       btn.addEventListener('click', function () { activeCategory = c; renderChips(); renderProducts(); });
       chipsEl.appendChild(btn);
     });
+    } catch(e) { errlog('renderChips', e); }
   }
 
   let searchTimer = null;
   function scheduleRenderProducts() { clearTimeout(searchTimer); searchTimer = setTimeout(renderProducts, 120); }
 
   function renderProducts() {
+    try {
     const productListEl = $('productList'), headerSearch = $('headerSearchInput');
     if (!productListEl) return;
     productListEl.innerHTML = '';
@@ -1368,6 +1377,7 @@ function handleTouchEnd() {
       card.appendChild(actions);
       productListEl.appendChild(card);
     }
+    } catch(e) { errlog('renderProducts', e); const el=$('productList'); if(el){el.innerHTML='';const d=document.createElement('div');d.className='small';d.style.padding='14px';d.textContent='Display error — pull to refresh.';el.appendChild(d);} }
   }
 
   function initProductListHandlers() {
@@ -1462,6 +1472,7 @@ function handleTouchEnd() {
 
   // FIX 4: Use DOM methods only — no innerHTML with user-controlled data.
   function renderActivityLog() {
+    try {
     const container = $('activityLogArea');
     if (!container) return;
     while (container.firstChild) container.removeChild(container.firstChild);
@@ -1523,6 +1534,7 @@ function handleTouchEnd() {
       listEl.appendChild(row);
     });
     setupActivityLogClick();
+    } catch(e) { errlog('renderActivityLog', e); }
   }
 
   // FIX 5: Use DOM methods only — no innerHTML with user-controlled data.
@@ -1771,6 +1783,7 @@ function handleTouchEnd() {
   }
 
   function renderDashboard() {
+    try {
     const dashRevenueEl = $('dashRevenue'), dashProfitEl = $('dashProfit'), dashTopEl = $('dashTop');
     const now   = Date.now();
     const today = startOfDay(now);
@@ -1823,9 +1836,11 @@ function handleTouchEnd() {
     if (cards[0]) cards[0].querySelector('.dash-small').textContent = 'Revenue · ' + salesToday.length + ' sales';
     if (cards[1]) cards[1].querySelector('.dash-small').textContent = 'Profit · ' + (state.products||[]).length + ' products';
     if (cards[2]) cards[2].querySelector('.dash-small').textContent = 'All-time bestseller';
+    } catch(e) { errlog('renderDashboard', e); }
   }
 
   function renderNotes() {
+    try {
     const notesListEl = $('notesList');
     if (!notesListEl) return;
     notesListEl.innerHTML = '';
@@ -1873,6 +1888,7 @@ function handleTouchEnd() {
       item.appendChild(actions);
       notesListEl.appendChild(item);
     }
+    } catch(e) { errlog('renderNotes', e); const el=$('notesList'); if(el){el.innerHTML='';const d=document.createElement('div');d.className='small';d.style.padding='14px';d.textContent='Display error — pull to refresh.';el.appendChild(d);} }
   }
 
   function initNotesHandlers() {
@@ -2096,6 +2112,7 @@ function handleTouchEnd() {
   }
 
   function renderCategoryEditor() {
+    try {
     const listEl = $('qs-cat-list');
     const addBtn = $('addCategoryBtn');
     if (!listEl) return;
@@ -2218,6 +2235,7 @@ function handleTouchEnd() {
     }
 
     renderActivityLog();
+    } catch(e) { errlog('renderCategoryEditor', e); }
   }
 
 
@@ -2353,6 +2371,7 @@ function handleTouchEnd() {
   let reportChart = null;
 
   function renderReportsChart(buckets) {
+    try {
     const canvas = $('reportChart');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -2495,6 +2514,7 @@ function handleTouchEnd() {
     if (updatedEl) {
       updatedEl.textContent = `Updated: ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
     }
+    } catch(e) { errlog('renderReportsChart', e); }
   }
 
   // FIX 10: Returns a DOM node instead of an HTML string — caller uses appendChild, not innerHTML.
@@ -2574,6 +2594,7 @@ function handleTouchEnd() {
   }
 
   function renderReports(range = currentReportRange) {
+    try {
     currentReportRange = range;
     const reportRangeButtons = Array.from(document.querySelectorAll('.report-range-btn'));
     const reportMini = $('reportMini'), reportSummary = $('reportSummary'), reportBreakdown = $('reportBreakdown');
@@ -2711,6 +2732,7 @@ function handleTouchEnd() {
       spacer.style.cssText = 'height:calc(var(--nav-h, 68px) + 16px + env(safe-area-inset-bottom));flex-shrink:0;pointer-events:none;';
       reportBreakdown.appendChild(spacer);
     }
+    } catch(e) { errlog('renderReports', e); const el=$('reportsPanel'); if(el){const d=document.createElement('div');d.className='small';d.style.cssText='padding:20px;text-align:center;';d.textContent='Display error — pull to refresh.';el.appendChild(d);} }
   }
 
   function initReportsHandlers() {
@@ -3523,6 +3545,7 @@ function handleTouchEnd() {
   })();
 
   function renderSettingsPanel() {
+    try {
     const user = currentUser;
     if (!user) {
       // Auth not yet resolved — show loading state so panel is never blank
@@ -4184,6 +4207,7 @@ function handleTouchEnd() {
         }
       });
     }
+    } catch(e) { errlog('renderSettingsPanel', e); const el=$('settingsPanel'); if(el){el.innerHTML='';const d=document.createElement('div');d.className='small';d.style.cssText='padding:20px;text-align:center;';d.textContent='Settings failed to load — pull to refresh.';el.appendChild(d);} }
   }
 
 

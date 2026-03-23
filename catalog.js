@@ -1737,11 +1737,17 @@
 
   /* ── 14. WHATSAPP CHECKOUT ───────────────────────────────────────────── */
 
+  // Strip WhatsApp markdown chars from text so product/store names with
+  // *, _, ~, or ` don't accidentally render as bold/italic/strikethrough/code.
+  function stripWaMd(text) {
+    return String(text || '').replace(/[*_~`]/g, '');
+  }
+
   function buildWhatsAppMessage(storeName) {
-    var lines = ['\uD83D\uDED2 New order from *' + (storeName || 'your catalog') + '*:\n'];
+    var lines = ['\uD83D\uDED2 New order from *' + stripWaMd(storeName || 'your catalog') + '*:\n'];
     cart.forEach(function (entry) {
       var p    = entry.product;
-      var line = '\u2022 ' + entry.qty + '\u00D7 ' + (p.name || 'Product')
+      var line = '\u2022 ' + entry.qty + '\u00D7 ' + stripWaMd(p.name || 'Product')
                + ' \u2014 ' + fmt(p.price * entry.qty);
       if (entry.qty > 1) line += ' (' + fmt(p.price) + ' each)';
       lines.push(line);

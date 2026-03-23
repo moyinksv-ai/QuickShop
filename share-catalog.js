@@ -295,7 +295,10 @@
 
       var profile = await sb.from('profiles').select('business_name,slug').eq('id', userId).maybeSingle();
       var businessName = (profile.data && profile.data.business_name) || '';
-      var slug = await getOrCreateSlug(sb, userId, businessName);
+      var existingSlug  = (profile.data && profile.data.slug) || null;
+      // Pass the already-fetched slug and business_name into getOrCreateSlug
+      // so it can skip its own redundant DB fetch when the data is already known.
+      var slug = await getOrCreateSlug(sb, userId, businessName, existingSlug);
 
       var catalogUrl = BASE_URL
         + '/?store=' + encodeURIComponent(slug)
@@ -386,14 +389,17 @@
     btn.addEventListener('click', handleShareClick);
   };
 
-})();  // ── Slug helpers ────────────────────────────────────────────────────────────────────────────
+
+  // ── Slug helpers (kept inside IIFE — no global scope pollution) ──
 
   function slugify(text) {
     return String(text || '').toLowerCase().trim()
       .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'store';
   }
 
-  async function getOrCreateSlug(sb, userId, businessName) {
+  async function getOrCreateSlug(sb, userId, businessName, existingSlug) {
+    // If the caller already fetched the slug, use it directly — skip the DB round-trip.
+    if (existingSlug) return existingSlug;
     var ex = await sb.from('profiles').select('slug,business_name').eq('id', userId).maybeSingle();
     if (ex.data && ex.data.slug) return ex.data.slug;
     var base = slugify(businessName || (ex.data && ex.data.business_name) || 'store');
@@ -404,4 +410,4 @@
     return slug;
   }
 
-
+})();
