@@ -25,12 +25,14 @@
     default-src 'self';
     script-src 'self' 'sha256-vkuC1G+8z7DQiK8BX78eqh+RkZPLmCD9MHm5A6/Nc14='
                https://unpkg.com
-               https://cdn.jsdelivr.net;
+               https://cdn.jsdelivr.net
+               https://browser.sentry-cdn.com;
     connect-src 'self'
                 https://*.supabase.co
                 wss://*.supabase.co
                 https://*.supabase.in
-                https://world.openfoodfacts.org;
+                https://world.openfoodfacts.org
+                https://*.sentry.io;
     img-src 'self' data: blob:
             https://*.supabase.co
             https://*.supabase.in;
@@ -55,6 +57,12 @@
   <meta name="description" content="QuickShop — Inventory, sales, and profits in real time. Works offline." />
   <title>QuickShop — Inventory + Sales + Notes</title>
   <link rel="stylesheet" href="styless.css">
+  <!-- Sentry error monitoring — load first so it catches all subsequent errors -->
+  <script
+    src="https://browser.sentry-cdn.com/7.99.0/bundle.min.js"
+    integrity="sha384-UlVRD1cNWz7WEAJ7rEwmwJkYL5b1Bqgt0O0pYyFYdWSzDhzuqaOWEP7wSxDuBku"
+    crossorigin="anonymous"
+  ></script>
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 

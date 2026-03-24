@@ -483,37 +483,33 @@
         addProductBtn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px"><span style="width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;display:inline-block"></span> Saving…</span>';
 
         try {
-          const s = state();
           let product, syncType;
 
           if (editingId) {
-            // ── EDIT MODE — update in place then CLOSE modal ───────────────
-            product = s.products.find(p => p.id === editingId);
-            if (!product) { toast('Product not found', 'error'); return; }
-            product.name      = name;
-            product.barcode   = barcode || null;
-            product.price     = price;
-            product.cost      = cost;
-            product.qty       = qty;
-            product.category  = category;
-            product.image       = image;
-            product.image2      = image2 || null;
-            product.description = desc || null;
-            product.updatedAt   = Date.now();
+            // ── EDIT MODE ──────────────────────────────────────────────────
+            const patch = {
+              name, barcode: barcode || null, price, cost, qty, category,
+              image, image2: image2 || null, description: desc || null,
+              updatedAt: Date.now()
+            };
+            const updated = app().updateProduct(editingId, patch);
+            if (!updated) { toast('Product not found', 'error'); return; }
+            // Keep a reference for the sync queue below
+            product = Object.assign({}, state().products.find(p => p.id === editingId), patch);
             syncType = 'updateProduct';
             addActivityLog('Edit', 'Updated product: ' + name);
             toast('Product updated ✓');
             // Close after edit — one shot operation
             hideAddForm();
           } else {
-            // ── ADD MODE — save, clear form, STAY OPEN for next product ───
+            // ── ADD MODE ──────────────────────────────────────────────────
             product = {
               id: uid(), name, price, cost, qty: qty || 0, category,
               image, image2: image2 || null, icon: null,
               description: desc || null,
               barcode: barcode || null, createdAt: Date.now(), updatedAt: Date.now()
             };
-            s.products.push(product);
+            app().addProduct(product);
             syncType = 'addProduct';
             addActivityLog('Create', 'Created product: ' + name);
             toast('Product saved! Keep adding product orTap X to cancel.', 'success');
@@ -702,24 +698,22 @@
   }
 
   async function removeProduct(id) {
-    const s = state();
-    const p = s.products.find(x => x.id === id);
-    if (!p) return;
+    // Read the product name before deletion for the confirm dialog
+    const _preDelete = state().products.find(x => x.id === id);
+    if (!_preDelete) return;
     const confirmed = await showConfirm({
-      title:    'Delete ' + p.name + '?',
+      title:    'Delete ' + _preDelete.name + '?',
       message:  'This will permanently remove the product and all its sales history.',
       okText:   'Delete Product',
       okDanger: true,
     });
     if (!confirmed) return;
-    const productToRemove  = Object.assign({}, p);
-    // Collect sale IDs before wiping local state so we can queue their deletion
-    const orphanedSaleIds  = s.sales.filter(x => x.productId === id).map(x => x.id);
 
-    // ── Mutate state first ──────────────────────────────────────────
-    s.products = s.products.filter(x => x.id !== id);
-    s.sales    = s.sales.filter(x => x.productId !== id);
-    s.changes  = (s.changes || []).filter(x => x.productId !== id);
+    // deleteProduct() removes from state.products, state.sales, state.changes
+    // and returns copies needed for the IndexedDB queue below.
+    const deleted = app().deleteProduct(id);
+    if (!deleted) return; // already gone
+    const { productCopy: productToRemove, orphanedSaleIds } = deleted;
 
     // ── Re-render IMMEDIATELY after state mutation ──────────────────
     // Must happen before any await so the product disappears instantly.
@@ -955,15 +949,14 @@
       importBtn.disabled   = true;
       importBtn.textContent = '⏳ Importing…';
       try {
-        const s = state();
         for (const row of parsedRows) {
           const product = {
             id: uid(), name: row.name, price: row.price, cost: row.cost,
             qty: row.qty, category: row.category, barcode: row.barcode,
             image: null, image2: null, icon: null, createdAt: Date.now(), updatedAt: Date.now()
           };
-          s.products.push(product);
-          if (!s.categories.includes(row.category)) s.categories.push(row.category);
+          // importProduct() pushes to state.products and adds category if new
+          app().importProduct(product, row.category);
           if (window.qsdb && window.qsdb.addPendingChange) {
             await window.qsdb.addPendingChange({ type: 'addProduct', item: product });
           }

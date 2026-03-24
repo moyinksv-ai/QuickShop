@@ -28,7 +28,59 @@ function initApp() {
 
   const IS_PROD = window.location.hostname !== 'localhost' && !window.location.hostname.includes('127.0.0.1');
   const log = IS_PROD ? () => {} : (...a) => console.log('[QS]', ...a);
-  const errlog = (...a) => console.error('[QS Error]', ...a);
+
+  // ── Sentry initialisation ────────────────────────────────────────────────
+  // Replace YOUR_SENTRY_DSN with the DSN from your Sentry project settings.
+  // The DSN is public-safe — it only lets data IN, never exposes your data.
+  // Get it at: sentry.io → Your Project → Settings → Client Keys (DSN)
+  if (typeof Sentry !== 'undefined') {
+    Sentry.init({
+      dsn: 'https://ff53979943e0f2a3ac927b695658968c@o4511099920449536.ingest.de.sentry.io/4511099927134288',
+      release: 'quickshop@4.48',
+      environment: IS_PROD ? 'production' : 'development',
+      // Capture 100% of errors, 5% of performance traces (free tier safe)
+      tracesSampleRate: 0.05,
+      // Ignore benign browser noise
+      ignoreErrors: [
+        'ResizeObserver loop limit exceeded',
+        'ResizeObserver loop completed with undelivered notifications',
+        'Non-Error promise rejection captured',
+        'NetworkError',
+        'Load failed',
+        'AbortError',
+      ],
+      beforeSend(event) {
+        // Strip any accidental PII from breadcrumbs before sending
+        if (event.breadcrumbs && event.breadcrumbs.values) {
+          event.breadcrumbs.values = event.breadcrumbs.values.map(b => {
+            if (b.data && b.data.url) {
+              try {
+                const u = new URL(b.data.url);
+                u.search = ''; // strip query params (may contain tokens)
+                b.data.url = u.toString();
+              } catch(_) {}
+            }
+            return b;
+          });
+        }
+        return event;
+      }
+    });
+  }
+  // ── End Sentry init ──────────────────────────────────────────────────────
+  const errlog = (...a) => {
+    console.error('[QS Error]', ...a);
+    // Forward to Sentry if available — captures the Error object (last arg)
+    // so Sentry gets the full stack trace, not just a string.
+    if (typeof Sentry !== 'undefined') {
+      const err = a.find(x => x instanceof Error);
+      if (err) {
+        Sentry.captureException(err, { extra: { context: a[0] } });
+      } else {
+        Sentry.captureMessage(a.map(x => String(x)).join(' '), 'error');
+      }
+    }
+  };
   
   function escapeHtml(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
   // FIX 1: Use crypto.randomUUID() to prevent ID collisions — Math.random() is not cryptographically safe.
@@ -1196,6 +1248,10 @@ function handleTouchEnd() {
     localStorage.setItem('qs_session_active', 'true');
     localStorage.setItem('qs_last_user_id', user.id);
     document.body.classList.add('mode-app');
+    // Set Sentry user context — use ID only, never email (no PII in error reports)
+    if (typeof Sentry !== 'undefined') {
+      Sentry.setUser({ id: user.id });
+    }
     const loginScreen = $('loginScreen');
     if (loginScreen) loginScreen.style.display = 'none';
     setBottomNavVisible(true);
@@ -1239,6 +1295,10 @@ function handleTouchEnd() {
     setSupabaseUser(null);
     localStorage.removeItem('qs_session_active');
     localStorage.removeItem('qs_last_user_id');
+    // Clear Sentry user so subsequent errors aren't attributed to the old user
+    if (typeof Sentry !== 'undefined') {
+      Sentry.setUser(null);
+    }
     document.body.classList.remove('mode-app');
     const loginScreen = $('loginScreen'), appScreen = document.querySelector('.app');
     if (loginScreen) loginScreen.style.display = 'flex';
@@ -4263,7 +4323,11 @@ function handleTouchEnd() {
 
   window.addEventListener('unhandledrejection', function (ev) {
     errlog('Unhandled rejection:', ev.reason);
-    toast('An unexpected error occurred. See console.', 'error');
+    // errlog() already forwards to Sentry if available — no double capture needed.
+    // Only show toast for unexpected errors, not deliberate AbortController aborts.
+    const reason = ev.reason;
+    const isAbort = reason && (reason.name === 'AbortError' || String(reason).includes('abort'));
+    if (!isAbort) toast('An unexpected error occurred. See console.', 'error');
   });
 
 
@@ -4278,7 +4342,53 @@ function handleTouchEnd() {
     getUser: () => currentUser,
     get currentUser() { return currentUser; },
     saveState,
-    getState: () => state,
+    // Returns a frozen shallow copy — callers can read but cannot mutate arrays
+    // or replace top-level properties. Use the explicit mutation methods below.
+    getState: () => Object.freeze(Object.assign({}, state)),
+
+    // ── State mutation methods ──────────────────────────────────────────────
+    // inventory.js must use these instead of mutating the getState() result.
+    // They operate on the live closure variable so saves and renders see changes.
+
+    addProduct: function(product) {
+      state.products.push(product);
+    },
+
+    // Patch an existing product in place by id.
+    // patch is a plain object — only keys present in patch are updated.
+    updateProduct: function(id, patch) {
+      const p = state.products.find(x => x.id === id);
+      if (!p) return false;
+      Object.assign(p, patch);
+      return true;
+    },
+
+    // Remove a product and all its local sales/changes by id.
+    // Returns { productCopy, orphanedSaleIds } for caller to use in queue.
+    deleteProduct: function(id) {
+      const p = state.products.find(x => x.id === id);
+      if (!p) return null;
+      const productCopy    = Object.assign({}, p);
+      const orphanedSaleIds = state.sales.filter(s => s.productId === id).map(s => s.id);
+      state.products = state.products.filter(x => x.id !== id);
+      state.sales    = state.sales.filter(x => x.productId !== id);
+      state.changes  = (state.changes || []).filter(x => x.productId !== id);
+      return { productCopy, orphanedSaleIds };
+    },
+
+    // Add a product and its category from a CSV import row.
+    importProduct: function(product, categoryName) {
+      state.products.push(product);
+      if (categoryName && !state.categories.includes(categoryName)) {
+        state.categories.push(categoryName);
+      }
+    },
+
+    // Add a category only (for manual category creation in settings).
+    addCategory: function(name) {
+      if (!state.categories.includes(name)) state.categories.push(name);
+    },
+    // ── End mutation methods ────────────────────────────────────────────────
     syncCloudData,
     showConfirm,
     generateAdvancedInsights,
