@@ -35,7 +35,7 @@ function initApp() {
   // Get it at: sentry.io → Your Project → Settings → Client Keys (DSN)
   if (typeof Sentry !== 'undefined') {
     Sentry.init({
-      dsn: 'https://ff53979943e0f2a3ac927b695658968c@o4511099920449536.ingest.de.sentry.io/4511099927134288',
+      dsn: 'YOUR_SENTRY_DSN',
       release: 'quickshop@4.48',
       environment: IS_PROD ? 'production' : 'development',
       // Capture 100% of errors, 5% of performance traces (free tier safe)
@@ -1197,6 +1197,7 @@ function handleTouchEnd() {
     const sb = await waitForSupabaseReady();
     if (!sb || !sb.client) {
       log('No Supabase found. Running in offline/anon mode.');
+      document.body.classList.remove('qs-auth-pending'); // no auth to wait for
       initAppUI();
       return;
     }
@@ -1205,9 +1206,13 @@ function handleTouchEnd() {
     if (session && session.user) handleAuthUser(session.user);
     supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'INITIAL_SESSION') {
-        if (session && session.user) handleAuthUser(session.user);
-        return;
-      }
+  if (session && session.user) {
+    handleAuthUser(session.user);
+  } else {
+    handleAuthLogout();
+  }
+  return;
+}
       if (event === 'SIGNED_IN' && session && session.user) {
         handleAuthUser(session.user);
       } else if (event === 'USER_UPDATED' && session && session.user) {
@@ -1238,7 +1243,8 @@ function handleTouchEnd() {
     const isUserConfirmed = user.email_confirmed_at || user.confirmed_at;
     if (!isUserConfirmed) {
       localStorage.removeItem('qs_session_active');
-      document.body.classList.remove('mode-app');
+      document.body.classList.remove('qs-auth-pending');
+document.body.classList.remove('mode-app'); // auth resolved (unverified)
       const loginScreen = $('loginScreen'), appScreen = document.querySelector('.app');
       if (loginScreen) loginScreen.style.display = 'flex';
       if (appScreen) appScreen.style.display = 'none';
@@ -1248,6 +1254,7 @@ function handleTouchEnd() {
     localStorage.setItem('qs_session_active', 'true');
     localStorage.setItem('qs_last_user_id', user.id);
     document.body.classList.add('mode-app');
+    document.body.classList.remove('qs-auth-pending'); // auth resolved — allow landing rules to apply
     // Set Sentry user context — use ID only, never email (no PII in error reports)
     if (typeof Sentry !== 'undefined') {
       Sentry.setUser({ id: user.id });
@@ -1300,6 +1307,7 @@ function handleTouchEnd() {
       Sentry.setUser(null);
     }
     document.body.classList.remove('mode-app');
+    document.body.classList.remove('qs-auth-pending'); // auth resolved (logged out)
     const loginScreen = $('loginScreen'), appScreen = document.querySelector('.app');
     if (loginScreen) loginScreen.style.display = 'flex';
     if (appScreen) appScreen.style.display = 'none';

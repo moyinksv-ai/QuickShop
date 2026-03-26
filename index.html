@@ -23,7 +23,7 @@
   -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
-    script-src 'self' 'sha256-vkuC1G+8z7DQiK8BX78eqh+RkZPLmCD9MHm5A6/Nc14='
+    script-src 'self' 'sha256-R7pgOtHcN9F5mkcjLNQbMlEM7Pp/AE6SHXPBAWv27Vc='
                https://unpkg.com
                https://cdn.jsdelivr.net
                https://browser.sentry-cdn.com;
@@ -118,7 +118,15 @@
           :not(.qs-hidden) ensures showAuth() can still hide it when Sign In
           is clicked — prevents the specificity override that broke the form. */
     #qs-landing { display: none !important; }
-    body:not(.mode-app):not(.qs-cat-early) #qs-landing:not(.qs-hidden) { display: block !important; }
+    body:not(.mode-app):not(.qs-cat-early):not(.qs-auth-pending) #qs-landing:not(.qs-hidden) { display: block !important; }
+
+    /* ── Auth-pending: hides landing while Supabase auth resolves. ──────────
+       Added at boot when qs_session_active=true. Removed by handleAuthUser
+       or handleAuthLogout. Prevents the flash caused by the SIGNED_OUT race
+       where onAuthStateChange fires before INITIAL_SESSION on cold starts.  */
+    body.qs-auth-pending #qs-landing      { display: none !important; }
+    body.qs-auth-pending.mode-app .app    { display: block !important; }
+    body.qs-auth-pending.mode-app .bottom-nav { display: flex !important; }
 
     @keyframes spin     { to { transform: rotate(360deg); } }
     @keyframes scanLine { 0%,100%{opacity:0;transform:translateY(-100%)} 50%{opacity:1;transform:translateY(100%)} }
@@ -602,7 +610,7 @@
     }
   </style>
 </head>
-<body>
+<body class="qs-auth-pending">
 
   <script>
     /* Runs at <body> open — DOM not yet parsed, only <head> available.
@@ -616,9 +624,12 @@
           // Catalog URL — never show app chrome, even if user is logged in.
           // catalog.js takes over completely.
           document.body.classList.add('qs-cat-early');
-        } else if (localStorage.getItem('qs_session_active') === 'true') {
-          document.body.classList.add('mode-app');
-        }
+        } else {
+  document.body.classList.add('qs-auth-pending');
+  if (localStorage.getItem('qs_session_active') === 'true') {
+    document.body.classList.add('mode-app');
+  }
+}
       } catch(e) { console.warn('QuickShop: storage check failed', e); }
     })();
   </script>

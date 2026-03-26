@@ -249,8 +249,6 @@
     if (icon) icon.style.display = 'none';
   }
 
-  // ── Per-slot upload state — tracks in-progress uploads independently ──────
-  // This allows both images to upload simultaneously without blocking the form.
   const _uploadInProgress = { img1: false, img2: false };
 
   function setSlotUploading(slot, uploading) {
@@ -303,8 +301,6 @@
   }
 
   function initImageUploadHandler() {
-
-    // ── Helper: upload a file and show result in slot ─────────────────────
     async function handleFileForSlot(file, slot) {
       if (!file) return;
       const url = await uploadImageToSlot(file, slot);
@@ -312,10 +308,6 @@
       else { if (slot === 'img1') clearInvImage(); else clearInvImage2(); }
     }
 
-    // ── "Add Photos" — reuses invImg with multiple=true ───────────────────
-    // Avoids a separate hidden input entirely. invImg is already proven to
-    // work on Android. We temporarily enable multiple, open the picker,
-    // then handle 1 or 2 files and restore single mode.
     const bothBtn   = $('invPhotoBothBtn');
     const img1Input = $('invImg');
     if (bothBtn && img1Input) {
@@ -325,11 +317,10 @@
       });
     }
 
-    // ── Slot 1 tap — picks individual file (or both if multiple enabled) ──
     const img1Btn   = $('invImg1Btn');
     if (img1Btn && img1Input) {
       img1Btn.addEventListener('click', function () {
-        img1Input.removeAttribute('multiple'); // single mode for slot tap
+        img1Input.removeAttribute('multiple');
         img1Input.click();
       });
       img1Input.addEventListener('change', async function (e) {
@@ -337,15 +328,13 @@
         if (!files || !files.length) return;
         const tasks = [];
         if (files[0]) tasks.push(handleFileForSlot(files[0], 'img1'));
-        if (files[1]) tasks.push(handleFileForSlot(files[1], 'img2')); // from "Add Photos"
+        if (files[1]) tasks.push(handleFileForSlot(files[1], 'img2'));
         await Promise.all(tasks);
-        // Restore to single mode after use
         img1Input.removeAttribute('multiple');
         img1Input.value = '';
       });
     }
 
-    // ── Slot 2 tap — picks individual file ───────────────────────────────
     const img2Btn   = $('invImg2Btn');
     const img2Input = $('invImg2');
     if (img2Btn && img2Input) {
@@ -356,7 +345,6 @@
       });
     }
 
-    // ── Remove buttons ────────────────────────────────────────────────────
     const clr1 = $('invImgClear');
     if (clr1) clr1.addEventListener('click', function (e) { e.preventDefault(); clearInvImage(); });
     const clr2 = $('invImgClear2');
@@ -382,12 +370,12 @@
   }
 
   function showAddForm() {
+    populateCategoryDropdown();
     const addForm = $('addForm');
     if (!addForm) return;
     const backdrop = createModalBackdrop('addFormBackdrop', 99998);
     if (addForm.parentElement !== document.body) document.body.appendChild(addForm);
     addForm.style.cssText = `position:fixed;left:50%;top:15vh;transform:translateX(-50%);z-index:99999;max-width:720px;width:calc(100% - 32px);max-height:80vh;overflow-y:auto;border-radius:var(--radius);box-shadow:var(--shadow-glass-lg);background:var(--bg-glass);border:1px solid var(--border-glass);padding:20px;display:flex;flex-direction:column;gap:12px;transition:top 0.3s ease;will-change:transform;`;
-    // Only add close button once
     let closeBtn = addForm.querySelector('.modal-close-x');
     if (closeBtn) closeBtn.remove();
     closeBtn = createModalCloseButton(hideAddForm);
@@ -457,7 +445,6 @@
         const invImgPreviewImg  = $('invImgPreviewImg');
         const invImgPreviewImg2 = $('invImgPreviewImg2');
 
-        // Guard: don't save while an image upload is still in progress
         if (isAnyUploadInProgress()) {
           toast('Please wait — image is still uploading…', 'info');
           return;
@@ -486,7 +473,6 @@
           let product, syncType;
 
           if (editingId) {
-            // ── EDIT MODE ──────────────────────────────────────────────────
             const patch = {
               name, barcode: barcode || null, price, cost, qty, category,
               image, image2: image2 || null, description: desc || null,
@@ -494,15 +480,12 @@
             };
             const updated = app().updateProduct(editingId, patch);
             if (!updated) { toast('Product not found', 'error'); return; }
-            // Keep a reference for the sync queue below
             product = Object.assign({}, state().products.find(p => p.id === editingId), patch);
             syncType = 'updateProduct';
             addActivityLog('Edit', 'Updated product: ' + name);
             toast('Product updated ✓');
-            // Close after edit — one shot operation
             hideAddForm();
           } else {
-            // ── ADD MODE ──────────────────────────────────────────────────
             product = {
               id: uid(), name, price, cost, qty: qty || 0, category,
               image, image2: image2 || null, icon: null,
@@ -513,7 +496,6 @@
             syncType = 'addProduct';
             addActivityLog('Create', 'Created product: ' + name);
             toast('Product saved! Keep adding product orTap X to cancel.', 'success');
-            // Clear form but KEEP modal open
             clearAddForm();
             populateCategoryDropdown();
             requestAnimationFrame(() => {
@@ -537,14 +519,10 @@
       });
     }
 
-    // Cancel button closes the modal
     if (cancelProductBtn) cancelProductBtn.addEventListener('click', hideAddForm);
 
-    // Live character counter for description textarea
-    // Shows "N / 300", turns amber at 260+, red at 290+
     const invDescEl = $('invDesc');
     if (invDescEl) {
-      // Create counter element and insert below textarea
       let descCounter = $('invDesc-counter');
       if (!descCounter) {
         descCounter = document.createElement('div');
@@ -564,7 +542,6 @@
       }
 
       invDescEl.addEventListener('input', updateDescCounter);
-      // Initial count on edit (may be pre-filled)
       updateDescCounter();
     }
   }
@@ -689,16 +666,12 @@
 
     showAddForm();
 
-    // Set category AFTER showAddForm — showAddForm previously called
-    // populateCategoryDropdown() which reset the select to its first option,
-    // wiping the value we set before. Now safe to set here.
     const invCategory = $('invCategory');
     if (invCategory) invCategory.value = p.category || 'Others';
     setTimeout(() => { try { const invName = $('invName'); if (invName) invName.focus(); } catch (e) {} }, 220);
   }
 
   async function removeProduct(id) {
-    // Read the product name before deletion for the confirm dialog
     const _preDelete = state().products.find(x => x.id === id);
     if (!_preDelete) return;
     const confirmed = await showConfirm({
@@ -709,21 +682,16 @@
     });
     if (!confirmed) return;
 
-    // deleteProduct() removes from state.products, state.sales, state.changes
-    // and returns copies needed for the IndexedDB queue below.
     const deleted = app().deleteProduct(id);
-    if (!deleted) return; // already gone
+    if (!deleted) return; 
     const { productCopy: productToRemove, orphanedSaleIds } = deleted;
 
-    // ── Re-render IMMEDIATELY after state mutation ──────────────────
-    // Must happen before any await so the product disappears instantly.
-    // Previously renders were after awaited IndexedDB calls — if the
-    // queue threw, renders never fired and the product stayed visible.
     renderInventory(); renderProducts(); renderDashboard(); renderChips();
     toast('Product deleted');
-    addActivityLog('Delete', 'Deleted product: ' + p.name);
+    
+    // ── FIXED LINE ──────────────────────────────────────────────────────────
+    addActivityLog('Delete', 'Deleted product: ' + productToRemove.name);
 
-    // ── Queue to IndexedDB in background (non-blocking) ────────────
     if (window.qsdb && window.qsdb.addPendingChange) {
       try {
         await window.qsdb.addPendingChange({ type: 'removeProduct', item: productToRemove });
@@ -732,8 +700,6 @@
         }
       } catch (e) {
         errlog('delete queue failed', e);
-        // UI already updated — product is gone from view.
-        // saveState() below will persist the deletion to localStorage.
       }
     }
     saveState().catch(e => errlog('delete sync', e));
@@ -758,7 +724,6 @@
     for (let i = 0; i < row.length; i++) {
       const ch = row[i];
       if (ch === '"') {
-        // RFC 4180: "" inside a quoted field is an escaped quote character
         if (inQ && row[i + 1] === '"') { cur += '"'; i++; }
         else { inQ = !inQ; }
       }
@@ -776,7 +741,7 @@
     if (lines.length < 2) return [];
     const headers = parseCsvRow(lines[0]).map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ''));
     const rows = [];
-    const limit = Math.min(lines.length, CSV_ROW_LIMIT + 1); // +1 for header
+    const limit = Math.min(lines.length, CSV_ROW_LIMIT + 1); 
     if (lines.length > CSV_ROW_LIMIT + 1) {
       toast('CSV has more than ' + CSV_ROW_LIMIT + ' rows — only the first ' + CSV_ROW_LIMIT + ' will be imported.', 'info');
     }
@@ -800,7 +765,6 @@
   }
 
   function showCsvImportModal() {
-    // Remove any existing modal
     const existing = $('csvImportModal');
     if (existing) existing.remove();
 
@@ -811,7 +775,6 @@
     const panel = document.createElement('div');
     panel.style.cssText = 'background:var(--bg-glass,#13132a);border:1px solid var(--border-glass,rgba(255,255,255,0.1));border-radius:20px 20px 0 0;padding:24px 20px 40px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;';
 
-    // Header row
     const hdr = document.createElement('div');
     hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;';
     const title = document.createElement('div');
@@ -825,7 +788,6 @@
     hdr.appendChild(closeX);
     panel.appendChild(hdr);
 
-    // Template download
     const tplRow = document.createElement('div');
     tplRow.style.cssText = 'margin-bottom:14px;';
     const tplBtn = document.createElement('button');
@@ -839,7 +801,6 @@
     tplRow.appendChild(tplHint);
     panel.appendChild(tplRow);
 
-    // Drop zone
     const dropZone = document.createElement('div');
     dropZone.style.cssText = 'border:2px dashed var(--border-glass,rgba(255,255,255,0.15));border-radius:12px;padding:28px 20px;text-align:center;cursor:pointer;transition:border-color 0.2s;margin-bottom:12px;';
     const dropLabel = document.createElement('div');
@@ -856,12 +817,10 @@
     dropZone.ondrop = (e) => { e.preventDefault(); dropZone.style.borderColor = ''; handleFile(e.dataTransfer.files[0]); };
     panel.appendChild(dropZone);
 
-    // Preview table container
     const previewWrap = document.createElement('div');
     previewWrap.style.cssText = 'display:none;margin-bottom:14px;overflow-x:auto;';
     panel.appendChild(previewWrap);
 
-    // Import button
     const importBtn = document.createElement('button');
     importBtn.style.cssText = 'display:none;width:100%;padding:14px;background:var(--accent,#7c3aed);color:#fff;border:0;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;';
     importBtn.textContent = 'Import Products';
@@ -871,7 +830,6 @@
 
     function handleFile(file) {
       if (!file) return;
-      // accept=".csv" is UI-only — validate MIME type here to block binary drops
       const validMime = ['text/csv', 'text/plain', 'application/csv', 'application/vnd.ms-excel'];
       if (!validMime.includes(file.type) && !file.name.toLowerCase().endsWith('.csv')) {
         toast('Please choose a CSV file.', 'error'); return;
@@ -888,7 +846,6 @@
 
         const existingBarcodes = new Set(state().products.filter(p => p.barcode).map(p => String(p.barcode).trim()));
 
-        // Build preview table
         const table = document.createElement('table');
         table.style.cssText = 'width:100%;border-collapse:collapse;font-size:12px;';
         const thead = document.createElement('thead');
@@ -955,7 +912,6 @@
             qty: row.qty, category: row.category, barcode: row.barcode,
             image: null, image2: null, icon: null, createdAt: Date.now(), updatedAt: Date.now()
           };
-          // importProduct() pushes to state.products and adds category if new
           app().importProduct(product, row.category);
           if (window.qsdb && window.qsdb.addPendingChange) {
             await window.qsdb.addPendingChange({ type: 'addProduct', item: product });
@@ -1013,7 +969,6 @@
     showCsvImportModal,
   });
 
-  // Signal appss.js that we're ready (in case appss.js loaded first and we weren't ready yet)
   document.dispatchEvent(new Event('qs:inventory:ready'));
 
 })();

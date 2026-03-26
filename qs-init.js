@@ -170,7 +170,7 @@
     var s = document.createElement('script');
     s.src = src;
     if (ordered) s.async = false;
-    document.body.appendChild(s);
+    (document.body || document.head || document.documentElement).appendChild(s);
   }
 
   var params    = new URLSearchParams(window.location.search);
