@@ -1,9 +1,17 @@
 /* =====================================================================
-   QUICKSHOP — DESIGN SYSTEM v3.1
+   QUICKSHOP — DESIGN SYSTEM v3.2
    Linear dark surfaces · Stripe typography · Apple light mode
+   Animation layer: expo-out enters · spring micro-interactions · stagger
    ===================================================================== */
 
 /* ── DARK TOKENS ──────────────────────────────────────────────────── */
+html.qs-booting body {
+  visibility: hidden;
+}
+
+html.qs-ready body {
+  visibility: visible;
+}
 :root,
 [data-theme="dark"] {
   --bg-obsidian:    #09090b;
@@ -40,6 +48,9 @@
   --nav-h:     68px;
   --topbar-h:  56px;
   --transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+  /* ── Animation easing tokens ── */
+  --ease-spring:   cubic-bezier(0.34,1.56,0.64,1);
+  --ease-expo-out: cubic-bezier(0.16,1,0.3,1);
 }
 
 /* ── LIGHT TOKENS ─────────────────────────────────────────────────── */
@@ -244,7 +255,7 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { opacity: 0
   transform: translateY(-1px);
   box-shadow: 0 6px 22px rgba(99,102,241,0.45);
 }
-#btnLogin:active, #btnSignup:active { transform: scale(.99); }
+#btnLogin:active, #btnSignup:active { transform: scale(0.98); }
 
 /* ── Secondary / ghost buttons ── */
 #btnShowSignup, #btnBackToLogin, #btnBackToLoginFromReset, #btnResendVerification {
@@ -408,6 +419,7 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { opacity: 0
 .chips::-webkit-scrollbar { display: none; }
 .chip { flex: 0 0 auto; padding: 6px 12px; border-radius: 999px; background: var(--card-glass); border: 1px solid var(--border-glass); font-weight: 600; color: var(--text-secondary); font-size: 12.5px; cursor: pointer; transition: var(--transition); white-space: nowrap; }
 .chip:hover { background: var(--card-glass-hover); color: var(--text-primary); border-color: var(--border-hi); }
+.chip:active { transform: scale(0.94); }
 .chip.active { background: var(--accent-primary); color: #fff; border-color: var(--accent-primary); box-shadow: var(--shadow-indigo); }
 
 /* ── DASHBOARD CARDS ─────────────────────────────────────────────── */
@@ -482,6 +494,27 @@ body.ai-open { overflow: hidden; position: fixed; width: 100%; height: 100%; }
 /* ── PRODUCT LIST ────────────────────────────────────────────────── */
 .list { display: flex; flex-direction: column; gap: 10px; padding-bottom: calc(var(--nav-h) + 40px + env(safe-area-inset-bottom)); }
 
+/*
+ * Card stagger — each child enters with a cascading delay.
+ * Physics: expo-out curve (fast departure, graceful landing).
+ * Delay increments shrink toward the end so a long list never
+ * feels slow to settle. Cap at 220ms so items 9+ appear together.
+ * Safe: animation and CSS transition coexist on the same element —
+ * animation owns enter; transition owns hover. No conflict.
+ */
+.list > * {
+  animation: cardEnter 0.3s cubic-bezier(0.16,1,0.3,1) both;
+}
+.list > *:nth-child(1)  { animation-delay:   0ms; }
+.list > *:nth-child(2)  { animation-delay:  28ms; }
+.list > *:nth-child(3)  { animation-delay:  56ms; }
+.list > *:nth-child(4)  { animation-delay:  84ms; }
+.list > *:nth-child(5)  { animation-delay: 110ms; }
+.list > *:nth-child(6)  { animation-delay: 134ms; }
+.list > *:nth-child(7)  { animation-delay: 155ms; }
+.list > *:nth-child(8)  { animation-delay: 172ms; }
+.list > *:nth-child(n+9) { animation-delay: 185ms; }
+
 .product-card {
   display: flex; gap: 10px; align-items: flex-start;
   padding: 12px; border-radius: var(--radius);
@@ -489,6 +522,7 @@ body.ai-open { overflow: hidden; position: fixed; width: 100%; height: 100%; }
   transition: var(--transition); cursor: pointer; box-shadow: var(--shadow-soft);
 }
 .product-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-glass); border-color: rgba(99,102,241,0.22); background: var(--card-glass-hover); }
+.product-card:active { transform: scale(0.985); }
 
 .p-thumb {
   width: 48px; height: 48px; border-radius: var(--radius-sm);
@@ -510,6 +544,7 @@ body.ai-open { overflow: hidden; position: fixed; width: 100%; height: 100%; }
 
 .btn-undo { background: transparent; border: 1px solid var(--border-glass); padding: 5px 8px; border-radius: var(--radius-sm); font-size: 11.5px; color: var(--text-secondary); cursor: pointer; transition: var(--transition); font-weight: 600; }
 .btn-undo:hover { background: var(--card-glass); border-color: var(--border-hi); color: var(--text-primary); }
+.btn-undo:active { transform: scale(0.94); }
 
 /* ── INVENTORY ───────────────────────────────────────────────────── */
 .sticky-header-wrapper {
@@ -538,6 +573,9 @@ body.ai-open { overflow: hidden; position: fixed; width: 100%; height: 100%; }
 .btn-restock:hover { background: var(--accent-emerald); color: #fff; border-color: var(--accent-emerald); transform: translateY(-1px); box-shadow: var(--shadow-emerald); }
 .btn-edit:hover { background: var(--accent-cyan); color: #fff; border-color: var(--accent-cyan); transform: translateY(-1px); }
 .btn-delete:hover { background: var(--danger); color: #fff; border-color: var(--danger); transform: translateY(-1px); }
+.btn-restock:active { transform: scale(0.94); }
+.btn-edit:active    { transform: scale(0.94); }
+.btn-delete:active  { transform: scale(0.94); }
 
 /* ── FORM INPUTS ─────────────────────────────────────────────────── */
 .add-row { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
@@ -585,11 +623,11 @@ select option { background: var(--bg-glass); color: var(--text-primary); }
   box-shadow: var(--shadow-indigo); white-space: nowrap;
 }
 .save-btn:hover { background: var(--accent-primary-hover); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(99,102,241,0.42); }
-.save-btn:active { transform: scale(0.96); }
+.save-btn:active { transform: scale(0.95); }
 
 /* ── MODAL ───────────────────────────────────────────────────────── */
-.modal-backdrop { position: fixed; left: 0; top: 0; width: 100%; height: 100%; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.82); z-index: 99990; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); animation: fadeIn 0.2s ease; }
-.modal { position: relative; background: var(--bg-glass); padding: 20px; border-radius: var(--radius); width: 94%; max-width: 420px; box-shadow: var(--shadow-glass-lg); animation: scaleIn 0.25s cubic-bezier(0.34,1.56,0.64,1); border: 1px solid var(--border-glass); }
+.modal-backdrop { position: fixed; left: 0; top: 0; width: 100%; height: 100%; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.82); z-index: 99990; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); animation: fadeIn 0.18s ease; }
+.modal { position: relative; background: var(--bg-glass); padding: 20px; border-radius: var(--radius); width: 94%; max-width: 420px; box-shadow: var(--shadow-glass-lg); animation: scaleIn 0.26s cubic-bezier(0.34,1.56,0.64,1); border: 1px solid var(--border-glass); }
 body.keyboard-open .modal { top: 8vh !important; }
 .modal h3 { margin: 0 0 10px; font-size: 17px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em; }
 .modal .row { display: flex; gap: 8px; margin-top: 10px; }
@@ -612,7 +650,7 @@ body.keyboard-open .modal { top: 8vh !important; }
 
 /* ── PANELS — consistent spacing ─────────────────────────────────── */
 .panel { display: none; min-height: calc(100vh - var(--topbar-h) - var(--nav-h)); overflow-anchor: none; padding-top: 16px; }
-.panel.active { display: block; animation: panelEnter 0.28s cubic-bezier(0.16,1,0.3,1) both; }
+.panel.active { display: block; animation: panelEnter 0.3s cubic-bezier(0.16,1,0.3,1) both; }
 /* Panels with sticky-header-wrapper should NOT have extra top padding — the header creates it */
 #inventoryPanel { padding-top: 0; }
 #settingsPanel { padding-bottom: calc(var(--nav-h) + 40px + env(safe-area-inset-bottom)) !important; padding-top: 0; }
@@ -633,6 +671,7 @@ canvas { max-width: 100%; height: auto; }
 .report-controls { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .report-range-btn { padding: 6px 11px; border-radius: var(--radius-sm); border: 1px solid var(--border-glass); background: var(--card-glass); cursor: pointer; font-size: 12.5px; font-weight: 600; transition: var(--transition); color: var(--text-secondary); }
 .report-range-btn:hover { background: var(--card-glass-hover); border-color: var(--accent-primary); color: var(--text-primary); }
+.report-range-btn:active { transform: scale(0.95); }
 .report-range-btn.active { background: var(--accent-primary); color: #fff; border-color: var(--accent-primary); box-shadow: var(--shadow-indigo); }
 .report-summary-cards { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .report-card { flex: 1; min-width: 0; min-width: calc(33% - 6px); background: var(--card-glass); padding: 12px; border-radius: var(--radius); border: 1px solid var(--border-glass); text-align: center; transition: var(--transition); box-shadow: var(--shadow-soft); overflow: hidden; }
@@ -648,6 +687,16 @@ canvas { max-width: 100%; height: auto; }
   gap: 8px;
   margin-top: 12px;
 }
+
+/* Report stat stagger — same expo-out physics as product list */
+.report-summary-stack > * {
+  animation: cardEnter 0.3s cubic-bezier(0.16,1,0.3,1) both;
+}
+.report-summary-stack > *:nth-child(1) { animation-delay:  0ms; }
+.report-summary-stack > *:nth-child(2) { animation-delay: 50ms; }
+.report-summary-stack > *:nth-child(3) { animation-delay: 95ms; }
+.report-summary-stack > *:nth-child(n+4) { animation-delay: 130ms; }
+
 .report-stat-row {
   display: flex;
   align-items: center;
@@ -744,7 +793,14 @@ table tr:last-child td { border-bottom: none; }
 }
 body.keyboard-open .bottom-nav { transform: translateY(calc(110% + env(safe-area-inset-bottom, 0px))); opacity: 0; pointer-events: none; transition: transform 0.22s ease, opacity 0.22s ease; }
 .nav { max-width: 480px; display: flex; gap: 4px; justify-content: space-between; width: 100%; }
+
+/*
+ * Nav button — position:relative is required for the ::after active dot.
+ * Transition: spring curve on transform so the scale(0.88) press bounces
+ * back to 1 rather than linearly releasing (feels mechanical otherwise).
+ */
 .nav-btn {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -756,7 +812,7 @@ body.keyboard-open .bottom-nav { transform: translateY(calc(110% + env(safe-area
   padding: 8px 5px;
   border-radius: 20px;
   cursor: pointer;
-  transition: color 0.18s, background 0.18s, transform 0.14s cubic-bezier(0.34,1.56,0.64,1);
+  transition: color 0.18s, background 0.18s, transform 0.16s cubic-bezier(0.34,1.56,0.64,1);
   flex: 1 1 0px;
   min-width: 0;
   font-weight: 600;
@@ -768,10 +824,35 @@ body.keyboard-open .bottom-nav { transform: translateY(calc(110% + env(safe-area
   font-weight: 700;
   background: rgba(99,102,241,0.14);
 }
+
+/*
+ * Active indicator dot — springs in when tab becomes active.
+ * 3×3px pill sits below the label text. Imperceptible when
+ * inactive (opacity:0, scale:0); springs to full on .active.
+ * pointer-events:none so it never blocks touches.
+ */
+.nav-btn::after {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  transform: translateX(-50%) scale(0);
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  pointer-events: none;
+}
+.nav-btn.active::after {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
 .nav-btn svg {
-  transition: transform 0.26s cubic-bezier(0.34,1.56,0.64,1);
-  filter: drop-shadow(0 0 0px rgba(99,102,241,0));
   transition: transform 0.26s cubic-bezier(0.34,1.56,0.64,1), filter 0.26s ease;
+  filter: drop-shadow(0 0 0px rgba(99,102,241,0));
 }
 .nav-btn.active svg {
   transform: scale(1.18) translateY(-1px);
@@ -842,7 +923,7 @@ body.keyboard-open .panel { padding-bottom: 16px; }
 #confirmModalCancel:hover { background: var(--card-glass); color: var(--text-primary); }
 
 /* ── INSIGHT OVERLAY ─────────────────────────────────────────────── */
-.insight-overlay { position: fixed; z-index: 20000; top: 4vh; left: 10px; right: 10px; max-height: 88vh; overflow-y: auto; background: var(--bg-glass); border: 1px solid var(--border-glass); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow-glass-lg); animation: scaleIn 0.22s cubic-bezier(0.34,1.56,0.64,1); }
+.insight-overlay { position: fixed; z-index: 20000; top: 4vh; left: 10px; right: 10px; max-height: 88vh; overflow-y: auto; background: var(--bg-glass); border: 1px solid var(--border-glass); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow-glass-lg); animation: scaleIn 0.26s cubic-bezier(0.34,1.56,0.64,1); }
 .insight-overlay h3 { color: var(--text-primary); margin-bottom: 10px; font-size: 15px; }
 .close-btn { position: absolute; top: 10px; right: 10px; background: transparent; border: 0; font-size: 18px; color: var(--text-muted); cursor: pointer; padding: 4px 8px; transition: color 0.18s; border-radius: var(--radius-sm); }
 .close-btn:hover { color: var(--text-primary); background: var(--card-glass); }
@@ -850,10 +931,9 @@ body.keyboard-open .panel { padding-bottom: 16px; }
 
 /* ── TOAST ───────────────────────────────────────────────────────── */
 .toast-container { position: fixed; bottom: calc(var(--nav-h) + 10px); left: 0; right: 0; z-index: 999997; display: flex; flex-direction: column; align-items: center; pointer-events: none; gap: 6px; }
-.toast { background: var(--bg-glass); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 10px 16px; border-radius: 18px; font-size: 13px; font-weight: 600; box-shadow: var(--shadow-glass-lg); animation: toastIn 0.22s cubic-bezier(0.34,1.56,0.64,1); max-width: 300px; text-align: center; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+.toast { background: var(--bg-glass); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 10px 16px; border-radius: 18px; font-size: 13px; font-weight: 600; box-shadow: var(--shadow-glass-lg); animation: toastIn 0.24s cubic-bezier(0.34,1.56,0.64,1); max-width: 300px; text-align: center; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
 .toast.error { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.3); color: #fca5a5; }
 .toast.info { background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.3); color: #c7d2fe; }
-@keyframes toastIn { from { opacity: 0; transform: translateY(8px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
 /* ── FILE INPUT ──────────────────────────────────────────────────── */
 input[type="file"] { color: var(--text-secondary); padding: 7px; }
@@ -907,16 +987,64 @@ input[type="file"]::file-selector-button:hover { background: var(--accent-primar
 ::-webkit-scrollbar { width: 0; background: transparent; }
 * { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.08) transparent; }
 
-/* ── ANIMATIONS ──────────────────────────────────────────────────── */
-@keyframes panelEnter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes fadeIn   { from { opacity: 0; }                              to { opacity: 1; } }
-@keyframes scaleIn  { from { transform: scale(0.93); opacity: 0; }      to { transform: scale(1); opacity: 1; } }
+/* ══════════════════════════════════════════════════════════════════
+   ANIMATIONS
+   All GPU-composited (opacity + transform only) — zero layout thrash.
+   Easing philosophy:
+     panelEnter  → expo-out: instant departure, graceful landing.
+     cardEnter   → expo-out: same physics per card, staggered.
+     scaleIn     → spring:   slight overshoot → feels alive not flat.
+     toastIn     → spring:   rises and slightly overshoots into place.
+     slideUp     → expo-out: full-screen modals snap up fast.
+   ══════════════════════════════════════════════════════════════════ */
+
+/*
+ * panelEnter — 1% scale + 10px lift on enter.
+ * The scale is imperceptible (10px at 360px width = 3.6px per edge)
+ * but adds depth cue that the panel is arriving from slightly behind.
+ */
+@keyframes panelEnter {
+  from { opacity: 0; transform: translateY(10px) scale(0.99); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+@keyframes fadeIn   { from { opacity: 0; }  to { opacity: 1; } }
+
+/*
+ * scaleIn — modal/overlay entry spring.
+ * Starts at scale(0.96) + translateY(6px) so the modal appears to
+ * rise from just below centre. Spring curve (0.34,1.56,0.64,1) lets
+ * it briefly overshoot to ~1.02x before settling at 1.0. This is
+ * the exact behaviour of iOS UIKit modal presentation.
+ */
+@keyframes scaleIn {
+  from { transform: scale(0.96) translateY(6px); opacity: 0; }
+  to   { transform: scale(1)    translateY(0);   opacity: 1; }
+}
+
 @keyframes slideIn  { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes slideUp  { from { transform: translateY(100%); }             to { transform: translateY(0); } }
 @keyframes spin     { 0%   { transform: rotate(0deg); }                 100% { transform: rotate(360deg); } }
 @keyframes scanLine { 0%   { transform: translateY(-100%); opacity: 0; } 50% { opacity: 1; } 100% { transform: translateY(100%); opacity: 0; } }
 @keyframes shake    { 0%,100% { transform: translateX(0); }             25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
 @keyframes shimmer  { from { left: -100%; } to { left: 100%; } }
+
+/*
+ * toastIn — rises 12px with a 92% start scale.
+ * The spring gives it a satisfying little bounce as it lands.
+ * Combined with backdrop-filter blur, it feels like a real system toast.
+ */
+@keyframes toastIn  { from { opacity: 0; transform: translateY(12px) scale(0.92); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+/*
+ * cardEnter — list item entrance animation.
+ * Used by .list > * and .report-summary-stack > * with nth-child delays.
+ * Purely translateY + opacity: both GPU composited, zero layout impact.
+ */
+@keyframes cardEnter {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 
 /* ── CATALOG MODE ────────────────────────────────────────────────── */
 body.customer-mode .btn-edit, body.customer-mode .btn-delete,

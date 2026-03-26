@@ -1306,8 +1306,8 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     if (typeof Sentry !== 'undefined') {
       Sentry.setUser(null);
     }
-    document.body.classList.remove('mode-app');
-    document.body.classList.remove('qs-auth-pending'); // auth resolved (logged out)
+    document.body.classList.remove('qs-auth-pending');
+document.body.classList.remove('mode-app'); // auth resolved (logged out)
     const loginScreen = $('loginScreen'), appScreen = document.querySelector('.app');
     if (loginScreen) loginScreen.style.display = 'flex';
     if (appScreen) appScreen.style.display = 'none';
