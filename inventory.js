@@ -375,7 +375,7 @@
     if (!addForm) return;
     const backdrop = createModalBackdrop('addFormBackdrop', 99998);
     if (addForm.parentElement !== document.body) document.body.appendChild(addForm);
-    addForm.style.cssText = `position:fixed;left:50%;top:15vh;transform:translateX(-50%);z-index:99999;max-width:720px;width:calc(100% - 32px);max-height:80vh;overflow-y:auto;border-radius:var(--radius);box-shadow:var(--shadow-glass-lg);background:var(--bg-glass);border:1px solid var(--border-glass);padding:20px;display:flex;flex-direction:column;gap:12px;transition:top 0.3s ease;will-change:transform;`;
+    addForm.style.cssText = `position:fixed;left:50%;top:15vh;transform:translateX(-50%);z-index:99999;max-width:720px;width:calc(100% - 32px);max-height:80vh;overflow-y:auto;border-radius:var(--radius);box-shadow:var(--shadow-glass-lg);background:var(--bg-glass);border:1px solid var(--border-glass);padding:52px 20px 20px;display:flex;flex-direction:column;gap:12px;transition:opacity 0.18s ease,transform 0.18s ease;will-change:transform,opacity;`;
     let closeBtn = addForm.querySelector('.modal-close-x');
     if (closeBtn) closeBtn.remove();
     closeBtn = createModalCloseButton(hideAddForm);
@@ -395,9 +395,27 @@
     clearAddForm();
     const addForm  = $('addForm');
     const backdrop = $('addFormBackdrop');
-    if (addForm)  addForm.style.display  = 'none';
-    if (backdrop) backdrop.style.display = 'none';
-    document.body.classList.remove('modal-open');
+    // If neither is visible there's nothing to animate — bail fast.
+    if (!addForm && !backdrop) { document.body.classList.remove('modal-open'); return; }
+    const isVisible = addForm && addForm.style.display !== 'none';
+    if (!isVisible) {
+      if (addForm)  addForm.style.display  = 'none';
+      if (backdrop) backdrop.style.display = 'none';
+      document.body.classList.remove('modal-open');
+      return;
+    }
+    // Animate addForm out — scale down + fade, matching the CSS scaleOut timing.
+    // The backdrop has no CSS class so we drive its fade inline.
+    if (addForm) {
+      addForm.style.opacity   = '0';
+      addForm.style.transform = 'translateX(-50%) scale(0.97)';
+    }
+    if (backdrop) backdrop.style.opacity = '0';
+    setTimeout(() => {
+      if (addForm)  { addForm.style.display  = 'none'; addForm.style.opacity = ''; addForm.style.transform = ''; }
+      if (backdrop) { backdrop.style.display = 'none'; backdrop.style.opacity = ''; }
+      document.body.classList.remove('modal-open');
+    }, 190);
   }
 
   function populateCategoryDropdown() {

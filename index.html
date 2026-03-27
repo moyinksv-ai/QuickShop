@@ -199,6 +199,7 @@
       min-height: 100vh;
       overflow-x: hidden;
     }
+
     /* ── ANIMATIONS ── */
     @keyframes fadeUp {
       from { opacity:0; transform:translateY(22px); }
@@ -210,9 +211,6 @@
     }
     @keyframes pulse-ring {
       0%{transform:scale(.85);opacity:.8} 100%{transform:scale(1.5);opacity:0}
-    }
-    @keyframes shimmer {
-      from{background-position:0% center} to{background-position:200% center}
     }
     @keyframes grain {
       0%,100%{transform:translate(0,0)} 10%{transform:translate(-2%,-3%)}
@@ -228,13 +226,14 @@
     .ql-anim-5{animation:fadeUp .75s cubic-bezier(.16,1,.3,1) .53s both}
 
     /* ══════════════════════════════════════════════════
-       HERO — Full viewport, two-column on desktop
+       HERO — natural height mobile, full-bleed desktop
     ══════════════════════════════════════════════════ */
     #qs-landing .ql-hero {
       position: relative;
-      min-height: 100dvh;
+      /* Mobile: height driven by content — no forced viewport fill.
+         This is the root fix for the excessive gap to screenshots.
+         Desktop gets min-height via media query below. */
       display: grid;
-      /* Mobile: single column. Desktop: 55/45 split */
       grid-template-columns: 1fr;
       align-items: stretch;
       overflow: hidden;
@@ -256,13 +255,14 @@
       position: relative; z-index: 2;
       display: flex; flex-direction: column;
       justify-content: center;
-      padding: calc(var(--nav-h) + 48px) clamp(24px, 6vw, 80px) 60px;
-      min-height: 100dvh;
+      /* Mobile: balanced padding — nav clearance + breathing room.
+         Not 100dvh-forced. Content sits close to the top half of screen. */
+      padding: calc(var(--nav-h) + 32px) clamp(24px, 6vw, 80px) 40px;
     }
 
     /* Right: image panel */
     #qs-landing .ql-hero-right {
-      display: none; /* hidden mobile, shown desktop */
+      display: none;
       position: relative; overflow: hidden;
     }
     #qs-landing .ql-hero-right img {
@@ -272,7 +272,6 @@
       object-position: center 35%;
       filter: brightness(0.88) contrast(1.05) saturate(1.1);
     }
-    /* Left-edge fade so image blends into bg */
     #qs-landing .ql-hero-right::before {
       content: '';
       position: absolute; inset: 0; z-index: 1;
@@ -283,7 +282,6 @@
         transparent 100%
       );
     }
-    /* Bottom edge fade */
     #qs-landing .ql-hero-right::after {
       content: '';
       position: absolute; bottom: 0; left: 0; right: 0; z-index: 1;
@@ -291,12 +289,12 @@
       background: linear-gradient(to top, var(--c-bg), transparent);
     }
 
-    /* Mobile: image strip above CTA */
+    /* Mobile: image strip top-right — smaller on mobile to not overwhelm copy */
     #qs-landing .ql-hero-img-mobile {
       position: absolute;
       top: 0; right: 0;
-      width: 55%;
-      height: 60%;
+      width: 48%;
+      height: 52%;
       overflow: hidden;
       z-index: 1;
     }
@@ -304,23 +302,22 @@
       width: 100%; height: 100%;
       object-fit: cover;
       object-position: 60% 25%;
-      filter: brightness(0.7) saturate(1.1);
+      filter: brightness(0.65) saturate(1.1);
     }
-    /* Fade left + bottom on mobile image */
     #qs-landing .ql-hero-img-mobile::before {
       content: '';
       position: absolute; inset: 0; z-index: 1;
       background: linear-gradient(
         to right,
         var(--c-bg) 0%,
-        rgba(8,8,16,0.55) 35%,
+        rgba(8,8,16,0.6) 35%,
         transparent 100%
       );
     }
     #qs-landing .ql-hero-img-mobile::after {
       content: '';
       position: absolute; bottom: 0; left: 0; right: 0; z-index: 1;
-      height: 55%;
+      height: 60%;
       background: linear-gradient(to top, var(--c-bg), transparent);
     }
 
@@ -332,7 +329,7 @@
       border-radius: 100px;
       padding: 5px 13px 5px 10px;
       font-size: 12px; font-weight: 600; color: var(--c-green-d);
-      margin-bottom: 28px;
+      margin-bottom: 22px;
       width: fit-content;
     }
     #qs-landing .ql-live-dot {
@@ -348,36 +345,38 @@
 
     /* ── Headline ── */
     #qs-landing .ql-h1 {
-      font-size: clamp(40px, 6.5vw, 72px);
+      font-size: clamp(38px, 6.5vw, 72px);
       font-weight: 900; line-height: 1.04;
       letter-spacing: -2.5px;
       color: var(--c-text);
-      margin: 0 0 20px;
+      margin: 0 0 18px;
       max-width: 14ch;
     }
-    #qs-landing .ql-shimmer {
-      background: linear-gradient(110deg,
-        var(--c-accent) 0%, var(--c-accent-h) 35%,
-        var(--c-green-d) 60%, var(--c-accent) 100%);
-      background-size: 200% auto;
+
+    /*
+     * Accent word — static gradient, not animated.
+     * Animated shimmer text = the single clearest signal of a template landing page.
+     * A clean two-stop gradient reads as designed, not generated.
+     */
+    #qs-landing .ql-accent-word {
+      background: linear-gradient(115deg, #6366f1 0%, #34d399 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
-      animation: shimmer 5s linear infinite;
     }
 
     /* ── Subheadline ── */
     #qs-landing .ql-sub {
       font-size: clamp(15px, 2vw, 18px); line-height: 1.65;
       color: var(--c-muted);
-      margin: 0 0 40px;
+      margin: 0 0 28px;
       max-width: 46ch;
     }
 
     /* ── CTA block ── */
     #qs-landing .ql-hero-btns {
       display: flex; flex-wrap: wrap; gap: 12px;
-      margin-bottom: 48px;
+      margin-bottom: 28px;
     }
     #qs-landing .ql-btn-main {
       background: var(--c-accent);
@@ -411,36 +410,20 @@
     }
     #qs-landing .ql-dot-sep { opacity: .35; }
 
-    /* ── Metric pills row ── */
-    #qs-landing .ql-metrics {
-      display: flex; gap: 10px; flex-wrap: wrap;
-      margin-bottom: 36px;
-    }
-    #qs-landing .ql-metric {
-      display: flex; flex-direction: column;
-      background: rgba(255,255,255,.04);
-      border: 1px solid var(--c-border);
-      border-radius: 10px; padding: 12px 16px;
-    }
-    #qs-landing .ql-metric-n {
-      font-size: 22px; font-weight: 800; letter-spacing: -1px; line-height: 1;
-      margin-bottom: 2px;
-    }
-    #qs-landing .ql-metric-l {
-      font-size: 11px; color: var(--c-dim); font-weight: 500;
-      letter-spacing: .2px;
-    }
-
     /* ── DESKTOP layout override ── */
     @media (min-width: 900px) {
       #qs-landing .ql-hero {
         grid-template-columns: 55% 45%;
+        min-height: 100dvh;
       }
       #qs-landing .ql-hero-right { display: block; }
       #qs-landing .ql-hero-img-mobile { display: none; }
       #qs-landing .ql-h1 { max-width: 100%; }
       #qs-landing .ql-hero-left {
         padding-right: 40px;
+        min-height: 100dvh;
+        padding-top: calc(var(--nav-h) + 48px);
+        padding-bottom: 60px;
       }
     }
     @media (min-width: 1200px) {
@@ -454,8 +437,12 @@
       display: flex; gap: 14px;
       overflow-x: auto; scroll-snap-type: x mandatory;
       -webkit-overflow-scrolling: touch; scrollbar-width: none;
-      padding: 48px clamp(20px,5vw,60px) 20px;
+      /* Mobile: tighter top — content above is naturally close now */
+      padding: 24px clamp(20px,5vw,60px) 20px;
       animation: fadeIn .9s ease .5s both;
+    }
+    @media (min-width: 900px) {
+      #qs-landing .ql-screens { padding-top: 48px; }
     }
     #qs-landing .ql-screens::-webkit-scrollbar{display:none}
     #qs-landing .ql-screen-wrap{flex:0 0 200px;scroll-snap-align:center;position:relative}
@@ -671,7 +658,7 @@
 
           <h1 class="ql-h1 ql-anim-2">
             Your shop.<br>
-            <span class="ql-shimmer">Your profits.</span><br>
+            <span class="ql-accent-word">Your profits.</span><br>
             In your pocket.
           </h1>
 
@@ -679,22 +666,6 @@
             Track inventory, record sales, and see exactly where you stand —
             even without internet. Built for traders who work in the real world.
           </p>
-
-          <!-- Metric pills -->
-          <div class="ql-metrics ql-anim-3">
-            <div class="ql-metric">
-              <span class="ql-metric-n" style="color:#34d399">100%</span>
-              <span class="ql-metric-l">Offline-ready</span>
-            </div>
-            <div class="ql-metric">
-              <span class="ql-metric-n" style="color:#f59e0b">₦0</span>
-              <span class="ql-metric-l">Free forever</span>
-            </div>
-            <div class="ql-metric">
-              <span class="ql-metric-n" style="color:#818cf8">PWA</span>
-              <span class="ql-metric-l">No app store</span>
-            </div>
-          </div>
 
           <div class="ql-hero-btns ql-anim-4">
             <button class="ql-btn-main" id="qs-hero-up">Create Free Account</button>
@@ -890,7 +861,7 @@
               <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>6-month reports &amp; trend analysis</div>
               <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>CSV export for all data</div>
               <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>Barcode scanner support</div>
-              <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>AI-powered stock insights</div>
+              <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>Smart stock insights</div>
               <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>Priority support</div>
             </div>
             <button class="ql-plan-btn ql-plan-btn-pro" id="qs-plan-pro">Start with Pro</button>
@@ -913,7 +884,7 @@
       </section>
 
       <footer class="ql-footer">
-        <p>© 2025 QuickShop. All rights reserved.</p>
+        <p>© 2026 QuickShop. All rights reserved.</p>
       </footer>
 
     </div><!-- /.ql-page -->
@@ -1091,7 +1062,6 @@
               📷 Add Photos
             </button>
           </div>
-
 
           <!-- Individual slots shown after picking -->
           <div style="display:flex;gap:8px;">

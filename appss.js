@@ -493,10 +493,20 @@ function handleTouchEnd() {
 
   function hideModal() {
     const mb = $('modalBackdrop');
-    if (mb) mb.style.display = 'none';
     modalContext = null;
     const errEl = $('modalError');
     if (errEl) errEl.textContent = '';
+    if (!mb || mb.style.display === 'none') return;
+    // Animate out — .closing triggers CSS scaleOut on .modal + fadeOut on .modal-backdrop.
+    // 200ms timeout outlasts both animations before snapping to display:none.
+    const modalEl = mb.querySelector('.modal');
+    mb.classList.add('closing');
+    if (modalEl) modalEl.classList.add('closing');
+    setTimeout(() => {
+      mb.style.display = 'none';
+      mb.classList.remove('closing');
+      if (modalEl) modalEl.classList.remove('closing');
+    }, 200);
   }
 
   function initKeyboardDetection() {
@@ -540,7 +550,19 @@ function handleTouchEnd() {
     if (titleEl) backdrop.setAttribute('aria-labelledby', 'confirmModalTitle');
     if (msgEl) backdrop.setAttribute('aria-describedby', 'confirmModalMessage');
 
-    const close = (result) => { if (confirmResolve) { confirmResolve(result); confirmResolve = null; } backdrop.style.display = 'none'; };
+    const close = (result) => {
+      if (confirmResolve) { confirmResolve(result); confirmResolve = null; }
+      // Resolve promise immediately so callers aren't blocked by animation timing.
+      // Animate the modal out before snapping display:none.
+      const modalEl = backdrop.querySelector('.modal');
+      backdrop.classList.add('closing');
+      if (modalEl) modalEl.classList.add('closing');
+      setTimeout(() => {
+        backdrop.style.display = 'none';
+        backdrop.classList.remove('closing');
+        if (modalEl) modalEl.classList.remove('closing');
+      }, 200);
+    };
     okBtn.addEventListener('click', () => close(true));
     cancelBtn.addEventListener('click', () => close(false));
     backdrop.addEventListener('click', (e) => { if (e.target.id === 'confirmModalBackdrop') close(false); });
@@ -676,16 +698,25 @@ function handleTouchEnd() {
 
   function closeInventoryInsight() {
     const view = $('inventoryInsightView');
-    if (view) {
-      view.style.display = 'none';
+    if (!view || view.style.display === 'none') return;
+    // Drive animation inline — view uses cssText so no CSS class available.
+    // Snap transition onto the properties we're changing, then clean up.
+    view.style.transition = 'opacity 0.18s ease, transform 0.18s ease';
+    view.style.opacity    = '0';
+    view.style.transform  = 'translateY(16px)';
+    setTimeout(() => {
+      view.style.display    = 'none';
+      view.style.transition = '';
+      view.style.opacity    = '';
+      view.style.transform  = '';
       view.removeAttribute('aria-modal');
       document.body.classList.remove('modal-open');
       const scrollY = view.dataset.scrollY;
       document.body.style.position = '';
-      document.body.style.top = '';
-      document.body.style.width = '';
+      document.body.style.top      = '';
+      document.body.style.width    = '';
       if (scrollY) window.scrollTo(0, parseInt(scrollY));
-    }
+    }, 190);
   }
 
   async function setUserProfile(uid, profile) {
@@ -1253,6 +1284,15 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     }
     localStorage.setItem('qs_session_active', 'true');
     localStorage.setItem('qs_last_user_id', user.id);
+    // Cache slim identity so renderSettingsPanel can render fully while offline.
+    // Only id, email, and user_metadata — no tokens, no session data.
+    try {
+      localStorage.setItem('qs_user_cache', JSON.stringify({
+        id: user.id,
+        email: user.email || '',
+        user_metadata: user.user_metadata || {}
+      }));
+    } catch(_) {}
     document.body.classList.add('mode-app');
     document.body.classList.remove('qs-auth-pending'); // auth resolved — allow landing rules to apply
     // Set Sentry user context — use ID only, never email (no PII in error reports)
@@ -1302,6 +1342,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     setSupabaseUser(null);
     localStorage.removeItem('qs_session_active');
     localStorage.removeItem('qs_last_user_id');
+    localStorage.removeItem('qs_user_cache');
     // Clear Sentry user so subsequent errors aren't attributed to the old user
     if (typeof Sentry !== 'undefined') {
       Sentry.setUser(null);
@@ -1658,7 +1699,13 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
 
   function closeFullAuditLog() {
     const modal = $('fullAuditLogModal');
-    if (modal) modal.style.display = 'none';
+    if (!modal || modal.style.display === 'none') return;
+    // slideDown animation defined in styless.css via .full-screen-modal.closing
+    modal.classList.add('closing');
+    setTimeout(() => {
+      modal.style.display = 'none';
+      modal.classList.remove('closing');
+    }, 230);
   }
 
   function exportAuditLog() {
@@ -2358,8 +2405,24 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     if (headerSearch) headerSearch.value = '';
   }
 
+  // Tab order matches DOM nav order — used to determine slide direction.
+  const _TAB_ORDER = ['home', 'inventory', 'reports', 'notes', 'settings'];
+  let _prevViewName = null;
+
   function setActiveView(view, resetScroll = false) {
     cleanupViewState();
+
+    // ── Direction ─────────────────────────────────────────────────────
+    // Compare the incoming tab's index against the outgoing one.
+    // Higher index = navigating right → new panel enters from the right.
+    // Lower index  = navigating left  → new panel enters from the left.
+    // No previous view (first load) = use default panelEnter (up+scale).
+    const prevIdx = _prevViewName !== null ? _TAB_ORDER.indexOf(_prevViewName) : -1;
+    const nextIdx = _TAB_ORDER.indexOf(view);
+    const dir = (prevIdx === -1 || nextIdx === -1) ? ''
+              : nextIdx > prevIdx ? 'from-right' : 'from-left';
+    _prevViewName = view;
+
     const navButtons = Array.from(document.querySelectorAll('.nav-btn'));
     const headerSearch = $('headerSearchInput'), chipsEl = $('chips');
     navButtons.forEach(b => {
@@ -2367,9 +2430,16 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       b.classList.toggle('active', isActive);
       b.setAttribute('aria-pressed', isActive ? 'true':'false');
     });
-    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => {
+      p.classList.remove('active', 'from-right', 'from-left');
+    });
     const panel = $(view + 'Panel');
-    if (panel) panel.classList.add('active');
+    if (panel) {
+      if (dir) panel.classList.add(dir);
+      panel.classList.add('active');
+      // Remove direction class after animation so it doesn't persist
+      if (dir) setTimeout(() => { panel.classList.remove(dir); }, 320);
+    }
     const isHome = view === 'home', isInv = view === 'inventory';
     if (headerSearch) {
       headerSearch.style.display = (isHome || isInv) ? 'block' : 'none';
@@ -3614,9 +3684,25 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
 
   function renderSettingsPanel() {
     try {
-    const user = currentUser;
+    let user = currentUser;
+
+    // ── Offline cache fallback ───────────────────────────────────────────
+    // When the device is offline, onAuthStateChange may not fire and
+    // currentUser stays null. Read the slim identity written to localStorage
+    // by the last successful handleAuthUser call so Settings renders fully
+    // instead of showing "Loading account…" indefinitely.
     if (!user) {
-      // Auth not yet resolved — show loading state so panel is never blank
+      try {
+        const _raw = localStorage.getItem('qs_user_cache');
+        if (_raw) {
+          const _cached = JSON.parse(_raw);
+          if (_cached && _cached.id) user = _cached;
+        }
+      } catch(_) {}
+    }
+
+    if (!user) {
+      // Truly no user — first boot, never logged in, or cache cleared.
       const sp = $('settingsPanel');
       if (sp && !sp.querySelector('#qs-sticky-profile')) {
         sp.innerHTML = '<div style="padding:40px 16px;text-align:center;' +
