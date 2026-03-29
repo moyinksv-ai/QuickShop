@@ -1,4 +1,5 @@
 <!doctype html>
+
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -64,24 +65,13 @@
     crossorigin="anonymous"
   ></script>
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-  <style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>  <style>
     /*
      * CRITICAL — loaded synchronously before first paint.
      * Defeats styless.css specificity wars and flash-of-wrong-content.
      */
 
-    /* 1. Hide loginScreen at all times by default.
-          This overrides styless.css `#loginScreen { display:flex }` because
-          same ID specificity, but we come AFTER the stylesheet in cascade order,
-          so same-specificity + !important = our rule wins. */
     #loginScreen { display: none !important; }
-
-    /* 2. When a CTA button is clicked, JS adds .qs-show-auth to <body>.
-          body.qs-show-auth has higher specificity than plain #loginScreen,
-          so this wins over rule 1 above. Forced column defeats 680px breakpoint. */
-    /* Utility: reliably hides any element */
     .qs-hidden { display: none !important; }
 
     body.qs-show-auth #loginScreen {
@@ -92,38 +82,24 @@
       min-height      : 100vh !important;
     }
 
-    /* 3. App chrome — hidden until mode-app is set. */
     .app        { display: none; }
     .bottom-nav { display: none; }
-    /* Inline critical panel rules so they apply before styless.css network load */
     .panel      { display: none; }
     .panel.active { display: block; }
 
-    /* 3b. Catalog mode — hides landing/app chrome synchronously when ?store= or ?token=
-           is present. Applied by the early-body script below before first paint,
-           so #qs-landing never flashes even though catalog.js loads async. */
     body.qs-cat-early #qs-landing,
     body.qs-cat-early #loginScreen,
     body.qs-cat-early .app,
     body.qs-cat-early .bottom-nav { display: none !important; }
 
-    /* 4. Logged-in state. */
     body.mode-app #loginScreen   { display: none !important; }
     body.mode-app #qs-landing    { display: none !important; }
     body.mode-app .app           { display: block !important; }
     body.mode-app .bottom-nav    { display: flex  !important; }
 
-    /* 5. FIX: Hide #qs-landing by default. Without this it flashes before
-          mode-app is applied. Visitors see it via the :not() rule below.
-          :not(.qs-hidden) ensures showAuth() can still hide it when Sign In
-          is clicked — prevents the specificity override that broke the form. */
     #qs-landing { display: none !important; }
     body:not(.mode-app):not(.qs-cat-early):not(.qs-auth-pending) #qs-landing:not(.qs-hidden) { display: block !important; }
 
-    /* ── Auth-pending: hides landing while Supabase auth resolves. ──────────
-       Added at boot when qs_session_active=true. Removed by handleAuthUser
-       or handleAuthLogout. Prevents the flash caused by the SIGNED_OUT race
-       where onAuthStateChange fires before INITIAL_SESSION on cold starts.  */
     body.qs-auth-pending #qs-landing      { display: none !important; }
     body.qs-auth-pending.mode-app .app    { display: block !important; }
     body.qs-auth-pending.mode-app .bottom-nav { display: flex !important; }
@@ -134,499 +110,407 @@
                border-radius:50%; width:40px; height:40px; animation:spin .8s linear infinite; }
     ::-webkit-scrollbar { width:0; background:transparent; }
 
-    /* ═══════════════════════════════════════════════
-       LANDING — fully scoped, zero bleed into app
-    ═══════════════════════════════════════════════ */
     *, *::before, *::after { box-sizing: border-box; }
 
-    /* ── TOKENS ── */
     #qs-landing {
-      --c-bg:        #080810;
-      --c-surface:   #0f0f1a;
-      --c-border:    rgba(255,255,255,0.07);
-      --c-text:      #f2f2f8;
-      --c-muted:     rgba(242,242,248,0.42);
-      --c-dim:       rgba(242,242,248,0.22);
-      --c-accent:    #6366f1;
-      --c-accent-h:  #818cf8;
-      --c-green:     #10b981;
-      --c-green-d:   #34d399;
-      --nav-h:       60px;
+      --c-bg:      #07070e;
+      --c-surface: #0e0e1a;
+      --c-border:  rgba(255,255,255,0.07);
+      --c-text:    #f0f0f6;
+      --c-muted:   rgba(240,240,246,0.40);
+      --c-dim:     rgba(240,240,246,0.20);
+      --c-accent:  #6366f1;
+      --c-green:   #10b981;
+      --c-green-d: #34d399;
+      --nav-h:     58px;
       background: var(--c-bg);
       color: var(--c-text);
-      font-family: "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+      font-family: "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", Inter, sans-serif;
       -webkit-font-smoothing: antialiased;
       overflow-x: hidden;
     }
 
-    /* ── NAV ── */
     #qs-landing .ql-nav {
       position: fixed; top: 0; left: 0; right: 0; z-index: 100;
       height: var(--nav-h);
       display: flex; align-items: center; justify-content: space-between;
       padding: 0 clamp(20px, 5vw, 60px);
-      background: rgba(8,8,16,0.7);
-      backdrop-filter: blur(24px) saturate(180%);
-      -webkit-backdrop-filter: blur(24px) saturate(180%);
-      border-bottom: 1px solid var(--c-border);
+      background: rgba(7,7,14,0.72);
+      backdrop-filter: blur(20px) saturate(160%);
+      -webkit-backdrop-filter: blur(20px) saturate(160%);
+      border-bottom: 1px solid rgba(255,255,255,0.05);
     }
     #qs-landing .ql-brand {
-      display: flex; align-items: center; gap: 8px;
-      font-size: 17px; font-weight: 800; letter-spacing: -0.4px; color: var(--c-text);
+      display: flex; align-items: center; gap: 7px;
+      font-size: 16px; font-weight: 700; letter-spacing: -0.3px; color: var(--c-text);
     }
-    #qs-landing .ql-brand-icon { font-size: 20px; }
-    #qs-landing .ql-nav-btns { display: flex; gap: 10px; align-items: center; }
+    #qs-landing .ql-brand-icon { font-size: 18px; }
+    #qs-landing .ql-nav-btns { display: flex; gap: 8px; align-items: center; }
     #qs-landing .ql-nav-signin {
-      background: transparent;
-      border: 1px solid rgba(255,255,255,0.12);
-      color: var(--c-muted); padding: 7px 18px;
-      border-radius: 8px; font-size: 13.5px; font-weight: 600;
-      cursor: pointer; transition: all .18s;
+      background: transparent; border: 0;
+      color: var(--c-muted); padding: 6px 14px;
+      font-size: 13px; font-weight: 500;
+      cursor: pointer; transition: color .15s; font-family: inherit;
     }
-    #qs-landing .ql-nav-signin:hover { color: var(--c-text); border-color: rgba(255,255,255,0.28); }
+    #qs-landing .ql-nav-signin:hover { color: var(--c-text); }
     #qs-landing .ql-nav-signup {
-      background: var(--c-accent); border: 0; color: #fff;
-      padding: 8px 20px; border-radius: 8px;
-      font-size: 13.5px; font-weight: 700; cursor: pointer;
-      box-shadow: 0 0 0 1px rgba(99,102,241,.5), 0 4px 16px rgba(99,102,241,.3);
-      transition: all .18s;
+      background: rgba(99,102,241,0.12);
+      border: 1px solid rgba(99,102,241,0.28);
+      color: #a5b4fc;
+      padding: 7px 18px; border-radius: 7px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: all .15s; font-family: inherit;
     }
-    #qs-landing .ql-nav-signup:hover { background: #4f52e0; transform: translateY(-1px); }
+    #qs-landing .ql-nav-signup:hover {
+      background: rgba(99,102,241,0.2);
+      border-color: rgba(99,102,241,0.5);
+      color: #c7d2fe;
+    }
 
-    /* ── PAGE SHELL ── */
     #qs-landing .ql-page {
       padding-top: var(--nav-h);
       min-height: 100vh;
       overflow-x: hidden;
     }
 
-    /* ── ANIMATIONS ── */
-    @keyframes fadeUp {
-      from { opacity:0; transform:translateY(22px); }
-      to   { opacity:1; transform:translateY(0);    }
+    @keyframes focusIn {
+      from { opacity: 0; transform: translateY(8px); filter: blur(5px); }
+      to   { opacity: 1; transform: translateY(0);   filter: blur(0); }
     }
-    @keyframes fadeIn { from{opacity:0} to{opacity:1} }
-    @keyframes float {
-      0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)}
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes imageFocus {
+      from { opacity: 0; filter: blur(8px); transform: scale(1.03); }
+      to   { opacity: 1; filter: blur(0);    transform: scale(1); }
     }
-    @keyframes pulse-ring {
-      0%{transform:scale(.85);opacity:.8} 100%{transform:scale(1.5);opacity:0}
-    }
-    @keyframes grain {
-      0%,100%{transform:translate(0,0)} 10%{transform:translate(-2%,-3%)}
-      20%{transform:translate(3%,2%)} 30%{transform:translate(-1%,4%)}
-      40%{transform:translate(4%,-1%)} 50%{transform:translate(-3%,3%)}
-      60%{transform:translate(2%,-4%)} 70%{transform:translate(-4%,2%)}
-      80%{transform:translate(3%,3%)} 90%{transform:translate(-2%,-2%)}
-    }
-    .ql-anim-1{animation:fadeUp .75s cubic-bezier(.16,1,.3,1) .05s both}
-    .ql-anim-2{animation:fadeUp .75s cubic-bezier(.16,1,.3,1) .17s both}
-    .ql-anim-3{animation:fadeUp .75s cubic-bezier(.16,1,.3,1) .29s both}
-    .ql-anim-4{animation:fadeUp .75s cubic-bezier(.16,1,.3,1) .41s both}
-    .ql-anim-5{animation:fadeUp .75s cubic-bezier(.16,1,.3,1) .53s both}
+    .ql-anim-1 { animation: focusIn .55s cubic-bezier(.16,1,.3,1) .02s both; }
+    .ql-anim-2 { animation: focusIn .65s cubic-bezier(.16,1,.3,1) .10s both; }
+    .ql-anim-3 { animation: focusIn .6s  cubic-bezier(.16,1,.3,1) .20s both; }
+    .ql-anim-4 { animation: focusIn .6s  cubic-bezier(.16,1,.3,1) .30s both; }
+    .ql-anim-5 { animation: focusIn .6s  cubic-bezier(.16,1,.3,1) .38s both; }
 
-    /* ══════════════════════════════════════════════════
-       HERO — natural height mobile, full-bleed desktop
-    ══════════════════════════════════════════════════ */
     #qs-landing .ql-hero {
-      position: relative;
-      /* Mobile: height driven by content — no forced viewport fill.
-         This is the root fix for the excessive gap to screenshots.
-         Desktop gets min-height via media query below. */
       display: grid;
       grid-template-columns: 1fr;
-      align-items: stretch;
-      overflow: hidden;
+      position: relative;
       background: var(--c-bg);
-    }
-
-    /* Film-grain texture overlay */
-    #qs-landing .ql-hero::after {
-      content: '';
-      position: absolute; inset: 0; z-index: 3;
-      pointer-events: none;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
-      opacity: 0.03;
-      animation: grain 8s steps(1) infinite;
-    }
-
-    /* Left: text content */
-    #qs-landing .ql-hero-left {
-      position: relative; z-index: 2;
-      display: flex; flex-direction: column;
-      justify-content: center;
-      /* Mobile: balanced padding — nav clearance + breathing room.
-         Not 100dvh-forced. Content sits close to the top half of screen. */
-      padding: calc(var(--nav-h) + 32px) clamp(24px, 6vw, 80px) 40px;
-    }
-
-    /* Right: image panel */
-    #qs-landing .ql-hero-right {
-      display: none;
-      position: relative; overflow: hidden;
-    }
-    #qs-landing .ql-hero-right img {
-      position: absolute; inset: 0;
-      width: 100%; height: 100%;
-      object-fit: cover;
-      object-position: center 35%;
-      filter: brightness(0.88) contrast(1.05) saturate(1.1);
-    }
-    #qs-landing .ql-hero-right::before {
-      content: '';
-      position: absolute; inset: 0; z-index: 1;
-      background: linear-gradient(
-        to right,
-        var(--c-bg) 0%,
-        rgba(8,8,16,0.4) 30%,
-        transparent 100%
+      min-height: calc(100dvh - var(--nav-h));
+      overflow: visible;
+      isolation: isolate;
+      background-image: radial-gradient(
+        ellipse 60% 45% at 0% 0%,
+        rgba(99,102,241,0.07) 0%,
+        transparent 65%
       );
     }
-    #qs-landing .ql-hero-right::after {
-      content: '';
-      position: absolute; bottom: 0; left: 0; right: 0; z-index: 1;
-      height: 40%;
-      background: linear-gradient(to top, var(--c-bg), transparent);
-    }
 
-    /* Mobile: image strip top-right — smaller on mobile to not overwhelm copy */
-    #qs-landing .ql-hero-img-mobile {
+    #qs-landing .ql-hero-media {
       position: absolute;
-      top: 0; right: 0;
-      width: 48%;
-      height: 52%;
+      inset: 0;
+      z-index: 0;
       overflow: hidden;
-      z-index: 1;
+      pointer-events: none;
+      animation: imageFocus .85s cubic-bezier(.16,1,.3,1) .2s both;
     }
-    #qs-landing .ql-hero-img-mobile img {
-      width: 100%; height: 100%;
+    #qs-landing .ql-hero-media img {
+      width: 100%;
+      height: 100%;
       object-fit: cover;
-      object-position: 60% 25%;
-      filter: brightness(0.65) saturate(1.1);
+      object-position: 74% 35%;
+      transform: scale(1.03);
+      filter: brightness(0.72) contrast(0.98) saturate(0.94);
+      opacity: 0.82;
+      display: block;
     }
-    #qs-landing .ql-hero-img-mobile::before {
+    #qs-landing .ql-hero-media::before {
       content: '';
       position: absolute; inset: 0; z-index: 1;
-      background: linear-gradient(
-        to right,
-        var(--c-bg) 0%,
-        rgba(8,8,16,0.6) 35%,
-        transparent 100%
-      );
+      background:
+        linear-gradient(90deg, rgba(7,7,14,0.70) 0%, rgba(7,7,14,0.42) 34%, rgba(7,7,14,0.10) 68%, rgba(7,7,14,0.02) 100%),
+        linear-gradient(180deg, rgba(7,7,14,0.08) 0%, rgba(7,7,14,0.14) 46%, rgba(7,7,14,0.74) 100%);
+      pointer-events: none;
     }
-    #qs-landing .ql-hero-img-mobile::after {
+    #qs-landing .ql-hero-media::after {
       content: '';
-      position: absolute; bottom: 0; left: 0; right: 0; z-index: 1;
-      height: 60%;
-      background: linear-gradient(to top, var(--c-bg), transparent);
+      position: absolute; inset: 0; z-index: 2;
+      background: radial-gradient(ellipse 44% 58% at 74% 42%, rgba(99,102,241,0.10) 0%, transparent 64%);
+      pointer-events: none;
     }
 
-    /* ── Eyebrow chip ── */
-    #qs-landing .ql-live-badge {
-      display: inline-flex; align-items: center; gap: 7px;
-      background: rgba(16,185,129,0.08);
-      border: 1px solid rgba(16,185,129,0.2);
-      border-radius: 100px;
-      padding: 5px 13px 5px 10px;
-      font-size: 12px; font-weight: 600; color: var(--c-green-d);
-      margin-bottom: 22px;
-      width: fit-content;
+    #qs-landing .ql-hero,
+    #qs-landing .ql-hero-media {
+      overflow: visible !important;
     }
-    #qs-landing .ql-live-dot {
-      width: 7px; height: 7px; border-radius: 50%;
-      background: var(--c-green); flex-shrink: 0; position: relative;
-    }
-    #qs-landing .ql-live-dot::after {
-      content: '';
-      position: absolute; inset: -3px; border-radius: 50%;
-      background: rgba(16,185,129,.35);
-      animation: pulse-ring 1.8s ease-out infinite;
+    #qs-landing .ql-hero-media img {
+      transform: translate3d(0, var(--qs-hero-float-y, 0px), 0) scale(var(--qs-hero-scale, 1.03));
+      will-change: transform;
+      opacity: var(--qs-hero-opacity, 0.58);
+      transition: none;
     }
 
-    /* ── Headline ── */
-    #qs-landing .ql-h1 {
-      font-size: clamp(38px, 6.5vw, 72px);
-      font-weight: 900; line-height: 1.04;
-      letter-spacing: -2.5px;
-      color: var(--c-text);
-      margin: 0 0 18px;
-      max-width: 14ch;
+    #qs-landing .ql-hero-left {
+      position: relative;
+      z-index: 3;
+      display: flex; flex-direction: column;
+      padding: calc(var(--nav-h) + 20px) clamp(22px, 6vw, 72px) 12px; /* tighter bottom padding */
+      max-width: 760px;
     }
 
-    /*
-     * Accent word — static gradient, not animated.
-     * Animated shimmer text = the single clearest signal of a template landing page.
-     * A clean two-stop gradient reads as designed, not generated.
-     */
-    #qs-landing .ql-accent-word {
-      background: linear-gradient(115deg, #6366f1 0%, #34d399 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-
-    /* ── Subheadline ── */
-    #qs-landing .ql-sub {
-      font-size: clamp(15px, 2vw, 18px); line-height: 1.65;
+    #qs-landing .ql-hero-tag {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
       color: var(--c-muted);
-      margin: 0 0 28px;
-      max-width: 46ch;
+      margin-bottom: 13px;
     }
 
-    /* ── CTA block ── */
+    #qs-landing .ql-h1 {
+      font-size: clamp(54px, 14.5vw, 92px);
+      font-weight: 900;
+      line-height: 1.0;
+      letter-spacing: -0.035em;
+      color: var(--c-text);
+      margin: 0 0 16px;
+      text-shadow: 0 10px 40px rgba(0,0,0,.18);
+    }
+    #qs-landing .ql-h1 em {
+      font-style: italic;
+      color: rgba(240,240,246,0.68);
+      letter-spacing: -0.028em;
+    }
+
+    #qs-landing .ql-sub {
+      font-size: 15px;
+      line-height: 1.62;
+      color: var(--c-muted);
+      margin: 0 0 24px;
+      max-width: 38ch;
+      font-weight: 400;
+    }
+
     #qs-landing .ql-hero-btns {
-      display: flex; flex-wrap: wrap; gap: 12px;
-      margin-bottom: 28px;
+      display: flex;
+      margin-bottom: 14px;
     }
     #qs-landing .ql-btn-main {
-      background: var(--c-accent);
-      border: 1px solid rgba(255,255,255,0.15);
-      color: #fff; padding: 14px 28px;
-      border-radius: 10px; font-size: 15px; font-weight: 700;
-      cursor: pointer; letter-spacing: -0.2px;
-      box-shadow: 0 4px 24px rgba(99,102,241,.4), inset 0 1px 0 rgba(255,255,255,.15);
-      transition: all .18s; white-space: nowrap;
+      background: #6366f1;
+      border: 0;
+      color: #fff;
+      padding: 13px 28px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: -0.1px;
+      transition: background .15s, transform .12s;
+      font-family: inherit;
+      white-space: nowrap;
     }
-    #qs-landing .ql-btn-main:hover { background:#4f52e0; transform:translateY(-2px); box-shadow:0 8px 32px rgba(99,102,241,.5); }
-    #qs-landing .ql-btn-main:active { transform:scale(.98); }
-    #qs-landing .ql-btn-ghost-lg {
-      background: rgba(255,255,255,.05);
-      border: 1px solid rgba(255,255,255,.10);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      color: var(--c-muted);
-      padding: 14px 28px; border-radius: 10px;
-      font-size: 15px; font-weight: 600; cursor: pointer;
-      transition: all .18s; white-space: nowrap;
-    }
-    #qs-landing .ql-btn-ghost-lg:hover { color: var(--c-text); border-color: rgba(255,255,255,.22); background: rgba(255,255,255,.08); }
+    #qs-landing .ql-btn-main:hover { background: #4f52e0; transform: translateY(-1px); }
+    #qs-landing .ql-btn-main:active { transform: scale(.97); }
 
-    /* ── Trust strip ── */
-    #qs-landing .ql-social-proof {
-      display: flex; align-items: center; gap: 8px;
-      flex-wrap: wrap;
-      font-size: 12.5px; color: var(--c-dim);
-      font-weight: 500;
+    #qs-landing .ql-signin-row {
+      font-size: 13px;
+      color: var(--c-dim);
     }
-    #qs-landing .ql-dot-sep { opacity: .35; }
+    #qs-landing .ql-signin-link {
+      background: none; border: none; padding: 0;
+      color: var(--c-muted); font-size: 13px;
+      font-family: inherit; cursor: pointer;
+      text-decoration: underline;
+      text-decoration-color: rgba(240,240,246,0.2);
+      text-underline-offset: 2px;
+      transition: color .15s;
+    }
+    #qs-landing .ql-signin-link:hover { color: var(--c-text); }
 
-    /* ── DESKTOP layout override ── */
     @media (min-width: 900px) {
       #qs-landing .ql-hero {
-        grid-template-columns: 55% 45%;
         min-height: 100dvh;
       }
-      #qs-landing .ql-hero-right { display: block; }
-      #qs-landing .ql-hero-img-mobile { display: none; }
-      #qs-landing .ql-h1 { max-width: 100%; }
       #qs-landing .ql-hero-left {
-        padding-right: 40px;
+        height: 100%;
         min-height: 100dvh;
-        padding-top: calc(var(--nav-h) + 48px);
-        padding-bottom: 60px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding-top:    calc(var(--nav-h) + 40px);
+        padding-bottom: 40px; /* tighter on desktop */
+        padding-right:  48px;
+        padding-left:   clamp(48px, 6vw, 80px);
+        max-width: 760px;
       }
+      #qs-landing .ql-hero-media img {
+        object-position: center 33%;
+      }
+      #qs-landing .ql-h1 {
+        font-size: clamp(80px, 7.5vw, 118px);
+        line-height: 0.98;
+      }
+      #qs-landing .ql-sub { font-size: 16px; max-width: 42ch; }
     }
     @media (min-width: 1200px) {
-      #qs-landing .ql-hero-left {
-        padding-left: clamp(60px, 8vw, 120px);
-      }
+      #qs-landing .ql-hero-left { padding-left: clamp(72px, 7vw, 120px); }
+      #qs-landing .ql-h1 { font-size: clamp(96px, 7.5vw, 118px); }
+    }
+    @media (min-width: 1100px) {
+      #qs-landing .ql-section { max-width: 980px; }
     }
 
-    /* ── SCREENSHOTS ── */
     #qs-landing .ql-screens {
       display: flex; gap: 14px;
       overflow-x: auto; scroll-snap-type: x mandatory;
       -webkit-overflow-scrolling: touch; scrollbar-width: none;
-      /* Mobile: tighter top — content above is naturally close now */
-      padding: 24px clamp(20px,5vw,60px) 20px;
-      animation: fadeIn .9s ease .5s both;
+      padding: 8px clamp(20px,5vw,60px) 20px; /* GAP CLOSED — top padding reduced from 20px */
+      animation: fadeIn .8s ease .4s both;
     }
     @media (min-width: 900px) {
-      #qs-landing .ql-screens { padding-top: 48px; }
+      #qs-landing .ql-screens {
+        padding-top: 20px; /* GAP CLOSED — top padding reduced from 48px */
+        max-width: 1040px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+      #qs-landing .ql-screen-wrap { flex: 0 0 220px; }
+      #qs-landing .ql-screen-wrap img { width: 220px; }
     }
-    #qs-landing .ql-screens::-webkit-scrollbar{display:none}
-    #qs-landing .ql-screen-wrap{flex:0 0 200px;scroll-snap-align:center;position:relative}
-    #qs-landing .ql-screen-wrap img{
-      width:200px; border-radius:22px;
-      border:1px solid rgba(255,255,255,.08);
-      box-shadow:0 20px 50px rgba(0,0,0,.6); display:block; object-fit:cover;
+    #qs-landing .ql-screens::-webkit-scrollbar { display: none; }
+    #qs-landing .ql-screen-wrap { flex: 0 0 200px; scroll-snap-align: center; position: relative; }
+    #qs-landing .ql-screen-wrap img {
+      width: 200px; border-radius: 20px;
+      border: 1px solid rgba(255,255,255,.06);
+      box-shadow: 0 20px 48px rgba(0,0,0,.65);
+      display: block; object-fit: cover;
     }
-    #qs-landing .ql-screen-wrap:nth-child(even){margin-top:24px}
-    #qs-landing .ql-screen-caption{
-      position:absolute; bottom:-8px; left:50%; transform:translateX(-50%);
-      background:rgba(255,255,255,.07); border:1px solid var(--c-border);
-      backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
-      border-radius:8px; padding:4px 10px;
-      font-size:10px; font-weight:600; color:var(--c-muted); white-space:nowrap;
+    #qs-landing .ql-screen-wrap:nth-child(even) { margin-top: 24px; }
+    #qs-landing .ql-screen-caption {
+      position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%);
+      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.07);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      border-radius: 7px; padding: 3px 10px;
+      font-size: 10px; font-weight: 600; color: var(--c-muted); white-space: nowrap;
     }
-    #qs-landing .ql-screens-hint{
-      text-align:center; font-size:11px; color:rgba(255,255,255,.16);
-      margin-top:20px; padding-bottom:8px;
-    }
-
-    /* ── SECTIONS ── */
-    #qs-landing .ql-section{padding:80px clamp(20px,5vw,60px);max-width:860px;margin:0 auto}
-    #qs-landing .ql-divider{
-      height:1px; margin:0 clamp(20px,5vw,60px);
-      background:linear-gradient(90deg,transparent,rgba(255,255,255,.07),transparent);
-    }
-    #qs-landing .ql-eyebrow{
-      font-size:11px;font-weight:700;letter-spacing:1.4px;
-      text-transform:uppercase;color:var(--c-accent);margin-bottom:14px;
-    }
-    #qs-landing .ql-h2{font-size:clamp(24px,4vw,38px);font-weight:800;line-height:1.18;letter-spacing:-1px;color:#fff;margin:0 0 12px}
-    #qs-landing .ql-h2-sub{font-size:15px;color:var(--c-muted);line-height:1.7;margin:0 0 40px;max-width:52ch}
-
-    /* ── FEATURE CARDS ── */
-    #qs-landing .ql-feat-grid{display:grid;grid-template-columns:1fr;gap:12px}
-    @media(min-width:700px){#qs-landing .ql-feat-grid{grid-template-columns:repeat(3,1fr)}}
-    #qs-landing .ql-feat{
-      background:rgba(255,255,255,.02);border:1px solid var(--c-border);
-      border-radius:16px;padding:24px 20px;
-      transition:border-color .3s,background .3s,transform .2s;
-    }
-    #qs-landing .ql-feat:hover{border-color:rgba(99,102,241,.25);background:rgba(99,102,241,.03);transform:translateY(-2px)}
-    #qs-landing .ql-feat-row{display:flex;align-items:flex-start;gap:14px}
-    #qs-landing .ql-feat-icon-wrap{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
-    #qs-landing .ql-fi-indigo{background:rgba(99,102,241,.12)}
-    #qs-landing .ql-fi-emerald{background:rgba(16,185,129,.12)}
-    #qs-landing .ql-fi-amber{background:rgba(245,158,11,.12)}
-    #qs-landing .ql-feat-text-title{font-size:14.5px;font-weight:700;color:#fff;margin-bottom:6px;letter-spacing:-.2px}
-    #qs-landing .ql-feat-text-body{font-size:13px;color:rgba(255,255,255,.42);line-height:1.65}
-    #qs-landing .ql-feat-tag{display:inline-flex;align-items:center;gap:4px;margin-top:10px;font-size:10.5px;font-weight:600;color:rgba(255,255,255,.28);border:1px solid rgba(255,255,255,.07);border-radius:6px;padding:3px 9px}
-
-    /* ── TRUST ── */
-    #qs-landing .ql-trust{background:rgba(16,185,129,.04);border:1px solid rgba(16,185,129,.12);border-radius:20px;padding:28px 24px;margin-bottom:16px}
-    #qs-landing .ql-trust-h{font-size:20px;font-weight:800;color:#fff;letter-spacing:-.5px;margin-bottom:10px;line-height:1.25}
-    #qs-landing .ql-trust-p{font-size:14px;color:var(--c-muted);line-height:1.7;margin-bottom:22px}
-    #qs-landing .ql-trust-list{display:flex;flex-direction:column;gap:10px}
-    #qs-landing .ql-trust-row{display:flex;align-items:flex-start;gap:10px}
-    #qs-landing .ql-check{width:18px;height:18px;background:rgba(16,185,129,.12);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;font-size:10px;color:var(--c-green)}
-    #qs-landing .ql-trust-txt{font-size:13.5px;color:rgba(255,255,255,.55);line-height:1.55}
-    #qs-landing .ql-trust-txt strong{color:#fff;font-weight:600}
-
-    /* Stats */
-    #qs-landing .ql-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    @media(min-width:700px){#qs-landing .ql-stats{grid-template-columns:repeat(4,1fr)}}
-    #qs-landing .ql-stat{background:rgba(255,255,255,.02);border:1px solid var(--c-border);border-radius:14px;padding:18px 16px;text-align:center}
-    #qs-landing .ql-stat-n{font-size:26px;font-weight:800;letter-spacing:-1px;line-height:1;margin-bottom:5px}
-    #qs-landing .ql-stat-d{font-size:11.5px;color:var(--c-dim);line-height:1.5}
-
-    /* ── PRICING ── */
-    #qs-landing .ql-plans{display:grid;grid-template-columns:1fr;gap:14px}
-    @media(min-width:640px){#qs-landing .ql-plans{grid-template-columns:1fr 1fr}}
-    #qs-landing .ql-plan{border-radius:18px;padding:28px 24px}
-    #qs-landing .ql-plan-free{background:rgba(255,255,255,.02);border:1px solid var(--c-border)}
-    #qs-landing .ql-plan-pro{background:linear-gradient(145deg,rgba(99,102,241,.1),rgba(167,139,250,.04));border:1.5px solid rgba(99,102,241,.3);position:relative;overflow:hidden}
-    #qs-landing .ql-plan-pro::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#6366f1,#a78bfa,#34d399)}
-    #qs-landing .ql-pill{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:3px 10px;border-radius:100px;margin-bottom:14px}
-    #qs-landing .ql-pill-free{background:rgba(255,255,255,.05);color:var(--c-dim)}
-    #qs-landing .ql-pill-pro{background:rgba(99,102,241,.15);color:#a5b4fc}
-    #qs-landing .ql-plan-name{font-size:20px;font-weight:800;color:#fff;letter-spacing:-.5px;margin-bottom:4px}
-    #qs-landing .ql-plan-price{font-size:34px;font-weight:800;color:#fff;letter-spacing:-1.5px;line-height:1;margin-bottom:4px}
-    #qs-landing .ql-plan-price span{font-size:13px;font-weight:500;color:var(--c-dim);letter-spacing:0}
-    #qs-landing .ql-plan-sub{font-size:13px;color:var(--c-dim);margin-bottom:22px;line-height:1.55}
-    #qs-landing .ql-plan-feats{display:flex;flex-direction:column;gap:9px;margin-bottom:24px}
-    #qs-landing .ql-plan-feat{display:flex;align-items:center;gap:10px;font-size:13px;color:rgba(255,255,255,.62)}
-    #qs-landing .ql-pf-emerald{color:var(--c-green);flex-shrink:0;font-size:12px}
-    #qs-landing .ql-pf-indigo{color:#818cf8;flex-shrink:0;font-size:12px}
-    #qs-landing .ql-plan-btn{width:100%;padding:13px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;border:0;transition:all .18s}
-    #qs-landing .ql-plan-btn-free{background:rgba(255,255,255,.06);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.09)}
-    #qs-landing .ql-plan-btn-free:hover{background:rgba(255,255,255,.1);color:#fff}
-    #qs-landing .ql-plan-btn-pro{background:var(--c-accent);color:#fff;box-shadow:0 4px 20px rgba(99,102,241,.3)}
-    #qs-landing .ql-plan-btn-pro:hover{background:#4f52e0;box-shadow:0 6px 28px rgba(99,102,241,.42);transform:translateY(-1px)}
-
-    /* ── FINAL CTA ── */
-    #qs-landing .ql-final{text-align:center;padding:80px clamp(20px,5vw,60px) 100px;max-width:700px;margin:0 auto;position:relative;overflow:hidden}
-    #qs-landing .ql-final-orb{position:absolute;border-radius:50%;filter:blur(80px);pointer-events:none;width:400px;height:400px;background:radial-gradient(circle,rgba(99,102,241,.18),transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%)}
-    #qs-landing .ql-final-inner{position:relative;z-index:1}
-    #qs-landing .ql-final-h{font-size:clamp(26px,4.5vw,42px);font-weight:800;color:#fff;letter-spacing:-1.2px;line-height:1.15;margin-bottom:14px}
-    #qs-landing .ql-final-sub{font-size:16px;color:var(--c-muted);line-height:1.65;margin-bottom:36px}
-    #qs-landing .ql-final-btn{background:var(--c-accent);border:0;color:#fff;padding:16px 40px;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 4px 28px rgba(99,102,241,.38);letter-spacing:-.2px;display:inline-block;transition:all .2s}
-    #qs-landing .ql-final-btn:hover{background:#4f52e0;transform:translateY(-2px);box-shadow:0 8px 36px rgba(99,102,241,.5)}
-    #qs-landing .ql-final-note{margin-top:14px;font-size:12px;color:var(--c-dim)}
-
-    /* ── FOOTER ── */
-    #qs-landing .ql-footer{border-top:1px solid var(--c-border);padding:24px clamp(20px,5vw,60px);text-align:center;font-size:12px;color:rgba(255,255,255,.15)}
-
-    /* ── SCROLL REVEAL ── */
-    .ql-reveal{opacity:0;transform:translateY(22px);transition:opacity .6s cubic-bezier(.16,1,.3,1),transform .6s cubic-bezier(.16,1,.3,1)}
-    .ql-reveal.ql-visible{opacity:1;transform:translateY(0)}
-    .ql-reveal-delay-1{transition-delay:.08s}
-    .ql-reveal-delay-2{transition-delay:.16s}
-    .ql-reveal-delay-3{transition-delay:.24s}
-
-    /* ── HOW IT WORKS ── */
-    #qs-landing .ql-steps{display:flex;flex-direction:column;gap:0}
-    #qs-landing .ql-step{
-      display:flex;gap:20px;align-items:flex-start;
-      padding:24px 0;
-    }
-    #qs-landing .ql-step-num{
-      font-size:11px;font-weight:800;letter-spacing:1.5px;
-      color:var(--c-accent);opacity:.7;
-      background:rgba(99,102,241,.08);
-      border:1px solid rgba(99,102,241,.15);
-      border-radius:8px;padding:6px 10px;
-      flex-shrink:0;margin-top:2px;
-      min-width:38px;text-align:center;
-    }
-    #qs-landing .ql-step-body{flex:1}
-    #qs-landing .ql-step-title{
-      font-size:16px;font-weight:700;color:#fff;
-      letter-spacing:-.3px;margin-bottom:8px;
-    }
-    #qs-landing .ql-step-desc{
-      font-size:14px;color:var(--c-muted);line-height:1.75;
-      margin:0 0 10px;
-    }
-    #qs-landing .ql-step-tip{
-      font-size:12px;color:rgba(255,255,255,.3);
-      line-height:1.55;font-style:italic;
-    }
-    #qs-landing .ql-step-connector{
-      width:1px;height:24px;
-      background:linear-gradient(to bottom,rgba(99,102,241,.25),transparent);
-      margin-left:28px;
+    #qs-landing .ql-screens-hint {
+      text-align: center; font-size: 11px; color: rgba(255,255,255,.14);
+      margin-top: 20px; padding-bottom: 8px;
     }
 
-    /* ── FRICTION REDUCER ── */
-    #qs-landing .ql-final-friction{
-      font-size:13px;color:rgba(255,255,255,.38);
-      margin:10px 0 4px;font-style:italic;
+    #qs-landing .ql-section { padding: 80px clamp(20px,5vw,60px); max-width: 860px; margin: 0 auto; }
+    #qs-landing .ql-divider {
+      height: 1px; margin: 0 clamp(20px,5vw,60px);
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.06), transparent);
     }
-  </style>
-</head>
-<body class="qs-auth-pending">
+    #qs-landing .ql-eyebrow {
+      font-size: 10.5px; font-weight: 700; letter-spacing: 1.4px;
+      text-transform: uppercase; color: var(--c-accent); margin-bottom: 14px;
+    }
+    #qs-landing .ql-h2 { font-size: clamp(24px,4vw,38px); font-weight: 800; line-height: 1.18; letter-spacing: -0.8px; color: #fff; margin: 0 0 12px; }
+    #qs-landing .ql-h2-sub { font-size: 15px; color: var(--c-muted); line-height: 1.7; margin: 0 0 40px; max-width: 52ch; }
 
-  <script>
-    /* Runs at <body> open — DOM not yet parsed, only <head> available.
-       We rely purely on CSS (above) for hiding loginScreen.
-       This script only sets the body class so CSS rules activate immediately. */
+    #qs-landing .ql-feat-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    @media (min-width: 700px) { #qs-landing .ql-feat-grid { grid-template-columns: repeat(3,1fr); } }
+    #qs-landing .ql-feat { background: rgba(255,255,255,.02); border: 1px solid var(--c-border); border-radius: 14px; padding: 22px 18px; transition: border-color .25s, background .25s, transform .18s; }
+    #qs-landing .ql-feat:hover { border-color: rgba(99,102,241,.22); background: rgba(99,102,241,.025); transform: translateY(-2px); }
+    #qs-landing .ql-feat-row { display: flex; align-items: flex-start; gap: 14px; }
+    #qs-landing .ql-feat-icon-wrap { width: 38px; height: 38px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
+    #qs-landing .ql-fi-indigo { background: rgba(99,102,241,.10); }
+    #qs-landing .ql-fi-emerald { background: rgba(16,185,129,.10); }
+    #qs-landing .ql-fi-amber { background: rgba(245,158,11,.10); }
+    #qs-landing .ql-feat-text-title { font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 6px; letter-spacing: -.15px; }
+    #qs-landing .ql-feat-text-body { font-size: 13px; color: rgba(255,255,255,.38); line-height: 1.65; }
+    #qs-landing .ql-feat-tag { display: inline-flex; align-items: center; gap: 4px; margin-top: 10px; font-size: 10px; font-weight: 600; color: rgba(255,255,255,.25); border: 1px solid rgba(255,255,255,.06); border-radius: 5px; padding: 3px 8px; }
+
+    #qs-landing .ql-trust { background: rgba(16,185,129,.035); border: 1px solid rgba(16,185,129,.10); border-radius: 18px; padding: 28px 24px; margin-bottom: 16px; }
+    #qs-landing .ql-trust-h { font-size: 20px; font-weight: 800; color: #fff; letter-spacing: -.5px; margin-bottom: 10px; line-height: 1.25; }
+    #qs-landing .ql-trust-p { font-size: 14px; color: var(--c-muted); line-height: 1.7; margin-bottom: 22px; }
+    #qs-landing .ql-trust-list { display: flex; flex-direction: column; gap: 10px; }
+    #qs-landing .ql-trust-row { display: flex; align-items: flex-start; gap: 10px; }
+    #qs-landing .ql-check { width: 18px; height: 18px; background: rgba(16,185,129,.10); border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; font-size: 10px; color: var(--c-green); }
+    #qs-landing .ql-trust-txt { font-size: 13.5px; color: rgba(255,255,255,.52); line-height: 1.55; }
+    #qs-landing .ql-trust-txt strong { color: #fff; font-weight: 600; }
+
+    #qs-landing .ql-plans { display: grid; grid-template-columns: 1fr; gap: 14px; }
+    @media (min-width: 640px) { #qs-landing .ql-plans { grid-template-columns: 1fr 1fr; } }
+    #qs-landing .ql-plan { border-radius: 16px; padding: 28px 24px; }
+    #qs-landing .ql-plan-free { background: rgba(255,255,255,.02); border: 1px solid var(--c-border); }
+    #qs-landing .ql-plan-pro { background: linear-gradient(145deg, rgba(99,102,241,.08), rgba(167,139,250,.03)); border: 1.5px solid rgba(99,102,241,.25); position: relative; overflow: hidden; }
+    #qs-landing .ql-plan-pro::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, #6366f1, #a78bfa, #34d399); }
+    #qs-landing .ql-pill { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; padding: 3px 10px; border-radius: 100px; margin-bottom: 14px; }
+    #qs-landing .ql-pill-free { background: rgba(255,255,255,.04); color: var(--c-dim); }
+    #qs-landing .ql-pill-pro { background: rgba(99,102,241,.13); color: #a5b4fc; }
+    #qs-landing .ql-plan-name { font-size: 19px; font-weight: 800; color: #fff; letter-spacing: -.4px; margin-bottom: 4px; }
+    #qs-landing .ql-plan-price { font-size: 32px; font-weight: 800; color: #fff; letter-spacing: -1.5px; line-height: 1; margin-bottom: 4px; }
+    #qs-landing .ql-plan-price span { font-size: 13px; font-weight: 500; color: var(--c-dim); letter-spacing: 0; }
+    #qs-landing .ql-plan-sub { font-size: 13px; color: var(--c-dim); margin-bottom: 22px; line-height: 1.55; }
+    #qs-landing .ql-plan-feats { display: flex; flex-direction: column; gap: 9px; margin-bottom: 24px; }
+    #qs-landing .ql-plan-feat { display: flex; align-items: center; gap: 10px; font-size: 13px; color: rgba(255,255,255,.60); }
+    #qs-landing .ql-pf-emerald { color: var(--c-green); flex-shrink: 0; font-size: 12px; }
+    #qs-landing .ql-pf-indigo { color: #818cf8; flex-shrink: 0; font-size: 12px; }
+    #qs-landing .ql-plan-btn { width: 100%; padding: 12px; border-radius: 9px; font-size: 14px; font-weight: 600; cursor: pointer; border: 0; transition: all .16s; font-family: inherit; }
+    #qs-landing .ql-plan-btn-free { background: rgba(255,255,255,.05); color: rgba(255,255,255,.65); border: 1px solid rgba(255,255,255,.08); }
+    #qs-landing .ql-plan-btn-free:hover { background: rgba(255,255,255,.09); color: #fff; }
+    #qs-landing .ql-plan-btn-pro { background: var(--c-accent); color: #fff; box-shadow: 0 4px 18px rgba(99,102,241,.28); }
+    #qs-landing .ql-plan-btn-pro:hover { background: #4f52e0; box-shadow: 0 6px 26px rgba(99,102,241,.4); transform: translateY(-1px); }
+
+    #qs-landing .ql-final { text-align: center; padding: 80px clamp(20px,5vw,60px) 100px; max-width: 700px; margin: 0 auto; }
+    #qs-landing .ql-final-inner { position: relative; z-index: 1; }
+    #qs-landing .ql-final-h { font-size: clamp(28px,4.5vw,44px); font-weight: 800; color: #fff; letter-spacing: -1.2px; line-height: 1.12; margin-bottom: 14px; }
+    #qs-landing .ql-final-sub { font-size: 15px; color: var(--c-muted); line-height: 1.65; margin-bottom: 36px; }
+    #qs-landing .ql-final-btn { background: var(--c-accent); border: 0; color: #fff; padding: 15px 38px; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; letter-spacing: -.15px; display: inline-block; transition: all .18s; font-family: inherit; }
+    #qs-landing .ql-final-btn:hover { background: #4f52e0; transform: translateY(-2px); }
+    #qs-landing .ql-final-note { margin-top: 14px; font-size: 12px; color: var(--c-dim); }
+
+    #qs-landing .ql-footer { border-top: 1px solid var(--c-border); padding: 24px clamp(20px,5vw,60px); text-align: center; font-size: 12px; color: rgba(255,255,255,.13); }
+
+    .ql-reveal {
+      opacity: 0;
+      transform: translateY(10px);
+      filter: blur(3px);
+      transition:
+        opacity   .5s cubic-bezier(.16,1,.3,1),
+        transform .5s cubic-bezier(.16,1,.3,1),
+        filter    .5s cubic-bezier(.16,1,.3,1);
+    }
+    .ql-reveal.ql-visible { opacity: 1; transform: translateY(0); filter: blur(0); }
+    .ql-reveal-delay-1 { transition-delay: .07s; }
+    .ql-reveal-delay-2 { transition-delay: .14s; }
+    .ql-reveal-delay-3 { transition-delay: .21s; }
+
+    #qs-landing .ql-steps { display: flex; flex-direction: column; gap: 0; }
+    #qs-landing .ql-step { display: flex; gap: 20px; align-items: flex-start; padding: 24px 0; }
+    #qs-landing .ql-step-num {
+      font-size: 10.5px; font-weight: 800; letter-spacing: 1.5px;
+      color: var(--c-accent); opacity: .65;
+      background: rgba(99,102,241,.07);
+      border: 1px solid rgba(99,102,241,.12);
+      border-radius: 7px; padding: 5px 9px;
+      flex-shrink: 0; margin-top: 2px; min-width: 36px; text-align: center;
+    }
+    #qs-landing .ql-step-body { flex: 1; }
+    #qs-landing .ql-step-title { font-size: 15px; font-weight: 700; color: #fff; letter-spacing: -.25px; margin-bottom: 7px; }
+    #qs-landing .ql-step-desc { font-size: 13.5px; color: var(--c-muted); line-height: 1.75; margin: 0 0 10px; }
+    #qs-landing .ql-step-tip { font-size: 12px; color: rgba(255,255,255,.28); line-height: 1.55; font-style: italic; }
+    #qs-landing .ql-step-connector { width: 1px; height: 20px; background: linear-gradient(to bottom, rgba(99,102,241,.2), transparent); margin-left: 27px; }
+
+    #qs-landing .ql-final-friction { font-size: 13px; color: rgba(255,255,255,.35); margin: 10px 0 4px; font-style: italic; }
+  </style></head>
+<body class="qs-auth-pending">  <script>
     (function() {
       try {
         var _p = new URLSearchParams(window.location.search);
         var _isCatalog = _p.has('store') || _p.has('token');
         if (_isCatalog) {
-          // Catalog URL — never show app chrome, even if user is logged in.
-          // catalog.js takes over completely.
           document.body.classList.add('qs-cat-early');
         } else {
-  document.body.classList.add('qs-auth-pending');
-  if (localStorage.getItem('qs_session_active') === 'true') {
-    document.body.classList.add('mode-app');
-  }
-}
+          document.body.classList.add('qs-auth-pending');
+          if (localStorage.getItem('qs_session_active') === 'true') {
+            document.body.classList.add('mode-app');
+          }
+        }
       } catch(e) { console.warn('QuickShop: storage check failed', e); }
     })();
-  </script>
-
-  <!-- ═══════════════════════════════════════════════════
-       LANDING — hidden automatically for logged-in users
-  ═══════════════════════════════════════════════════ -->
-  <div id="qs-landing">
-
-    <!-- Sticky nav -->
+  </script>  <div id="qs-landing">
     <nav class="ql-nav" aria-label="QuickShop">
       <div class="ql-brand">
         <span class="ql-brand-icon">⚡</span>
@@ -636,358 +520,294 @@
         <button class="ql-nav-signin" id="qs-nav-in">Sign In</button>
         <button class="ql-nav-signup" id="qs-nav-up">Sign Up</button>
       </div>
-    </nav>
+    </nav><div class="ql-page">
+  <section class="ql-hero" aria-label="Hero">
+    <div class="ql-hero-media" aria-hidden="true">
+      <img src="hero-bg.png" alt="" loading="eager">
+    </div>
 
-    <div class="ql-page">
+    <div class="ql-hero-left">
+      <div class="ql-hero-tag ql-anim-1">Inventory · Sales · Notes</div>
 
-      <!-- ── HERO ─────────────────────────────────────────── -->
-      <section class="ql-hero" aria-label="Hero">
+      <h1 class="ql-h1 ql-anim-2">
+        Your shop.<br>
+        <em>Your profits.</em><br>
+        In your pocket.
+      </h1>
 
-        <!-- Mobile image strip (top-right bleed) -->
-        <div class="ql-hero-img-mobile" aria-hidden="true">
-          <img src="hero-bg.png" alt="" loading="eager">
-        </div>
+      <p class="ql-sub ql-anim-3">
+        Track inventory, record sales, and see where you stand —
+        even without internet.
+      </p>
 
-        <!-- LEFT: copy -->
-        <div class="ql-hero-left">
+      <div class="ql-hero-btns ql-anim-4">
+        <button class="ql-btn-main" id="qs-hero-up">Start for free</button>
+      </div>
 
-          <div class="ql-live-badge ql-anim-1">
-            <span class="ql-live-dot"></span>
-            Works offline · No setup needed
-          </div>
+      <div class="ql-signin-row ql-anim-5">
+        Already have an account?
+        <button class="ql-signin-link" id="qs-hero-in">Sign in</button>
+      </div>
+    </div>
+  </section>
 
-          <h1 class="ql-h1 ql-anim-2">
-            Your shop.<br>
-            <span class="ql-accent-word">Your profits.</span><br>
-            In your pocket.
-          </h1>
+  <div class="ql-screens" aria-label="App screenshots" role="img">
+    <div class="ql-screen-wrap">
+      <img src="home.png" alt="QuickShop home screen" loading="lazy" />
+      <div class="ql-screen-caption">Home</div>
+    </div>
+    <div class="ql-screen-wrap">
+      <img src="inventory.png" alt="Inventory view" loading="lazy" />
+      <div class="ql-screen-caption">Inventory</div>
+    </div>
+    <div class="ql-screen-wrap">
+      <img src="store.png" alt="AI Insights" loading="lazy" />
+      <div class="ql-screen-caption">Store front</div>
+    </div>
+    <div class="ql-screen-wrap">
+      <img src="store-front.png" alt="Reports" loading="lazy" />
+      <div class="ql-screen-caption">Store front</div>
+    </div>
+    <div class="ql-screen-wrap">
+      <img src="reports.png" alt="Reports" loading="lazy" />
+      <div class="ql-screen-caption">Reports</div>
+    </div>
+  </div>
+  <p class="ql-screens-hint">← swipe to explore →</p>
 
-          <p class="ql-sub ql-anim-3">
-            Track inventory, record sales, and see exactly where you stand —
-            even without internet. Built for traders who work in the real world.
-          </p>
+  <div class="ql-divider" style="margin-top:48px;"></div>
 
-          <div class="ql-hero-btns ql-anim-4">
-            <button class="ql-btn-main" id="qs-hero-up">Create Free Account</button>
-            <button class="ql-btn-ghost-lg" id="qs-hero-in">Sign In</button>
-          </div>
+  <section class="ql-section" aria-label="How it works">
+    <div class="ql-eyebrow ql-reveal">How it works</div>
+    <h2 class="ql-h2 ql-reveal ql-reveal-delay-1">From first product to first sale in under 5 minutes.</h2>
+    <p class="ql-h2-sub ql-reveal ql-reveal-delay-2">No manual. No tutorial. Just three steps and you're running.</p>
 
-          <div class="ql-social-proof ql-anim-5">
-            <span>No credit card</span>
-            <span class="ql-dot-sep">·</span>
-            <span>Installs like an app</span>
-            <span class="ql-dot-sep">·</span>
-            <span>Works on any phone</span>
-          </div>
-
-        </div>
-
-        <!-- RIGHT: full-bleed image (desktop only) -->
-        <div class="ql-hero-right" aria-hidden="true">
-          <img src="hero-bg.png" alt="Two entrepreneurs managing their business with QuickShop" loading="eager">
-        </div>
-
-      </section>
-
-      <!-- ── SCREENSHOTS ──────────────────────────────────── -->
-      <div class="ql-screens" aria-label="App screenshots" role="img">
-        <div class="ql-screen-wrap">
-          <img src="home.png" alt="QuickShop home screen" loading="lazy" />
-          <div class="ql-screen-caption">Home</div>
-        </div>
-        <div class="ql-screen-wrap">
-          <img src="inventory.png" alt="Inventory view" loading="lazy" />
-          <div class="ql-screen-caption">Inventory</div>
-        </div>
-        <div class="ql-screen-wrap">
-          <img src="store.png" alt="AI Insights" loading="lazy" />
-          <div class="ql-screen-caption">Store front</div>
-        </div>
-        <div class="ql-screen-wrap">
-          <img src="store-front.png" alt="Reports" loading="lazy" />
-          <div class="ql-screen-caption">Store front</div>
-        </div>
-        <div class="ql-screen-wrap">
-          <img src="reports.png" alt="Reports" loading="lazy" />
-          <div class="ql-screen-caption">Reports</div>
+    <div class="ql-steps">
+      <div class="ql-step ql-reveal ql-reveal-delay-1">
+        <div class="ql-step-num">01</div>
+        <div class="ql-step-body">
+          <div class="ql-step-title">Add your products</div>
+          <p class="ql-step-desc">Name, price, quantity. Add a photo if you want. Scan the barcode or type it in. Each product takes about 30 seconds. When you're done, your full inventory is live and searchable.</p>
+          <div class="ql-step-tip">💡 You can import a CSV if you already have a product list</div>
         </div>
       </div>
-      <p class="ql-screens-hint">← swipe to explore →</p>
 
-      <div class="ql-divider" style="margin-top:48px;"></div>
+      <div class="ql-step-connector" aria-hidden="true"></div>
 
-      <!-- ── HOW IT WORKS ─────────────────────────────────── -->
-      <section class="ql-section" aria-label="How it works">
-        <div class="ql-eyebrow ql-reveal">How it works</div>
-        <h2 class="ql-h2 ql-reveal ql-reveal-delay-1">From first product to first sale in under 5 minutes.</h2>
-        <p class="ql-h2-sub ql-reveal ql-reveal-delay-2">No manual. No tutorial. Just three steps and you're running.</p>
-
-        <div class="ql-steps">
-
-          <div class="ql-step ql-reveal ql-reveal-delay-1">
-            <div class="ql-step-num">01</div>
-            <div class="ql-step-body">
-              <div class="ql-step-title">Add your products</div>
-              <p class="ql-step-desc">Name, price, quantity. Add a photo if you want. Scan the barcode or type it in. Each product takes about 30 seconds. When you're done, your full inventory is live and searchable.</p>
-              <div class="ql-step-tip">💡 You can import a CSV if you already have a product list</div>
-            </div>
-          </div>
-
-          <div class="ql-step-connector" aria-hidden="true"></div>
-
-          <div class="ql-step ql-reveal ql-reveal-delay-2">
-            <div class="ql-step-num">02</div>
-            <div class="ql-step-body">
-              <div class="ql-step-title">Record sales as they happen</div>
-              <p class="ql-step-desc">Tap a product, enter how many you sold, confirm. Stock drops automatically. Revenue and profit update in real time. Works the same whether you're online or not — everything syncs when you reconnect.</p>
-              <div class="ql-step-tip">💡 Scan barcodes at checkout for even faster recording</div>
-            </div>
-          </div>
-
-          <div class="ql-step-connector" aria-hidden="true"></div>
-
-          <div class="ql-step ql-reveal ql-reveal-delay-3">
-            <div class="ql-step-num">03</div>
-            <div class="ql-step-body">
-              <div class="ql-step-title">Share your catalog on WhatsApp</div>
-              <p class="ql-step-desc">Go to Settings → Share Catalog. Copy the link. Paste it anywhere — WhatsApp, Instagram, a group chat. Customers tap the link, see your full product list with photos and prices, and message you directly to order. No app download. No account needed on their end.</p>
-              <div class="ql-step-tip">💡 Your catalog updates automatically when you add or edit products</div>
-            </div>
-          </div>
-
+      <div class="ql-step ql-reveal ql-reveal-delay-2">
+        <div class="ql-step-num">02</div>
+        <div class="ql-step-body">
+          <div class="ql-step-title">Record sales as they happen</div>
+          <p class="ql-step-desc">Tap a product, enter how many you sold, confirm. Stock drops automatically. Revenue and profit update in real time. Works the same whether you're online or not — everything syncs when you reconnect.</p>
+          <div class="ql-step-tip">💡 Scan barcodes at checkout for even faster recording</div>
         </div>
-      </section>
+      </div>
 
-      <div class="ql-divider"></div>
+      <div class="ql-step-connector" aria-hidden="true"></div>
 
-      <section class="ql-section" aria-label="Features">
-        <div class="ql-eyebrow ql-reveal">What you get</div>
-        <h2 class="ql-h2 ql-reveal ql-reveal-delay-1">Three things that make a real difference every trading day.</h2>
+      <div class="ql-step ql-reveal ql-reveal-delay-3">
+        <div class="ql-step-num">03</div>
+        <div class="ql-step-body">
+          <div class="ql-step-title">Share your catalog on WhatsApp</div>
+          <p class="ql-step-desc">Go to Settings → Share Catalog. Copy the link. Paste it anywhere — WhatsApp, Instagram, a group chat. Customers tap the link, see your full product list with photos and prices, and message you directly to order. No app download. No account needed on their end.</p>
+          <div class="ql-step-tip">💡 Your catalog updates automatically when you add or edit products</div>
+        </div>
+      </div>
+    </div>
+  </section>
 
-        <div class="ql-feat-grid">
-          <div class="ql-feat ql-reveal ql-reveal-delay-1">
-            <div class="ql-feat-row">
-              <div class="ql-feat-icon-wrap ql-fi-indigo">📶</div>
-              <div>
-                <div class="ql-feat-text-title">Works without internet</div>
-                <p class="ql-feat-text-body">Sales and stock updates queue locally when you're offline and sync the moment you reconnect. Nothing lost. No manual work.</p>
-                <div class="ql-feat-tag">✓&nbsp; Offline queue + auto-sync</div>
-              </div>
-            </div>
-          </div>
-          <div class="ql-feat ql-reveal ql-reveal-delay-2">
-            <div class="ql-feat-row">
-              <div class="ql-feat-icon-wrap ql-fi-emerald">💬</div>
-              <div>
-                <div class="ql-feat-text-title">Share catalog via WhatsApp</div>
-                <p class="ql-feat-text-body">One tap creates a live link to your products. Customers browse and message you directly. No website. No middleman.</p>
-                <div class="ql-feat-tag">✓&nbsp; Live link · Always up to date</div>
-              </div>
-            </div>
-          </div>
-          <div class="ql-feat ql-reveal ql-reveal-delay-3">
-            <div class="ql-feat-row">
-              <div class="ql-feat-icon-wrap ql-fi-amber">📊</div>
-              <div>
-                <div class="ql-feat-text-title">Insights that actually help</div>
-                <p class="ql-feat-text-body">Know what's running low before it runs out. See your best earners. Spot idle stock. Real numbers, plain language — no jargon.</p>
-                <div class="ql-feat-tag">✓&nbsp; Restock alerts · Profit · Dead stock</div>
-              </div>
-            </div>
+  <div class="ql-divider"></div>
+
+  <section class="ql-section" aria-label="Features">
+    <div class="ql-eyebrow ql-reveal">What you get</div>
+    <h2 class="ql-h2 ql-reveal ql-reveal-delay-1">Three things that make a real difference every trading day.</h2>
+
+    <div class="ql-feat-grid">
+      <div class="ql-feat ql-reveal ql-reveal-delay-1">
+        <div class="ql-feat-row">
+          <div class="ql-feat-icon-wrap ql-fi-indigo">📶</div>
+          <div>
+            <div class="ql-feat-text-title">Works without internet</div>
+            <p class="ql-feat-text-body">Sales and stock updates queue locally when you're offline and sync the moment you reconnect. Nothing lost. No manual work.</p>
+            <div class="ql-feat-tag">✓&nbsp; Offline queue + auto-sync</div>
           </div>
         </div>
-      </section>
-
-      <div class="ql-divider"></div>
-
-      <!-- ── TRUST ────────────────────────────────────────── -->
-      <section class="ql-section" aria-label="Why QuickShop">
-        <div class="ql-trust ql-reveal">
-          <div class="ql-trust-h">Built for real-world market conditions</div>
-          <p class="ql-trust-p">Most apps assume stable internet, a laptop, and a tech team. QuickShop assumes you don't have any of that — and works perfectly anyway.</p>
-          <div class="ql-trust-list">
-            <div class="ql-trust-row">
-              <div class="ql-check">✓</div>
-              <div class="ql-trust-txt"><strong>No internet? No problem.</strong> Everything queues locally and syncs when you reconnect. Zero data loss.</div>
-            </div>
-            <div class="ql-trust-row">
-              <div class="ql-check">✓</div>
-              <div class="ql-trust-txt"><strong>One device, full control.</strong> Inventory, sales history, and reports — all on your phone.</div>
-            </div>
-            <div class="ql-trust-row">
-              <div class="ql-check">✓</div>
-              <div class="ql-trust-txt"><strong>No training needed.</strong> If you can use WhatsApp, you can use QuickShop. Open and go.</div>
-            </div>
-            <div class="ql-trust-row">
-              <div class="ql-check">✓</div>
-              <div class="ql-trust-txt"><strong>Your data stays yours.</strong> Stored securely under your own account. You own it, always.</div>
-            </div>
+      </div>
+      <div class="ql-feat ql-reveal ql-reveal-delay-2">
+        <div class="ql-feat-row">
+          <div class="ql-feat-icon-wrap ql-fi-emerald">💬</div>
+          <div>
+            <div class="ql-feat-text-title">Share catalog via WhatsApp</div>
+            <p class="ql-feat-text-body">One tap creates a live link to your products. Customers browse and message you directly. No website. No middleman.</p>
+            <div class="ql-feat-tag">✓&nbsp; Live link · Always up to date</div>
           </div>
         </div>
-      </section>
-
-      <div class="ql-divider"></div>
-
-      <!-- ── PRICING ──────────────────────────────────────── -->
-      <section class="ql-section" aria-label="Pricing">
-        <div class="ql-eyebrow ql-reveal">Pricing</div>
-        <h2 class="ql-h2 ql-reveal ql-reveal-delay-1">Start free. Upgrade when ready.</h2>
-        <p class="ql-h2-sub ql-reveal ql-reveal-delay-2">No credit card. No trial. The free plan is free forever.</p>
-
-        <div class="ql-plans">
-          <div class="ql-plan ql-plan-free ql-reveal ql-reveal-delay-1">
-            <div class="ql-pill ql-pill-free">Free forever</div>
-            <div class="ql-plan-name">Starter</div>
-            <div class="ql-plan-price">₦0 <span>/ month</span></div>
-            <p class="ql-plan-sub">Everything you need to run a solo operation from day one.</p>
-            <div class="ql-plan-feats">
-              <div class="ql-plan-feat"><span class="ql-pf-emerald">✓</span>Unlimited products</div>
-              <div class="ql-plan-feat"><span class="ql-pf-emerald">✓</span>Sales recording &amp; profit tracking</div>
-              <div class="ql-plan-feat"><span class="ql-pf-emerald">✓</span>Offline mode + auto-sync</div>
-              <div class="ql-plan-feat"><span class="ql-pf-emerald">✓</span>WhatsApp catalog sharing</div>
-              <div class="ql-plan-feat"><span class="ql-pf-emerald">✓</span>Notes &amp; activity log</div>
-              <div class="ql-plan-feat"><span class="ql-pf-emerald">✓</span>Basic reports (7 days)</div>
-            </div>
-            <button class="ql-plan-btn ql-plan-btn-free" id="qs-plan-free">Get Started Free</button>
-          </div>
-
-          <div class="ql-plan ql-plan-pro ql-reveal ql-reveal-delay-2">
-            <div class="ql-pill ql-pill-pro">Most popular</div>
-            <div class="ql-plan-name">Pro</div>
-            <div class="ql-plan-price">₦2,500 <span>/ month</span></div>
-            <p class="ql-plan-sub">Deeper insight and more control as your business grows.</p>
-            <div class="ql-plan-feats">
-              <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>Everything in Starter</div>
-              <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>6-month reports &amp; trend analysis</div>
-              <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>CSV export for all data</div>
-              <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>Barcode scanner support</div>
-              <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>Smart stock insights</div>
-              <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>Priority support</div>
-            </div>
-            <button class="ql-plan-btn ql-plan-btn-pro" id="qs-plan-pro">Start with Pro</button>
+      </div>
+      <div class="ql-feat ql-reveal ql-reveal-delay-3">
+        <div class="ql-feat-row">
+          <div class="ql-feat-icon-wrap ql-fi-amber">📊</div>
+          <div>
+            <div class="ql-feat-text-title">Insights that actually help</div>
+            <p class="ql-feat-text-body">Know what's running low before it runs out. See your best earners. Spot idle stock. Real numbers, plain language — no jargon.</p>
+            <div class="ql-feat-tag">✓&nbsp; Restock alerts · Profit · Dead stock</div>
           </div>
         </div>
-      </section>
+      </div>
+    </div>
+  </section>
 
-      <div class="ql-divider"></div>
+  <div class="ql-divider"></div>
 
-      <!-- ── FINAL CTA ─────────────────────────────────────── -->
-      <section class="ql-final" aria-label="Call to action">
-        <div class="ql-final-orb" aria-hidden="true"></div>
-        <div class="ql-final-inner ql-reveal">
-          <h2 class="ql-final-h">Your stock isn't going<br>to track itself.</h2>
-          <p class="ql-final-sub">Less than 2 minutes to set up. Free to start. See exactly where your business stands — right now.</p>
-          <button class="ql-final-btn" id="qs-final">Create Your Free Account</button>
-          <p class="ql-final-friction">Add your first product in under 60 seconds. No tutorial needed.</p>
-          <div class="ql-final-note">No credit card &nbsp;·&nbsp; No expiry &nbsp;·&nbsp; Cancel anytime</div>
+  <section class="ql-section" aria-label="Why QuickShop">
+    <div class="ql-trust ql-reveal">
+      <div class="ql-trust-h">Built for real-world market conditions</div>
+      <p class="ql-trust-p">Most apps assume stable internet, a laptop, and a tech team. QuickShop assumes you don't have any of that — and works perfectly anyway.</p>
+      <div class="ql-trust-list">
+        <div class="ql-trust-row">
+          <div class="ql-check">✓</div>
+          <div class="ql-trust-txt"><strong>No internet? No problem.</strong> Everything queues locally and syncs when you reconnect. Zero data loss.</div>
         </div>
-      </section>
+        <div class="ql-trust-row">
+          <div class="ql-check">✓</div>
+          <div class="ql-trust-txt"><strong>One device, full control.</strong> Inventory, sales history, and reports — all on your phone.</div>
+        </div>
+        <div class="ql-trust-row">
+          <div class="ql-check">✓</div>
+          <div class="ql-trust-txt"><strong>No training needed.</strong> If you can use WhatsApp, you can use QuickShop. Open and go.</div>
+        </div>
+        <div class="ql-trust-row">
+          <div class="ql-check">✓</div>
+          <div class="ql-trust-txt"><strong>Your data stays yours.</strong> Stored securely under your own account. You own it, always.</div>
+        </div>
+      </div>
+    </div>
+  </section>
 
-      <footer class="ql-footer">
-        <p>© 2026 QuickShop. All rights reserved.</p>
-      </footer>
+  <div class="ql-divider"></div>
 
-    </div><!-- /.ql-page -->
-  </div><!-- /#qs-landing -->
+  <section class="ql-section" aria-label="Pricing">
+    <div class="ql-eyebrow ql-reveal">Pricing</div>
+    <h2 class="ql-h2 ql-reveal ql-reveal-delay-1">Start free. Upgrade when ready.</h2>
+    <p class="ql-h2-sub ql-reveal ql-reveal-delay-2">No credit card. No trial. The free plan is free forever.</p>
 
+    <div class="ql-plans">
+      <div class="ql-plan ql-plan-free ql-reveal ql-reveal-delay-1">
+        <div class="ql-pill ql-pill-free">Free forever</div>
+        <div class="ql-plan-name">Starter</div>
+        <div class="ql-plan-price">₦0 <span>/ month</span></div>
+        <p class="ql-plan-sub">Everything you need to run a solo operation from day one.</p>
+        <div class="ql-plan-feats">
+          <div class="ql-plan-feat"><span class="ql-pf-emerald">✓</span>Unlimited products</div>
+          <div class="ql-plan-feat"><span class="ql-pf-emerald">✓</span>Sales recording &amp; profit tracking</div>
+          <div class="ql-plan-feat"><span class="ql-pf-emerald">✓</span>Offline mode + auto-sync</div>
+          <div class="ql-plan-feat"><span class="ql-pf-emerald">✓</span>WhatsApp catalog sharing</div>
+          <div class="ql-plan-feat"><span class="ql-pf-emerald">✓</span>Notes &amp; activity log</div>
+          <div class="ql-plan-feat"><span class="ql-pf-emerald">✓</span>Basic reports (7 days)</div>
+        </div>
+        <button class="ql-plan-btn ql-plan-btn-free" id="qs-plan-free">Get Started Free</button>
+      </div>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       AUTH SCREEN — preserved exactly, shown only on CTA click
-  ═══════════════════════════════════════════════════════════ -->
-  <div id="loginScreen" style="display:none">
+      <div class="ql-plan ql-plan-pro ql-reveal ql-reveal-delay-2">
+        <div class="ql-pill ql-pill-pro">Most popular</div>
+        <div class="ql-plan-name">Pro</div>
+        <div class="ql-plan-price">₦2,500 <span>/ month</span></div>
+        <p class="ql-plan-sub">Deeper insight and more control as your business grows.</p>
+        <div class="ql-plan-feats">
+          <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>Everything in Starter</div>
+          <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>6-month reports &amp; trend analysis</div>
+          <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>CSV export for all data</div>
+          <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>Barcode scanner support</div>
+          <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>Smart stock insights</div>
+          <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>Priority support</div>
+        </div>
+        <button class="ql-plan-btn ql-plan-btn-pro" id="qs-plan-pro">Start with Pro</button>
+      </div>
+    </div>
+  </section>
 
-    <!-- Fixed back button -->
+  <div class="ql-divider"></div>
+
+  <section class="ql-final" aria-label="Call to action">
+    <div class="ql-final-orb" aria-hidden="true"></div>
+    <div class="ql-final-inner ql-reveal">
+      <h2 class="ql-final-h">Your stock isn't going<br>to track itself.</h2>
+      <p class="ql-final-sub">Less than 2 minutes to set up. Free to start. See exactly where your business stands — right now.</p>
+      <button class="ql-final-btn" id="qs-final">Create Your Free Account</button>
+      <p class="ql-final-friction">Add your first product in under 60 seconds. No tutorial needed.</p>
+      <div class="ql-final-note">No credit card &nbsp;·&nbsp; No expiry &nbsp;·&nbsp; Cancel anytime</div>
+    </div>
+  </section>
+
+  <footer class="ql-footer">
+    <p>© 2026 QuickShop. All rights reserved.</p>
+  </footer>
+</div>
+
+  </div>  <div id="loginScreen" style="display:none">
     <button id="btnBackToLanding" type="button" aria-label="Back to home">← Home</button>
-
-    <!-- Forms container -->
     <div id="authForms">
-
-      <!-- Sign In -->
       <div id="loginForm" style="display:flex;">
         <div class="auth-form-title">Welcome back</div>
         <div class="auth-form-sub">Sign in to your QuickShop account</div>
-
         <input id="loginEmail" placeholder="Email address" type="email" class="auth-input" autocomplete="email" />
         <input id="loginPass" placeholder="Password" type="password" class="auth-input" autocomplete="current-password" />
-
         <button id="btnLogin" type="button">Sign In</button>
         <button id="btnForgotPassword" type="button">Forgot password?</button>
-
         <div class="auth-divider">
           <div class="auth-divider-line"></div>
           <span class="auth-divider-text">Don't have an account?</span>
           <div class="auth-divider-line"></div>
         </div>
-
         <button id="btnShowSignup" type="button">Create a free account →</button>
-      </div>
-
-      <!-- Sign Up -->
-      <div id="signupForm" style="display:none;flex-direction:column;">
-        <div class="auth-form-title">Create your account</div>
-        <div class="auth-form-sub">Free forever. No credit card needed.</div>
-
-        <input id="signupName" placeholder="Your full name" type="text" class="auth-input" autocomplete="name" />
-        <input id="signupBusiness" placeholder="Business name (optional)" type="text" class="auth-input" autocomplete="organization" />
-        <input id="signupEmail" placeholder="Email address" type="email" class="auth-input" autocomplete="email" />
-        <input id="signupPass" placeholder="Password (min 6 characters)" type="password" class="auth-input" autocomplete="new-password" />
-        <input id="signupPassConfirm" placeholder="Confirm password" type="password" class="auth-input" autocomplete="new-password" />
-
-        <div class="auth-notice">📧 A verification link will be sent to your email. Please verify before signing in.</div>
-
-        <button id="btnSignup" type="button">Create Account</button>
-
-        <div class="auth-divider">
-          <div class="auth-divider-line"></div>
-          <span class="auth-divider-text">Already have an account?</span>
-          <div class="auth-divider-line"></div>
-        </div>
-
-        <button id="btnBackToLogin" type="button">Sign in instead →</button>
-      </div>
-
-      <!-- Forgot Password -->
-      <div id="resetForm" style="display:none;flex-direction:column;">
-        <div class="auth-form-title">Reset password</div>
-        <div class="auth-form-sub">We'll send a reset link to your email address</div>
-
-        <input id="resetEmail" placeholder="Email address" type="email" class="auth-input" autocomplete="email" />
-        <button id="btnSendReset" type="button">Send Reset Link</button>
-        <button id="btnBackToLoginFromReset" type="button">← Back to sign in</button>
-      </div>
-
-      <!-- Verify email -->
-      <div id="verificationNotice" style="display:none;flex-direction:column;">
-        <div class="auth-form-title">Check your inbox</div>
-        <div class="auth-form-sub">One last step before you get started</div>
-
-        <div class="auth-verify-box">
-          <p style="color:rgba(244,244,245,0.85);font-size:14px;line-height:1.65;margin-bottom:6px;">
-            We sent a verification link to<br><strong id="verificationEmail" style="color:#fff;"></strong>
-          </p>
-          <p style="color:rgba(244,244,245,0.52);font-size:12.5px;line-height:1.55;">
-            Click the link in the email, then tap the button below to continue.
-          </p>
-        </div>
-
-        <button id="btnCheckVerification" type="button">I've verified — Sign me in</button>
-        <button id="btnResendVerification" type="button">Resend verification email</button>
-        <button id="btnLogoutFromVerification" type="button">Use a different account</button>
-      </div>
-
-      <!-- Loading -->
-      <div id="authLoading" style="display:none;">
-        <div class="spinner"></div>
-        <p>One moment…</p>
-      </div>
-
+      </div><div id="signupForm" style="display:none;flex-direction:column;">
+    <div class="auth-form-title">Create your account</div>
+    <div class="auth-form-sub">Free forever. No credit card needed.</div>
+    <input id="signupName" placeholder="Your full name" type="text" class="auth-input" autocomplete="name" />
+    <input id="signupBusiness" placeholder="Business name (optional)" type="text" class="auth-input" autocomplete="organization" />
+    <input id="signupEmail" placeholder="Email address" type="email" class="auth-input" autocomplete="email" />
+    <input id="signupPass" placeholder="Password (min 6 characters)" type="password" class="auth-input" autocomplete="new-password" />
+    <input id="signupPassConfirm" placeholder="Confirm password" type="password" class="auth-input" autocomplete="new-password" />
+    <div class="auth-notice">📧 A verification link will be sent to your email. Please verify before signing in.</div>
+    <button id="btnSignup" type="button">Create Account</button>
+    <div class="auth-divider">
+      <div class="auth-divider-line"></div>
+      <span class="auth-divider-text">Already have an account?</span>
+      <div class="auth-divider-line"></div>
     </div>
+    <button id="btnBackToLogin" type="button">Sign in instead →</button>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       APP — untouched
-  ═══════════════════════════════════════════════════════════ -->
-  <div class="app" style="display:none">
+  <div id="resetForm" style="display:none;flex-direction:column;">
+    <div class="auth-form-title">Reset password</div>
+    <div class="auth-form-sub">We'll send a reset link to your email address</div>
+    <input id="resetEmail" placeholder="Email address" type="email" class="auth-input" autocomplete="email" />
+    <button id="btnSendReset" type="button">Send Reset Link</button>
+    <button id="btnBackToLoginFromReset" type="button">← Back to sign in</button>
+  </div>
+
+  <div id="verificationNotice" style="display:none;flex-direction:column;">
+    <div class="auth-form-title">Check your inbox</div>
+    <div class="auth-form-sub">One last step before you get started</div>
+    <div class="auth-verify-box">
+      <p style="color:rgba(244,244,245,0.85);font-size:14px;line-height:1.65;margin-bottom:6px;">
+        We sent a verification link to<br><strong id="verificationEmail" style="color:#fff;"></strong>
+      </p>
+      <p style="color:rgba(244,244,245,0.52);font-size:12.5px;line-height:1.55;">
+        Click the link in the email, then tap the button below to continue.
+      </p>
+    </div>
+    <button id="btnCheckVerification" type="button">I've verified — Sign me in</button>
+    <button id="btnResendVerification" type="button">Resend verification email</button>
+    <button id="btnLogoutFromVerification" type="button">Use a different account</button>
+  </div>
+
+  <div id="authLoading" style="display:none;">
+    <div class="spinner"></div>
+    <p>One moment…</p>
+  </div>
+</div>
+
+  </div>  <div class="app" style="display:none">
     <div class="topbar">
       <div>
         <div class="title">QuickShop</div>
@@ -996,176 +816,162 @@
       <div style="position:relative">
         <input id="headerSearchInput" placeholder="Search..." type="text" autocomplete="off" aria-label="Search products" />
       </div>
-    </div>
+    </div><div id="homePanel" class="panel active">
+  <div id="chips" class="chips" aria-label="Categories"></div>
+  <div class="dash">
+    <div class="dash-card"><div class="dash-small">Revenue (today)</div><div class="dash-large" id="dashRevenue">₦0</div></div>
+    <div class="dash-card"><div class="dash-small">Profit (today)</div><div class="dash-large" id="dashProfit">₦0</div></div>
+    <div class="dash-card"><div class="dash-small">Top seller</div><div class="dash-large" id="dashTop">—</div></div>
+  </div>
+  <div id="aiCard" class="ai-card" aria-live="polite"><div id="aiContent"></div></div>
+  <div id="productList" class="list" aria-label="Products"></div>
+</div>
 
-    <div id="homePanel" class="panel active">
-      <div id="chips" class="chips" aria-label="Categories"></div>
-      <div class="dash">
-        <div class="dash-card"><div class="dash-small">Revenue (today)</div><div class="dash-large" id="dashRevenue">₦0</div></div>
-        <div class="dash-card"><div class="dash-small">Profit (today)</div><div class="dash-large" id="dashProfit">₦0</div></div>
-        <div class="dash-card"><div class="dash-small">Top seller</div><div class="dash-large" id="dashTop">—</div></div>
-      </div>
-      <div id="aiCard" class="ai-card" aria-live="polite"><div id="aiContent"></div></div>
-      <div id="productList" class="list" aria-label="Products"></div>
-    </div>
-
-    <div id="inventoryPanel" class="panel">
-      <div class="sticky-header-wrapper">
-        <div style="font-weight:700; font-size: 18px; color: var(--text-primary);">Inventory</div>
-        <div style="display:flex; gap: 8px; flex-wrap:wrap;">
-          <button id="primaryScanBtn" class="save-btn" type="button" style="background: var(--accent-cyan);">📷 Scan</button>
-          <button id="csvImportBtn2" class="save-btn" type="button" style="background:var(--accent-indigo, #6366f1);">📥 Import</button>
-          <button id="insightBtn" class="save-btn" type="button">💡 Insight</button>
-          <button id="toggleAddFormBtn" class="save-btn" type="button">+ Add</button>
-        </div>
-      </div>
-      <div id="addForm" class="add-card" style="display:none;flex-direction:column;gap:12px;">
-        <div class="add-row">
-          <input id="invId" type="hidden" />
-          <input id="invName" type="text" placeholder="Product name *" style="flex:1;" />
-        </div>
-        <div class="add-row">
-          <input id="invBarcode" type="text" placeholder="Barcode (optional)" style="flex:1;" />
-          <button id="scanBarcodeBtn" class="save-btn" type="button" style="white-space:nowrap;">📷 Scan</button>
-        </div>
-        <div class="add-row">
-          <input id="invPrice" type="number" placeholder="Price *" min="0" step="0.01" style="flex:1;" />
-          <input id="invCost" type="number" placeholder="Cost" min="0" step="0.01" style="flex:1;" />
-          <input id="invQty" type="number" placeholder="Stock" min="0" style="flex:1;" />
-        </div>
-        <div class="add-row"><select id="invCategory" style="flex:1;"></select></div>
-        <!-- Description -->
-        <textarea id="invDesc"
-          placeholder="Product description (optional, shown to customers)"
-          maxlength="500" rows="2"
-          style="width:100%;box-sizing:border-box;resize:none;
-                 background:var(--card-glass);
-                 border:1px solid var(--border-glass);
-                 border-radius:var(--radius-sm);
-                 color:var(--text-primary);
-                 font-size:13px;line-height:1.55;
-                 padding:10px 12px;min-height:60px;
-                 font-family:inherit;
-                 transition:border-color .2s;"></textarea>
-
-        <!-- Photos — hidden native inputs + styled tap targets -->
-        <!-- Single "Add Photos" button picks both at once -->
-        <div style="display:flex;flex-direction:column;gap:8px;">
-
-          <!-- Pick both at once -->
-          <div style="display:flex;gap:8px;">
-            <button id="invPhotoBothBtn" type="button"
-              style="flex:1;padding:10px;background:var(--card-glass);
-                     border:1px dashed var(--border-hi);border-radius:var(--radius-sm);
-                     color:var(--text-secondary);font-size:13px;font-weight:600;
-                     cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
-              📷 Add Photos
-            </button>
-          </div>
-
-          <!-- Individual slots shown after picking -->
-          <div style="display:flex;gap:8px;">
-            <!-- Slot 1 -->
-            <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
-              <button id="invImg1Btn" type="button"
-                style="width:100%;aspect-ratio:1/1;max-height:90px;
-                       background:var(--card-glass);
-                       border:1px dashed var(--border-glass);
-                       border-radius:var(--radius-sm);
-                       color:var(--text-muted);font-size:11px;font-weight:600;
-                       cursor:pointer;display:flex;align-items:center;
-                       justify-content:center;flex-direction:column;gap:4px;
-                       position:relative;overflow:hidden;">
-                <span id="invImg1BtnIcon" style="font-size:20px;">＋</span>
-                <span>Photo 1</span>
-                <img id="invImgPreviewImg" src="" alt="Preview"
-                  style="display:none;position:absolute;inset:0;width:100%;height:100%;
-                         object-fit:cover;border-radius:var(--radius-sm);" />
-              </button>
-              <button id="invImgClear" type="button" class="btn-undo"
-                style="display:none;font-size:11px;width:100%;padding:4px;">Remove</button>
-            </div>
-            <!-- Slot 2 -->
-            <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
-              <button id="invImg2Btn" type="button"
-                style="width:100%;aspect-ratio:1/1;max-height:90px;
-                       background:var(--card-glass);
-                       border:1px dashed var(--border-glass);
-                       border-radius:var(--radius-sm);
-                       color:var(--text-muted);font-size:11px;font-weight:600;
-                       cursor:pointer;display:flex;align-items:center;
-                       justify-content:center;flex-direction:column;gap:4px;
-                       position:relative;overflow:hidden;">
-                <span id="invImg2BtnIcon" style="font-size:20px;">＋</span>
-                <span>Photo 2</span>
-                <img id="invImgPreviewImg2" src="" alt="Preview 2"
-                  style="display:none;position:absolute;inset:0;width:100%;height:100%;
-                         object-fit:cover;border-radius:var(--radius-sm);" />
-              </button>
-              <button id="invImgClear2" type="button" class="btn-undo"
-                style="display:none;font-size:11px;width:100%;padding:4px;">Remove</button>
-            </div>
-          </div>
-
-          <!-- Hidden individual file inputs — kept for inventory.js compatibility -->
-          <input id="invImg"  type="file" accept="image/*" style="display:none" aria-hidden="true" />
-          <input id="invImg2" type="file" accept="image/*" style="display:none" aria-hidden="true" />
-          <!-- Hidden preview wrappers — kept for inventory.js compatibility -->
-          <div id="invImgPreview"  style="display:none;"></div>
-          <div id="invImgPreview2" style="display:none;"></div>
-        </div>
-        <div class="add-row">
-          <button id="addProductBtn" class="save-btn" style="flex:1;">Save Product</button>
-          <button id="cancelProductBtn" class="btn-undo" style="display:none;">Cancel</button>
-        </div>
-      </div>
-      <div id="inventoryInsightView" class="insight-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="inventoryInsightTitle">
-        <button id="closeInventoryInsightBtn" class="close-btn" aria-label="Close insights">✕</button>
-        <h3 id="inventoryInsightTitle">💡 Inventory Insights</h3>
-        <div id="inventoryInsightsContent"></div>
-      </div>
-      <div id="inventoryList" class="list" aria-label="Inventory items"></div>
-    </div>
-
-    <div id="reportsPanel" class="panel">
-      <div style="font-weight:700; font-size:18px; color:var(--text-primary); margin-bottom:12px;">Reports</div>
-      <div id="reportSummary"></div>
-      <div id="reportChartCard" style="margin-top:12px;">
-        <div style="padding:12px;">
-          <canvas id="reportChart" height="220"></canvas>
-          <div id="reportChartUpdated"></div>
-        </div>
-      </div>
-      <div class="report-controls" id="reportControls">
-        <button class="report-range-btn active" data-range="daily">7 Days</button>
-        <button class="report-range-btn" data-range="weekly">4 Weeks</button>
-        <button class="report-range-btn" data-range="monthly">6 Months</button>
-        <button id="exportReport" class="save-btn" style="background:var(--accent-cyan);">📥 Export CSV</button>
-      </div>
-      <div id="reportBreakdown" style="margin-top:12px;"></div>
-    </div>
-
-    <div id="notesPanel" class="panel">
-      <div style="font-weight:700; font-size:18px; color:var(--text-primary); margin-bottom:12px;">Notes</div>
-      <div class="notes-panel">
-        <div class="note-form">
-          <input id="noteTitleInput" type="text" placeholder="Title (optional)" />
-          <textarea id="noteContentInput" placeholder="Write a note..." rows="3" style="resize:vertical;"></textarea>
-          <div style="display:flex;gap:8px;">
-            <button id="noteSaveBtn" class="save-btn" style="flex:1;">Save Note</button>
-            <button id="noteCancelBtn" class="btn-undo">Cancel</button>
-          </div>
-        </div>
-        <div id="notesList"></div>
-      </div>
-    </div>
-
-    <div id="settingsPanel" class="panel">
-      <!-- renderSettingsPanel() in appss.js replaces this entirely on load -->
+<div id="inventoryPanel" class="panel">
+  <div class="sticky-header-wrapper">
+    <div style="font-weight:700; font-size: 18px; color: var(--text-primary);">Inventory</div>
+    <div style="display:flex; gap: 8px; flex-wrap:wrap;">
+      <button id="primaryScanBtn" class="save-btn" type="button" style="background: var(--accent-cyan);">📷 Scan</button>
+      <button id="csvImportBtn2" class="save-btn" type="button" style="background:var(--accent-indigo, #6366f1);">📥 Import</button>
+      <button id="insightBtn" class="save-btn" type="button">💡 Insight</button>
+      <button id="toggleAddFormBtn" class="save-btn" type="button">+ Add</button>
     </div>
   </div>
+  <div id="addForm" class="add-card" style="display:none;flex-direction:column;gap:12px;">
+    <div class="add-row">
+      <input id="invId" type="hidden" />
+      <input id="invName" type="text" placeholder="Product name *" style="flex:1;" />
+    </div>
+    <div class="add-row">
+      <input id="invBarcode" type="text" placeholder="Barcode (optional)" style="flex:1;" />
+      <button id="scanBarcodeBtn" class="save-btn" type="button" style="white-space:nowrap;">📷 Scan</button>
+    </div>
+    <div class="add-row">
+      <input id="invPrice" type="number" placeholder="Price *" min="0" step="0.01" style="flex:1;" />
+      <input id="invCost" type="number" placeholder="Cost" min="0" step="0.01" style="flex:1;" />
+      <input id="invQty" type="number" placeholder="Stock" min="0" style="flex:1;" />
+    </div>
+    <div class="add-row"><select id="invCategory" style="flex:1;"></select></div>
+    <textarea id="invDesc"
+      placeholder="Product description (optional, shown to customers)"
+      maxlength="500" rows="2"
+      style="width:100%;box-sizing:border-box;resize:none;
+             background:var(--card-glass);
+             border:1px solid var(--border-glass);
+             border-radius:var(--radius-sm);
+             color:var(--text-primary);
+             font-size:13px;line-height:1.55;
+             padding:10px 12px;min-height:60px;
+             font-family:inherit;
+             transition:border-color .2s;"></textarea>
 
-  <div id="fullAuditLogModal" class="full-screen-modal" style="display:none;">
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div style="display:flex;gap:8px;">
+        <button id="invPhotoBothBtn" type="button"
+          style="flex:1;padding:10px;background:var(--card-glass);
+                 border:1px dashed var(--border-hi);border-radius:var(--radius-sm);
+                 color:var(--text-secondary);font-size:13px;font-weight:600;
+                 cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+          📷 Add Photos
+        </button>
+      </div>
+
+      <div style="display:flex;gap:8px;">
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+          <button id="invImg1Btn" type="button"
+            style="width:100%;aspect-ratio:1/1;max-height:90px;
+                   background:var(--card-glass);
+                   border:1px dashed var(--border-glass);
+                   border-radius:var(--radius-sm);
+                   color:var(--text-muted);font-size:11px;font-weight:600;
+                   cursor:pointer;display:flex;align-items:center;
+                   justify-content:center;flex-direction:column;gap:4px;
+                   position:relative;overflow:hidden;">
+            <span id="invImg1BtnIcon" style="font-size:20px;">＋</span>
+            <span>Photo 1</span>
+            <img id="invImgPreviewImg" src="" alt="Preview"
+              style="display:none;position:absolute;inset:0;width:100%;height:100%;
+                     object-fit:cover;border-radius:var(--radius-sm);" />
+          </button>
+          <button id="invImgClear" type="button" class="btn-undo"
+            style="display:none;font-size:11px;width:100%;padding:4px;">Remove</button>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+          <button id="invImg2Btn" type="button"
+            style="width:100%;aspect-ratio:1/1;max-height:90px;
+                   background:var(--card-glass);
+                   border:1px dashed var(--border-glass);
+                   border-radius:var(--radius-sm);
+                   color:var(--text-muted);font-size:11px;font-weight:600;
+                   cursor:pointer;display:flex;align-items:center;
+                   justify-content:center;flex-direction:column;gap:4px;
+                   position:relative;overflow:hidden;">
+            <span id="invImg2BtnIcon" style="font-size:20px;">＋</span>
+            <span>Photo 2</span>
+            <img id="invImgPreviewImg2" src="" alt="Preview 2"
+              style="display:none;position:absolute;inset:0;width:100%;height:100%;
+                     object-fit:cover;border-radius:var(--radius-sm);" />
+          </button>
+          <button id="invImgClear2" type="button" class="btn-undo"
+            style="display:none;font-size:11px;width:100%;padding:4px;">Remove</button>
+        </div>
+      </div>
+
+      <input id="invImg"  type="file" accept="image/*" style="display:none" aria-hidden="true" />
+      <input id="invImg2" type="file" accept="image/*" style="display:none" aria-hidden="true" />
+      <div id="invImgPreview"  style="display:none;"></div>
+      <div id="invImgPreview2" style="display:none;"></div>
+    </div>
+    <div class="add-row">
+      <button id="addProductBtn" class="save-btn" style="flex:1;">Save Product</button>
+      <button id="cancelProductBtn" class="btn-undo" style="display:none;">Cancel</button>
+    </div>
+  </div>
+  <div id="inventoryInsightView" class="insight-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="inventoryInsightTitle">
+    <button id="closeInventoryInsightBtn" class="close-btn" aria-label="Close insights">✕</button>
+    <h3 id="inventoryInsightTitle">💡 Inventory Insights</h3>
+    <div id="inventoryInsightsContent"></div>
+  </div>
+  <div id="inventoryList" class="list" aria-label="Inventory items"></div>
+</div>
+
+<div id="reportsPanel" class="panel">
+  <div style="font-weight:700; font-size:18px; color:var(--text-primary); margin-bottom:12px;">Reports</div>
+  <div id="reportSummary"></div>
+  <div id="reportChartCard" style="margin-top:12px;">
+    <div style="padding:12px;">
+      <canvas id="reportChart" height="220"></canvas>
+      <div id="reportChartUpdated"></div>
+    </div>
+  </div>
+  <div class="report-controls" id="reportControls">
+    <button class="report-range-btn active" data-range="daily">7 Days</button>
+    <button class="report-range-btn" data-range="weekly">4 Weeks</button>
+    <button class="report-range-btn" data-range="monthly">6 Months</button>
+    <button id="exportReport" class="save-btn" style="background:var(--accent-cyan);">📥 Export CSV</button>
+  </div>
+  <div id="reportBreakdown" style="margin-top:12px;"></div>
+</div>
+
+<div id="notesPanel" class="panel">
+  <div style="font-weight:700; font-size:18px; color:var(--text-primary); margin-bottom:12px;">Notes</div>
+  <div class="notes-panel">
+    <div class="note-form">
+      <input id="noteTitleInput" type="text" placeholder="Title (optional)" />
+      <textarea id="noteContentInput" placeholder="Write a note..." rows="3" style="resize:vertical;"></textarea>
+      <div style="display:flex;gap:8px;">
+        <button id="noteSaveBtn" class="save-btn" style="flex:1;">Save Note</button>
+        <button id="noteCancelBtn" class="btn-undo">Cancel</button>
+      </div>
+    </div>
+    <div id="notesList"></div>
+  </div>
+</div>
+
+<div id="settingsPanel" class="panel">
+</div>
+
+  </div>  <div id="fullAuditLogModal" class="full-screen-modal" style="display:none;">
     <div class="full-screen-header">
       <div style="display:flex; align-items:center; gap:10px;">
         <button id="closeAuditModalBtn" class="btn-undo" style="border:0; padding:0; font-size:24px;">←</button>
@@ -1177,9 +983,7 @@
       Full history of all actions performed in this store.
     </div>
     <div id="fullAuditLogList" class="full-log-list"></div>
-  </div>
-
-  <div id="modalBackdrop" class="modal-backdrop" aria-hidden="true">
+  </div>  <div id="modalBackdrop" class="modal-backdrop" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <h3 id="modalTitle">Sell</h3>
       <div class="small" id="modalItem">Item name</div>
@@ -1192,9 +996,7 @@
         <button id="modalCancel" class="btn-undo" style="margin-top:10px">Cancel</button>
       </div>
     </div>
-  </div>
-
-  <div id="barcodeScannerModal" class="modal-backdrop" style="display:none">
+  </div>  <div id="barcodeScannerModal" class="modal-backdrop" style="display:none">
     <div class="modal" style="max-width:500px">
       <h3>Scan Barcode</h3>
       <div style="position:relative;margin:16px 0; border-radius:12px; overflow:hidden; background:#000;">
@@ -1210,9 +1012,7 @@
         <button id="barcodeUseBtn" class="save-btn" style="display:none">Use This Barcode</button>
       </div>
     </div>
-  </div>
-
-  <div id="smartScannerModal" class="modal-backdrop" aria-hidden="true" style="display:none;">
+  </div>  <div id="smartScannerModal" class="modal-backdrop" aria-hidden="true" style="display:none;">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="smartModalTitle">
       <h3 id="smartModalTitle">Product Found</h3>
       <div id="smartModalItem" class="small" style="margin-top: 8px; font-size: 16px; font-weight: 600;">Item name</div>
@@ -1225,9 +1025,7 @@
         <button id="smartModalCancel" class="btn-undo" style="margin-top:10px">Cancel</button>
       </div>
     </div>
-  </div>
-
-  <div id="confirmModalBackdrop" class="modal-backdrop" style="display:none; z-index: 99999;">
+  </div>  <div id="confirmModalBackdrop" class="modal-backdrop" style="display:none; z-index: 99999;">
     <div class="modal" role="alertdialog" aria-labelledby="confirmModalTitle">
       <h3 id="confirmModalTitle">Are you sure?</h3>
       <p id="confirmModalMessage" class="small" style="margin-top: 8px; line-height: 1.6; color: var(--text-secondary);">This action cannot be undone.</p>
@@ -1236,9 +1034,7 @@
         <button id="confirmModalOK" class="save-btn">OK</button>
       </div>
     </div>
-  </div>
-
-  <div class="bottom-nav" role="navigation" aria-label="Main navigation" style="display: none;">
+  </div>  <div class="bottom-nav" role="navigation" aria-label="Main navigation" style="display: none;">
     <div class="nav" style="max-width:480px">
       <button class="nav-btn" data-view="home" id="navHome" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M3 10.5L12 4l9 6.5" stroke="currentColor" stroke-width="1.6"/></svg><div>Home</div></button>
       <button class="nav-btn" data-view="inventory" id="navInventory"><svg viewBox="0 0 24 24" fill="none" width="18" height="18"><rect x="3" y="4" width="18" height="6" rx="1" stroke="currentColor" stroke-width="1.6"/></svg><div>Inventory</div></button>
@@ -1246,14 +1042,134 @@
       <button class="nav-btn" data-view="notes" id="navNotes"><svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="1.6"/></svg><div>Notes</div></button>
       <button class="nav-btn" data-view="settings" id="navSettings"><svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" stroke-width="1.4" stroke="currentColor"/></svg><div>Settings</div></button>
     </div>
-  </div>
+  </div>  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>  <script src="supabase-config.js"></script>  <script>
+    (function() {
+      'use strict';
 
+      /* ─────────────────────────────────────────────────────────────────
+         SCROLL REVEAL
+         .ql-reveal elements are invisible via CSS until .ql-visible is
+         added. Nothing in qs-init.js does this — we own it here.
+         threshold 0.12: trigger when 12% of the element is in viewport.
+      ───────────────────────────────────────────────────────────────── */
+      var revealEls = document.querySelectorAll('.ql-reveal');
+      if (revealEls.length && 'IntersectionObserver' in window) {
+        var ro = new IntersectionObserver(function(entries) {
+          entries.forEach(function(e) {
+            if (e.isIntersecting) {
+              e.target.classList.add('ql-visible');
+              ro.unobserve(e.target);
+            }
+          });
+        }, { threshold: 0.12, rootMargin: '0px 0px -32px 0px' });
+        revealEls.forEach(function(el) { ro.observe(el); });
+      } else {
+        /* Fallback: reveal everything immediately */
+        revealEls.forEach(function(el) { el.classList.add('ql-visible'); });
+      }
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase-config.js"></script>
+      /* ─────────────────────────────────────────────────────────────────
+         HERO IMAGE SCROLL CHOREOGRAPHY
+         The .ql-hero-media img is driven by three CSS custom properties
+         set on .ql-hero:
+           --qs-hero-float-y   translateY in px  (image drifts down)
+           --qs-hero-scale     scale factor       (subtle settle)
+           --qs-hero-opacity   opacity            (grows more present)
 
-  <script src="qs-init.js"></script>
+         Scroll range:
+           START — after 20% of the hero has scrolled past.
+                   Motion begins with intent, not on the first pixel.
+           END   — when the gallery (.ql-screens) is 32px from
+                   the viewport top. The image is "docked" at this point.
 
+         maxShift — how far the image travels vertically.
+                    = natural gap between hero bottom and gallery top
+                      + 6% of hero height (pushes slightly past the gap).
+                    Clamped [60px, 180px] so the shift is always
+                    perceptible but never excessive on any screen size.
 
-</body>
+         Easing — cubic ease-out: fast departure, graceful landing.
+                  The image decelerates as it approaches dock position.
+      ───────────────────────────────────────────────────────────────── */
+      var prefersReduced = window.matchMedia
+        && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      var landing = document.getElementById('qs-landing');
+      if (!landing) return;
+
+      var hero    = landing.querySelector('.ql-hero');
+      var screens = landing.querySelector('.ql-screens');
+      if (!hero || !screens) return;
+
+      /* Bail silently on reduced-motion — CSS defaults keep the image visible */
+      if (prefersReduced) return;
+
+      var clamp = function(n, lo, hi) { return n < lo ? lo : n > hi ? hi : n; };
+
+      /* Cubic ease-out — t goes 0→1, return value goes 0→1 decelerating */
+      var ease = function(t) { return 1 - (1 - t) * (1 - t) * (1 - t); };
+
+      var raf = 0;
+
+      var tick = function() {
+        raf = 0;
+
+        var scrollY = window.scrollY || window.pageYOffset || 0;
+        var vh      = window.innerHeight || document.documentElement.clientHeight;
+
+        /* getBoundingClientRect every frame — always correct after reflow */
+        var heroR    = hero.getBoundingClientRect();
+        var screensR = screens.getBoundingClientRect();
+
+        /* Absolute document Y positions */
+        var heroAbsTop    = heroR.top    + scrollY;
+        var heroAbsBottom = heroR.bottom + scrollY;
+        var screensAbsTop = screensR.top + scrollY;
+
+        var heroH = heroR.height || vh;
+
+        /* Scroll range in absolute document coordinates */
+        var start = heroAbsTop  + heroH * 0.20;        /* motion begins after 20% scroll */
+        var end   = screensAbsTop - 32;                /* image docked 32px above gallery */
+        var span  = Math.max(1, end - start);
+
+        var raw   = clamp((scrollY - start) / span, 0, 1);
+        var eased = ease(raw);
+
+        /* Travel distance — proportional to actual page geometry */
+        var naturalGap = Math.max(0, screensAbsTop - heroAbsBottom);
+        var maxShift   = clamp(naturalGap + heroH * 0.06, 60, 180);
+
+        var translateY = eased * maxShift;
+
+        /*
+         * scale: 1.03 at rest → 1.005 docked.
+         * The slight reduction signals "landing" without being consciously noticed.
+         */
+        var scale = 1.03 - eased * 0.025;
+
+        /*
+         * opacity: 0.55 at rest (subdued behind copy) → 0.65 docked.
+         * Becomes slightly more present as it introduces the gallery.
+         */
+        var opacity = 0.55 + eased * 0.10;
+
+        hero.style.setProperty('--qs-hero-float-y', translateY.toFixed(2) + 'px');
+        hero.style.setProperty('--qs-hero-scale',   scale.toFixed(4));
+        hero.style.setProperty('--qs-hero-opacity', opacity.toFixed(3));
+      };
+
+      var schedule = function() {
+        if (!raf) raf = window.requestAnimationFrame(tick);
+      };
+
+      window.addEventListener('scroll',            schedule, { passive: true });
+      window.addEventListener('resize',            schedule, { passive: true });
+      window.addEventListener('orientationchange', schedule, { passive: true });
+
+      /* Initial state on page load */
+      schedule();
+
+    })();
+  </script>  <script src="qs-init.js"></script></body>
 </html>
