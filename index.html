@@ -236,14 +236,31 @@
       pointer-events: none;
     }
 
-    #qs-landing .ql-hero,
+    /*
+     * SCROLL CHOREOGRAPHY — clip-path peel.
+     *
+     * The container is clipped from the top via `inset()`. As the user scrolls,
+     * the top of the image peels away (hero background shows through), border-radius
+     * forms on the exposed edges, and the image shapes into a card that docks above
+     * the gallery. The image pans slightly downward within the clip to keep the most
+     * interesting area visible in the card window.
+     *
+     * Properties set on .ql-hero by JS (inherited by this element):
+     *   --qs-clip-top  : px — top inset of the clip (0 → ~50% of hero height)
+     *   --qs-clip-r    : px — border-radius on all clip corners (0 → 20px)
+     *   --qs-media-pan : px — translateY on the img within the clip (0 → ~20% of hero height)
+     *   --qs-hero-opacity : 0–1 — image becomes slightly more vivid as it docks
+     */
     #qs-landing .ql-hero-media {
-      overflow: visible !important;
+      clip-path: inset(var(--qs-clip-top, 0px) 0px 0px 0px round var(--qs-clip-r, 0px));
+      will-change: clip-path;
+      /* overflow: hidden already in rule above — keep it */
     }
     #qs-landing .ql-hero-media img {
-      transform: translate3d(0, var(--qs-hero-float-y, 0px), 0) scale(var(--qs-hero-scale, 1.03));
+      /* scale(1.08) > 1 so the image still covers when panned downward */
+      transform: translate3d(0, var(--qs-media-pan, 0px), 0) scale(1.08);
       will-change: transform;
-      opacity: var(--qs-hero-opacity, 0.58);
+      opacity: var(--qs-hero-opacity, 0.56);
       transition: none;
     }
 
@@ -1043,56 +1060,52 @@
       <button class="nav-btn" data-view="settings" id="navSettings"><svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" stroke-width="1.4" stroke="currentColor"/></svg><div>Settings</div></button>
     </div>
   </div>  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>  <script src="supabase-config.js"></script>  <script>
-    (function() {
+    (function () {
       'use strict';
 
-      /* ─────────────────────────────────────────────────────────────────
-         SCROLL REVEAL
-         .ql-reveal elements are invisible via CSS until .ql-visible is
-         added. Nothing in qs-init.js does this — we own it here.
-         threshold 0.12: trigger when 12% of the element is in viewport.
-      ───────────────────────────────────────────────────────────────── */
+      /* ── Scroll reveal ─────────────────────────────────────────────────────
+         .ql-reveal is invisible until .ql-visible is added.
+         Nothing in qs-init.js does this, so we own it here.                 */
       var revealEls = document.querySelectorAll('.ql-reveal');
       if (revealEls.length && 'IntersectionObserver' in window) {
-        var ro = new IntersectionObserver(function(entries) {
-          entries.forEach(function(e) {
-            if (e.isIntersecting) {
-              e.target.classList.add('ql-visible');
-              ro.unobserve(e.target);
-            }
+        var ro = new IntersectionObserver(function (entries) {
+          entries.forEach(function (e) {
+            if (e.isIntersecting) { e.target.classList.add('ql-visible'); ro.unobserve(e.target); }
           });
-        }, { threshold: 0.12, rootMargin: '0px 0px -32px 0px' });
-        revealEls.forEach(function(el) { ro.observe(el); });
+        }, { threshold: 0.12, rootMargin: '0px 0px -24px 0px' });
+        revealEls.forEach(function (el) { ro.observe(el); });
       } else {
-        /* Fallback: reveal everything immediately */
-        revealEls.forEach(function(el) { el.classList.add('ql-visible'); });
+        revealEls.forEach(function (el) { el.classList.add('ql-visible'); });
       }
 
-      /* ─────────────────────────────────────────────────────────────────
-         HERO IMAGE SCROLL CHOREOGRAPHY
-         The .ql-hero-media img is driven by three CSS custom properties
-         set on .ql-hero:
-           --qs-hero-float-y   translateY in px  (image drifts down)
-           --qs-hero-scale     scale factor       (subtle settle)
-           --qs-hero-opacity   opacity            (grows more present)
+      /* ── Hero image clip-path choreography ────────────────────────────────
+         Problem with every previous attempt: moving the <img> inside
+         position:absolute;inset:0 by 60–200px inside an 800px container
+         is visually invisible — nothing appears to "float."
 
-         Scroll range:
-           START — after 20% of the hero has scrolled past.
-                   Motion begins with intent, not on the first pixel.
-           END   — when the gallery (.ql-screens) is 32px from
-                   the viewport top. The image is "docked" at this point.
+         This implementation clips the CONTAINER with clip-path: inset().
+         As the user scrolls:
+           --qs-clip-top  grows → top of image peels away, hero bg shows through
+           --qs-clip-r    grows → exposed edges gain border-radius (card shape)
+           --qs-media-pan grows → image pans down within the clip window
+                                   so the interesting area stays in the card
+           --qs-hero-opacity → image becomes slightly more vivid as it docks
 
-         maxShift — how far the image travels vertically.
-                    = natural gap between hero bottom and gallery top
-                      + 6% of hero height (pushes slightly past the gap).
-                    Clamped [60px, 180px] so the shift is always
-                    perceptible but never excessive on any screen size.
+         Net visual: image peels from "background" into a defined card that
+         docks at the bottom of the hero, just above the screenshot gallery.
 
-         Easing — cubic ease-out: fast departure, graceful landing.
-                  The image decelerates as it approaches dock position.
-      ───────────────────────────────────────────────────────────────── */
-      var prefersReduced = window.matchMedia
-        && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+         Scroll range (in absolute document Y coordinates):
+           start = after 12% of hero has scrolled past viewport top
+                   — motion begins with intent, not on first pixel
+           end   = after 82% of hero has scrolled past
+                   — at this point the gallery is entering the viewport
+
+         At end state, the card's bottom edge is at the hero bottom, which
+         is exactly where the gallery begins. The image "docks."               */
+
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        return; /* CSS defaults keep the image visible; just skip motion */
+      }
 
       var landing = document.getElementById('qs-landing');
       if (!landing) return;
@@ -1101,65 +1114,64 @@
       var screens = landing.querySelector('.ql-screens');
       if (!hero || !screens) return;
 
-      /* Bail silently on reduced-motion — CSS defaults keep the image visible */
-      if (prefersReduced) return;
-
-      var clamp = function(n, lo, hi) { return n < lo ? lo : n > hi ? hi : n; };
-
-      /* Cubic ease-out — t goes 0→1, return value goes 0→1 decelerating */
-      var ease = function(t) { return 1 - (1 - t) * (1 - t) * (1 - t); };
+      var clamp = function (n, lo, hi) { return n < lo ? lo : n > hi ? hi : n; };
+      /* Cubic ease-out: fast start, decelerates to rest — feels like docking */
+      var ease  = function (t) { return 1 - (1 - t) * (1 - t) * (1 - t); };
 
       var raf = 0;
 
-      var tick = function() {
+      var tick = function () {
         raf = 0;
 
         var scrollY = window.scrollY || window.pageYOffset || 0;
-        var vh      = window.innerHeight || document.documentElement.clientHeight;
+        var heroR   = hero.getBoundingClientRect();
+        var heroH   = heroR.height || window.innerHeight;
 
-        /* getBoundingClientRect every frame — always correct after reflow */
-        var heroR    = hero.getBoundingClientRect();
-        var screensR = screens.getBoundingClientRect();
+        /* Absolute document positions — recalculated each frame to handle
+           dynamic layout changes (keyboard open, orientation, etc.)       */
+        var heroAbsTop = heroR.top + scrollY;
 
-        /* Absolute document Y positions */
-        var heroAbsTop    = heroR.top    + scrollY;
-        var heroAbsBottom = heroR.bottom + scrollY;
-        var screensAbsTop = screensR.top + scrollY;
-
-        var heroH = heroR.height || vh;
-
-        /* Scroll range in absolute document coordinates */
-        var start = heroAbsTop  + heroH * 0.20;        /* motion begins after 20% scroll */
-        var end   = screensAbsTop - 32;                /* image docked 32px above gallery */
+        /* Scroll range: [start … end] in absolute scrollY units */
+        var start = heroAbsTop + heroH * 0.12;
+        var end   = heroAbsTop + heroH * 0.82;
         var span  = Math.max(1, end - start);
 
         var raw   = clamp((scrollY - start) / span, 0, 1);
         var eased = ease(raw);
 
-        /* Travel distance — proportional to actual page geometry */
-        var naturalGap = Math.max(0, screensAbsTop - heroAbsBottom);
-        var maxShift   = clamp(naturalGap + heroH * 0.06, 60, 180);
-
-        var translateY = eased * maxShift;
+        /*
+         * clip-top: 0 → 50% of hero height.
+         * At eased=1 on a 800px hero: clip-top = 400px.
+         * The visible card (below the clip) is 400px tall.
+         * At that scroll position the card bottom aligns with the gallery top.
+         */
+        var clipTop = eased * heroH * 0.50;
 
         /*
-         * scale: 1.03 at rest → 1.005 docked.
-         * The slight reduction signals "landing" without being consciously noticed.
+         * border-radius: 0 → 20px on all clip corners.
+         * Applied via `round <r>` in inset() — rounds all 4 corners of the
+         * visible rectangle, giving the floating-card appearance.
          */
-        var scale = 1.03 - eased * 0.025;
+        var radius  = eased * 20;
 
         /*
-         * opacity: 0.55 at rest (subdued behind copy) → 0.65 docked.
-         * Becomes slightly more present as it introduces the gallery.
+         * pan: 0 → 20% of hero height.
+         * The image translates downward inside the clip window so the
+         * mid-image (most visually interesting) area stays visible rather
+         * than showing only the bottom of the photo.
          */
-        var opacity = 0.55 + eased * 0.10;
+        var pan     = eased * heroH * 0.20;
 
-        hero.style.setProperty('--qs-hero-float-y', translateY.toFixed(2) + 'px');
-        hero.style.setProperty('--qs-hero-scale',   scale.toFixed(4));
-        hero.style.setProperty('--qs-hero-opacity', opacity.toFixed(3));
+        /* opacity: 0.56 → 0.70 — image becomes slightly more present as it docks */
+        var opacity = 0.56 + eased * 0.14;
+
+        hero.style.setProperty('--qs-clip-top',       clipTop.toFixed(1) + 'px');
+        hero.style.setProperty('--qs-clip-r',         radius.toFixed(1)  + 'px');
+        hero.style.setProperty('--qs-media-pan',      pan.toFixed(1)     + 'px');
+        hero.style.setProperty('--qs-hero-opacity',   opacity.toFixed(3));
       };
 
-      var schedule = function() {
+      var schedule = function () {
         if (!raf) raf = window.requestAnimationFrame(tick);
       };
 
@@ -1167,9 +1179,9 @@
       window.addEventListener('resize',            schedule, { passive: true });
       window.addEventListener('orientationchange', schedule, { passive: true });
 
-      /* Initial state on page load */
+      /* Fire once on load so initial state is correct */
       schedule();
 
-    })();
+    }());
   </script>  <script src="qs-init.js"></script></body>
 </html>
