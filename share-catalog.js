@@ -269,6 +269,207 @@
 
   // ── Main share action ───────────────────────────────────────────────────────
 
+  // ── Paywall modal ───────────────────────────────────────────────────────
+  // Shown when is_active = false OR subscription_expires is past.
+  // No Paystack. No Stripe. Bank details shown; you manually toggle is_active.
+
+  function showPaywallModal() {
+    return new Promise(function (resolve) {
+      var stale = document.getElementById('qs-paywall-modal');
+      if (stale) stale.remove();
+
+      var backdrop = document.createElement('div');
+      backdrop.id = 'qs-paywall-modal';
+      backdrop.setAttribute('role', 'dialog');
+      backdrop.setAttribute('aria-modal', 'true');
+      backdrop.setAttribute('aria-labelledby', 'qs-paywall-title');
+      backdrop.style.cssText = [
+        'position:fixed;inset:0;',
+        'background:rgba(0,0,0,0.82);',
+        'backdrop-filter:blur(10px);',
+        '-webkit-backdrop-filter:blur(10px);',
+        'z-index:9999999;',
+        'display:flex;align-items:flex-end;justify-content:center;',
+        'padding:0;',
+      ].join('');
+
+      var box = document.createElement('div');
+      box.style.cssText = [
+        'background:linear-gradient(160deg,#13111a 0%,#0f0d16 100%);',
+        'border:1px solid rgba(139,92,246,0.25);',
+        'border-bottom:none;',
+        'border-radius:24px 24px 0 0;',
+        'padding:28px 24px 36px;',
+        'width:100%;max-width:480px;',
+        'box-shadow:0 -24px 60px rgba(0,0,0,0.7);',
+        'position:relative;',
+      ].join('');
+
+      // Drag handle
+      var handle = document.createElement('div');
+      handle.style.cssText = [
+        'width:40px;height:4px;border-radius:2px;',
+        'background:rgba(255,255,255,0.15);',
+        'margin:0 auto 24px;',
+      ].join('');
+
+      // Lock icon
+      var lockIcon = document.createElement('div');
+      lockIcon.setAttribute('aria-hidden', 'true');
+      lockIcon.style.cssText = [
+        'width:52px;height:52px;border-radius:14px;',
+        'background:linear-gradient(135deg,#7c3aed,#4f46e5);',
+        'display:flex;align-items:center;justify-content:center;',
+        'font-size:24px;margin:0 auto 16px;',
+        'box-shadow:0 8px 24px rgba(124,58,237,0.35);',
+      ].join('');
+      lockIcon.textContent = '🔒';
+
+      var title = document.createElement('h2');
+      title.id = 'qs-paywall-title';
+      title.style.cssText = 'color:#fff;font-size:20px;font-weight:800;text-align:center;margin:0 0 8px;letter-spacing:-0.3px;';
+      title.textContent = 'Unlock Your Public Showroom';
+
+      var sub = document.createElement('p');
+      sub.style.cssText = 'color:rgba(255,255,255,0.5);font-size:14px;text-align:center;margin:0 0 24px;line-height:1.6;';
+      sub.textContent = 'Share your catalog link with any customer for just ₦1,500/month. One-time bank transfer — activated within minutes.';
+
+      // Price badge
+      var priceBadge = document.createElement('div');
+      priceBadge.style.cssText = [
+        'background:rgba(124,58,237,0.12);',
+        'border:1px solid rgba(124,58,237,0.3);',
+        'border-radius:12px;padding:16px 20px;',
+        'margin-bottom:20px;',
+      ].join('');
+      var priceRow = document.createElement('div');
+      priceRow.style.cssText = 'display:flex;align-items:baseline;justify-content:center;gap:6px;margin-bottom:4px;';
+      var priceAmt = document.createElement('span');
+      priceAmt.style.cssText = 'color:#a78bfa;font-size:32px;font-weight:900;letter-spacing:-1px;';
+      priceAmt.textContent = '₦1,500';
+      var pricePer = document.createElement('span');
+      pricePer.style.cssText = 'color:rgba(255,255,255,0.4);font-size:14px;font-weight:500;';
+      pricePer.textContent = '/ month';
+      priceRow.appendChild(priceAmt);
+      priceRow.appendChild(pricePer);
+      var priceNote = document.createElement('div');
+      priceNote.style.cssText = 'color:rgba(255,255,255,0.35);font-size:12px;text-align:center;';
+      priceNote.textContent = 'Inventory management stays free forever';
+      priceBadge.appendChild(priceRow);
+      priceBadge.appendChild(priceNote);
+
+      // Bank details card
+      var bankCard = document.createElement('div');
+      bankCard.style.cssText = [
+        'background:rgba(255,255,255,0.04);',
+        'border:1px solid rgba(255,255,255,0.08);',
+        'border-radius:12px;padding:16px 18px;',
+        'margin-bottom:20px;',
+      ].join('');
+      var bankTitle = document.createElement('div');
+      bankTitle.style.cssText = 'color:rgba(255,255,255,0.45);font-size:11px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:12px;';
+      bankTitle.textContent = 'Transfer Details';
+
+      var bankLines = [
+        ['Bank',       'YOUR_BANK_NAME'],
+        ['Account No', 'YOUR_ACCOUNT_NUMBER'],
+        ['Name',       'YOUR_ACCOUNT_NAME'],
+        ['Reference',  'QS-CATALOG'],
+      ];
+
+      bankCard.appendChild(bankTitle);
+      bankLines.forEach(function (pair) {
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);';
+        var label = document.createElement('span');
+        label.style.cssText = 'color:rgba(255,255,255,0.35);font-size:12px;';
+        label.textContent = pair[0];
+        var value = document.createElement('span');
+        value.style.cssText = 'color:#e2e8f0;font-size:13px;font-weight:600;';
+        value.textContent = pair[1];
+        row.appendChild(label);
+        row.appendChild(value);
+        bankCard.appendChild(row);
+      });
+      var lastRow = bankCard.querySelector('div:last-child');
+      if (lastRow) lastRow.style.borderBottom = 'none';
+
+      // After transfer note
+      var afterNote = document.createElement('p');
+      afterNote.style.cssText = 'color:rgba(255,255,255,0.3);font-size:12px;text-align:center;margin:0 0 20px;line-height:1.5;';
+      afterNote.textContent = 'After transfer, your link will be activated within a few minutes. We\'ll notify you.';
+
+      // CTA — dismiss (user has paid, waiting for activation)
+      var doneBtn = document.createElement('button');
+      doneBtn.type = 'button';
+      doneBtn.style.cssText = [
+        'width:100%;padding:15px;',
+        'background:linear-gradient(135deg,#7c3aed,#4f46e5);',
+        'border:0;border-radius:12px;',
+        'color:#fff;font-size:15px;font-weight:700;',
+        'cursor:pointer;letter-spacing:0.2px;',
+        'box-shadow:0 8px 24px rgba(124,58,237,0.35);',
+        'margin-bottom:10px;',
+      ].join('');
+      doneBtn.textContent = "I've Sent the Transfer";
+
+      var cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.style.cssText = [
+        'width:100%;padding:12px;',
+        'background:transparent;border:0;',
+        'color:rgba(255,255,255,0.3);',
+        'font-size:13px;cursor:pointer;',
+      ].join('');
+      cancelBtn.textContent = 'Maybe later';
+
+      function close() { backdrop.remove(); resolve(); }
+
+      doneBtn.addEventListener('click', function () {
+        notify("Transfer noted! Your catalog link will be active within minutes.", 'success');
+        close();
+      });
+      cancelBtn.addEventListener('click', close);
+      backdrop.addEventListener('click', function (e) { if (e.target === backdrop) close(); });
+      backdrop.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+
+      box.appendChild(handle);
+      box.appendChild(lockIcon);
+      box.appendChild(title);
+      box.appendChild(sub);
+      box.appendChild(priceBadge);
+      box.appendChild(bankCard);
+      box.appendChild(afterNote);
+      box.appendChild(doneBtn);
+      box.appendChild(cancelBtn);
+      backdrop.appendChild(box);
+      document.body.appendChild(backdrop);
+
+      requestAnimationFrame(function () { doneBtn.focus(); });
+    });
+  }
+
+  // ── Subscription status check ────────────────────────────────────────────
+
+  async function checkSubscriptionActive(userId) {
+    try {
+      var sb = window.__QS_SUPABASE && window.__QS_SUPABASE.client;
+      if (!sb) return false;
+      var result = await sb
+        .from('profiles')
+        .select('is_active, subscription_expires')
+        .eq('id', userId)
+        .maybeSingle();
+      if (!result || !result.data) return false;
+      var d = result.data;
+      if (!d.is_active) return false;
+      if (d.subscription_expires && new Date(d.subscription_expires) < new Date()) return false;
+      return true;
+    } catch (_) { return false; }
+  }
+
+  // ── Main share action ───────────────────────────────────────────────────────
+
   async function handleShareClick(e) {
     if (e) e.preventDefault();
 
@@ -277,6 +478,14 @@
       notify('Please log in to share your catalog.', 'error');
       return;
     }
+
+    // ── Subscription gate ──────────────────────────────────────────────────
+    var isActive = await checkSubscriptionActive(userId);
+    if (!isActive) {
+      await showPaywallModal();
+      return; // abort share — user needs to pay and be manually activated
+    }
+    // ── End subscription gate ─────────────────────────────────────────────
 
     var phone = await getSellerPhone();
     if (!phone) return;

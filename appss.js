@@ -29,6 +29,21 @@ function initApp() {
   const IS_PROD = window.location.hostname !== 'localhost' && !window.location.hostname.includes('127.0.0.1');
   const log = IS_PROD ? () => {} : (...a) => console.log('[QS]', ...a);
 
+  // ── Referral capture ─────────────────────────────────────────────────────
+  // If the user arrived via a catalog's "Get a free catalog like this" button,
+  // the URL will contain ?ref=<UUID> (the store owner's user_id).
+  // We capture it here — once, at boot — and hold it in sessionStorage so it
+  // survives navigating between Login ↔ Signup tabs without polluting the URL.
+  // It is consumed exactly once during signup and then cleared.
+  (function captureReferral() {
+    try {
+      var _refParam = new URLSearchParams(window.location.search).get('ref');
+      if (_refParam && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_refParam)) {
+        sessionStorage.setItem('qs_pending_ref', _refParam);
+      }
+    } catch (_) {}
+  })();
+
   // ── Sentry initialisation ────────────────────────────────────────────────
   // Replace YOUR_SENTRY_DSN with the DSN from your Sentry project settings.
   // The DSN is public-safe — it only lets data IN, never exposes your data.
@@ -1093,6 +1108,24 @@ function handleTouchEnd() {
           const user = data.user;
           const profile = { uid: user.id, name, businessName: business || null, email: user.email, createdAt: Date.now() };
           await setUserProfile(user.id, profile);
+
+          // ── Referral attribution ────────────────────────────────────────
+          // Consume the pending referral code captured at boot (from ?ref=UUID).
+          // Written once at signup and never overwritten — UUID validated again
+          // here so a tampered sessionStorage value can never write garbage data.
+          try {
+            var _pendingRef = sessionStorage.getItem('qs_pending_ref');
+            if (_pendingRef && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_pendingRef)
+                && _pendingRef !== user.id) { // guard: can't refer yourself
+              const supabaseRef = getClient();
+              if (supabaseRef) {
+                await supabaseRef.from('profiles').update({ referred_by: _pendingRef }).eq('id', user.id);
+              }
+            }
+            sessionStorage.removeItem('qs_pending_ref');
+          } catch (_refErr) { errlog('referral attribution failed', _refErr); }
+          // ── End referral attribution ─────────────────────────────────────
+
           showVerificationNotice(email);
           toast('Account created — verification email sent. Please verify before logging in.');
         } catch (e) {

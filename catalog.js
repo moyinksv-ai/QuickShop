@@ -2084,6 +2084,16 @@
       return;
     }
 
+    // ── Referral growth loop ────────────────────────────────────────────────
+    // Every public catalog page is an affiliate link for its owner.
+    // The "Create yours free" branding button now routes to signup with the
+    // store owner's user_id pre-loaded as the referrer — captured by appss.js.
+    var _brandingLink = document.getElementById('cat-branding-link');
+    if (_brandingLink) {
+      _brandingLink.href = window.location.origin + '/?ref=' + encodeURIComponent(storeId);
+    }
+    // ── End referral growth loop ────────────────────────────────────────────
+
     // Fetch profile + products.
     // Strategy: try the security-scoped views first (post-migration).
     // If either view is missing ("not in schema cache"), fall back to querying
