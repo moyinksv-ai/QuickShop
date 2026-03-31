@@ -442,6 +442,23 @@
       '#cat-branding-btn{font-size:13px;font-weight:800;',
         'color:rgba(167,139,250,0.8);letter-spacing:-.2px;}',
 
+      /* --- soft gate (inactive vendor) --- */
+      '#cat-soft-gate{display:none;flex-direction:column;align-items:center;',
+        'padding:40px 24px 32px;text-align:center;gap:16px;}',
+      '#cat-soft-gate.show{display:flex;}',
+      '#cat-soft-gate-icon{font-size:48px;line-height:1;}',
+      '#cat-soft-gate-title{font-size:18px;font-weight:900;color:#fff;letter-spacing:-.3px;}',
+      '#cat-soft-gate-sub{font-size:14px;color:rgba(240,240,246,0.55);line-height:1.6;max-width:280px;}',
+      '#cat-soft-gate-wa{display:inline-flex;align-items:center;gap:8px;',
+        'background:#25d366;color:#fff;border:none;border-radius:14px;',
+        'padding:14px 24px;font-size:15px;font-weight:800;cursor:pointer;',
+        'text-decoration:none;margin-top:4px;letter-spacing:-.2px;',
+        'box-shadow:0 6px 24px rgba(37,211,102,0.35);',
+        '-webkit-tap-highlight-color:transparent;}',
+      '#cat-soft-gate-wa:active{opacity:.85;}',
+      /* Grid disabled overlay when soft-gated */
+      '#cat-grid.qs-gated{pointer-events:none;opacity:0.18;filter:blur(2px);}',
+
       /* --- util --- */
       '.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}',
 
@@ -687,6 +704,18 @@
     err.appendChild(erri); err.appendChild(errt); err.appendChild(errs);
     root.appendChild(err);
 
+    // Soft gate (vendor not yet active — shows identity + WhatsApp CTA)
+    var sg = document.createElement('div');
+    sg.id = 'cat-soft-gate';
+    sg.setAttribute('role', 'status');
+    var sgi = document.createElement('div'); sgi.id = 'cat-soft-gate-icon'; sgi.textContent = '🔒';
+    var sgt = document.createElement('div'); sgt.id = 'cat-soft-gate-title'; sgt.textContent = 'Store not yet open';
+    var sgs = document.createElement('div'); sgs.id = 'cat-soft-gate-sub';
+    sgs.textContent = 'This vendor hasn\'t activated their catalog yet. You can still reach them directly on WhatsApp.';
+    sg.appendChild(sgi); sg.appendChild(sgt); sg.appendChild(sgs);
+    // WhatsApp CTA appended dynamically by showSoftGate() once we have phone + store name
+    root.appendChild(sg);
+
     // Cart bar (sticky bottom)
     var bar = document.createElement('div');
     bar.id = 'cat-cart-bar';
@@ -846,6 +875,63 @@
     if (grid)  grid.style.display  = 'none';
     if (emsg && msg) emsg.textContent = msg;
     if (err) err.classList.add('show');
+  }
+
+  // showSoftGate — called when is_active === false.
+  // Renders vendor identity (already in header) + a WhatsApp CTA panel,
+  // then blurs the grid so it is visible but non-interactive (soft lock).
+  function showSoftGate(storeName, phone) {
+    // Hide skeletons
+    var skels = document.getElementById('cat-skeletons');
+    if (skels) skels.style.display = 'none';
+
+    // Blur + disable grid interaction (products may have loaded — we still hide them)
+    var grid = document.getElementById('cat-grid');
+    if (grid) grid.classList.add('qs-gated');
+
+    // Hide the cart bar — no ordering while gated
+    var cartBar = document.getElementById('cat-cart-bar');
+    if (cartBar) cartBar.style.display = 'none';
+
+    // Update status pill to reflect closed state
+    var stxt = document.getElementById('cat-status-text');
+    var sstat = document.getElementById('cat-status');
+    if (stxt) stxt.textContent = 'NOT ACTIVE';
+    if (sstat) {
+      sstat.style.background = 'rgba(239,68,68,0.1)';
+      sstat.style.borderColor = 'rgba(239,68,68,0.25)';
+    }
+    var dot = sstat && sstat.querySelector('.cat-live-dot');
+    if (dot) { dot.style.background = '#ef4444'; dot.style.boxShadow = 'none'; }
+
+    // Show soft gate panel
+    var sg = document.getElementById('cat-soft-gate');
+    if (!sg) return;
+    sg.classList.add('show');
+
+    // Append WhatsApp CTA if we have a phone number
+    if (phone) {
+      var waMsg = 'Hi! I found your QuickShop catalog. Are you accepting orders?';
+      var waHref = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(waMsg);
+      var waBtn = document.createElement('a');
+      waBtn.id = 'cat-soft-gate-wa';
+      waBtn.href = waHref;
+      waBtn.target = '_blank';
+      waBtn.rel = 'noopener noreferrer';
+      waBtn.setAttribute('aria-label', 'Contact ' + (storeName || 'vendor') + ' on WhatsApp');
+      // WhatsApp SVG icon (same as checkout button)
+      var waNS = 'http://www.w3.org/2000/svg';
+      var waSvg = document.createElementNS(waNS, 'svg');
+      waSvg.setAttribute('viewBox','0 0 24 24'); waSvg.setAttribute('fill','currentColor');
+      waSvg.setAttribute('width','18'); waSvg.setAttribute('height','18');
+      waSvg.setAttribute('aria-hidden','true');
+      var waPath = document.createElementNS(waNS, 'path');
+      waPath.setAttribute('d','M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z');
+      waSvg.appendChild(waPath);
+      waBtn.appendChild(waSvg);
+      waBtn.appendChild(document.createTextNode(' Chat on WhatsApp'));
+      sg.appendChild(waBtn);
+    }
   }
 
   /* ── 7. STORE RESOLUTION ─────────────────────────────────────────────── */
@@ -2177,11 +2263,11 @@
     // Profile
     var profile   = profileResult.data;
 
-    // SECURITY GATE: Hard stop if the vendor has not paid.
-    if (profile && profile.is_active === false) {
-      showError('This catalog is currently unavailable.');
-      return;
-    }
+    // ── SECURITY GATE ────────────────────────────────────────────────────────
+    // If vendor is inactive, render their identity in the header (name, avatar)
+    // so the buyer knows whose store this is, then show the soft gate panel
+    // with a WhatsApp CTA instead of a dead-end error screen.
+    var _isGated = (profile && profile.is_active === false);
 
     var _rawName = (profile && (profile.business_name || profile.name)) || '';
 
@@ -2225,6 +2311,12 @@
         // Fallback to initials
         avatar.textContent = mono(_rawName || storeName);
       }
+    }
+
+    // SOFT GATE: header identity is now rendered — apply gate if inactive
+    if (_isGated) {
+      showSoftGate(storeName, SELLER_PHONE);
+      return; // stop — do not render products or attach cart events
     }
 
     // Hide skeletons, show grid area
