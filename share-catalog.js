@@ -19,6 +19,13 @@
   var PHONE_STORAGE_KEY = 'qs_seller_phone';
   var BASE_URL          = window.location.origin;
 
+  // ── Paywall config ───────────────────────────────────────────────────────────
+  // Fill these in before deploying. Never commit real account details to a repo.
+  var VENDOR_WHATSAPP  = '2348112439876';   // e.g. '2348012345678'
+  var BANK_NAME        = 'Opay (Paycom)';
+  var ACCOUNT_NUMBER   = '7035023138';
+  var ACCOUNT_NAME     = 'Moses Olayinka O';
+
   // ── Non-blocking toast ──────────────────────────────────────────────────────
 
   function notify(msg, type) {
@@ -267,53 +274,79 @@
     return phone;
   }
 
-  // ── Main share action ───────────────────────────────────────────────────────
+  // ── Subscription helpers ────────────────────────────────────────────────────
 
-  // ── Paywall modal ───────────────────────────────────────────────────────
-  // Shown when is_active = false OR subscription_expires is past.
-  // No Paystack. No Stripe. Bank details shown; you manually toggle is_active.
+  // localStorage key is scoped per user — two vendors on same device don't collide.
+  function pendingKey(userId) { return 'qs_payment_pending_' + userId; }
 
-  function showPaywallModal() {
+  async function checkSubscriptionActive(userId) {
+    try {
+      var sb = window.__QS_SUPABASE && window.__QS_SUPABASE.client;
+      if (!sb) return { active: false, expired: false };
+      var result = await sb
+        .from('profiles')
+        .select('is_active, subscription_expires')
+        .eq('id', userId)
+        .maybeSingle();
+      if (!result || !result.data) return { active: false, expired: false };
+      var d = result.data;
+      var now = new Date();
+      var hasExpiry = d.subscription_expires && new Date(d.subscription_expires) < now;
+      if (hasExpiry) return { active: false, expired: true };
+      if (!d.is_active) return { active: false, expired: false };
+      return { active: true, expired: false };
+    } catch (_) {
+      // Network failure — fail open so a glitch doesn't block an active vendor
+      return { active: true, expired: false };
+    }
+  }
+
+  // ── Paywall modals (State 1 and State 2) ────────────────────────────────────
+
+  // shared bottom-sheet scaffold
+  function _buildSheet(id) {
+    var stale = document.getElementById(id);
+    if (stale) stale.remove();
+
+    var backdrop = document.createElement('div');
+    backdrop.id = id;
+    backdrop.setAttribute('role', 'dialog');
+    backdrop.setAttribute('aria-modal', 'true');
+    backdrop.style.cssText = [
+      'position:fixed;inset:0;',
+      'background:rgba(0,0,0,0.82);',
+      'backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);',
+      'z-index:9999999;display:flex;',
+      'align-items:flex-end;justify-content:center;padding:0;',
+    ].join('');
+
+    var box = document.createElement('div');
+    box.style.cssText = [
+      'background:linear-gradient(160deg,#13111a 0%,#0f0d16 100%);',
+      'border:1px solid rgba(139,92,246,0.25);border-bottom:none;',
+      'border-radius:24px 24px 0 0;',
+      'padding:28px 24px 40px;',
+      'width:100%;max-width:480px;',
+      'box-shadow:0 -24px 60px rgba(0,0,0,0.7);',
+    ].join('');
+
+    // drag handle
+    var handle = document.createElement('div');
+    handle.style.cssText = 'width:40px;height:4px;border-radius:2px;background:rgba(255,255,255,0.15);margin:0 auto 24px;';
+    box.appendChild(handle);
+    backdrop.appendChild(box);
+    return { backdrop: backdrop, box: box };
+  }
+
+  // State 1 — fresh paywall: bank details + WhatsApp notify CTA
+  // If isRenewal is true, heading changes to "Renew Your Subscription"
+  function showPaywallModal(userId, userEmail, isRenewal) {
     return new Promise(function (resolve) {
-      var stale = document.getElementById('qs-paywall-modal');
-      if (stale) stale.remove();
-
-      var backdrop = document.createElement('div');
-      backdrop.id = 'qs-paywall-modal';
-      backdrop.setAttribute('role', 'dialog');
-      backdrop.setAttribute('aria-modal', 'true');
+      var _s = _buildSheet('qs-paywall-modal');
+      var backdrop = _s.backdrop, box = _s.box;
       backdrop.setAttribute('aria-labelledby', 'qs-paywall-title');
-      backdrop.style.cssText = [
-        'position:fixed;inset:0;',
-        'background:rgba(0,0,0,0.82);',
-        'backdrop-filter:blur(10px);',
-        '-webkit-backdrop-filter:blur(10px);',
-        'z-index:9999999;',
-        'display:flex;align-items:flex-end;justify-content:center;',
-        'padding:0;',
-      ].join('');
 
-      var box = document.createElement('div');
-      box.style.cssText = [
-        'background:linear-gradient(160deg,#13111a 0%,#0f0d16 100%);',
-        'border:1px solid rgba(139,92,246,0.25);',
-        'border-bottom:none;',
-        'border-radius:24px 24px 0 0;',
-        'padding:28px 24px 36px;',
-        'width:100%;max-width:480px;',
-        'box-shadow:0 -24px 60px rgba(0,0,0,0.7);',
-        'position:relative;',
-      ].join('');
-
-      // Drag handle
-      var handle = document.createElement('div');
-      handle.style.cssText = [
-        'width:40px;height:4px;border-radius:2px;',
-        'background:rgba(255,255,255,0.15);',
-        'margin:0 auto 24px;',
-      ].join('');
-
-      // Lock icon
+      // Icon
       var lockIcon = document.createElement('div');
       lockIcon.setAttribute('aria-hidden', 'true');
       lockIcon.style.cssText = [
@@ -323,24 +356,26 @@
         'font-size:24px;margin:0 auto 16px;',
         'box-shadow:0 8px 24px rgba(124,58,237,0.35);',
       ].join('');
-      lockIcon.textContent = '🔒';
+      lockIcon.textContent = isRenewal ? '🔄' : '🔒';
 
+      // Title
       var title = document.createElement('h2');
       title.id = 'qs-paywall-title';
       title.style.cssText = 'color:#fff;font-size:20px;font-weight:800;text-align:center;margin:0 0 8px;letter-spacing:-0.3px;';
-      title.textContent = 'Unlock Your Public Showroom';
+      title.textContent = isRenewal ? 'Renew Your Subscription' : 'Unlock Your Public Showroom';
 
+      // Subtitle
       var sub = document.createElement('p');
       sub.style.cssText = 'color:rgba(255,255,255,0.5);font-size:14px;text-align:center;margin:0 0 24px;line-height:1.6;';
-      sub.textContent = 'Share your catalog link with any customer for just ₦1,500/month. One-time bank transfer — activated within minutes.';
+      sub.textContent = isRenewal
+        ? 'Your subscription has expired. Renew for ₦1,500/month to restore your catalog link.'
+        : 'Share your catalog with your customer for ₦1,500/month. Bank transfer — activated within minutes.';
 
       // Price badge
       var priceBadge = document.createElement('div');
       priceBadge.style.cssText = [
-        'background:rgba(124,58,237,0.12);',
-        'border:1px solid rgba(124,58,237,0.3);',
-        'border-radius:12px;padding:16px 20px;',
-        'margin-bottom:20px;',
+        'background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.3);',
+        'border-radius:12px;padding:16px 20px;margin-bottom:20px;',
       ].join('');
       var priceRow = document.createElement('div');
       priceRow.style.cssText = 'display:flex;align-items:baseline;justify-content:center;gap:6px;margin-bottom:4px;';
@@ -348,124 +383,238 @@
       priceAmt.style.cssText = 'color:#a78bfa;font-size:32px;font-weight:900;letter-spacing:-1px;';
       priceAmt.textContent = '₦1,500';
       var pricePer = document.createElement('span');
-      pricePer.style.cssText = 'color:rgba(255,255,255,0.4);font-size:14px;font-weight:500;';
+      pricePer.style.cssText = 'color:rgba(255,255,255,0.4);font-size:14px;';
       pricePer.textContent = '/ month';
-      priceRow.appendChild(priceAmt);
-      priceRow.appendChild(pricePer);
       var priceNote = document.createElement('div');
       priceNote.style.cssText = 'color:rgba(255,255,255,0.35);font-size:12px;text-align:center;';
       priceNote.textContent = 'Inventory management stays free forever';
+      priceRow.appendChild(priceAmt);
+      priceRow.appendChild(pricePer);
       priceBadge.appendChild(priceRow);
       priceBadge.appendChild(priceNote);
 
       // Bank details card
       var bankCard = document.createElement('div');
       bankCard.style.cssText = [
-        'background:rgba(255,255,255,0.04);',
-        'border:1px solid rgba(255,255,255,0.08);',
-        'border-radius:12px;padding:16px 18px;',
-        'margin-bottom:20px;',
+        'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);',
+        'border-radius:12px;padding:16px 18px;margin-bottom:20px;',
       ].join('');
       var bankTitle = document.createElement('div');
       bankTitle.style.cssText = 'color:rgba(255,255,255,0.45);font-size:11px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:12px;';
       bankTitle.textContent = 'Transfer Details';
+      bankCard.appendChild(bankTitle);
 
       var bankLines = [
-        ['Bank',       'OPAY (Paycom)'],
-        ['Account No', '7035023138'],
-        ['Name',       'Moses Olayinka O'],
-        ['Reference',  'QS-CATALOG'],
+        ['Bank',       BANK_NAME],
+        ['Account No', ACCOUNT_NUMBER],
+        ['Name',       ACCOUNT_NAME],
+        ['Amount',     '₦1,500'],
       ];
-
-      bankCard.appendChild(bankTitle);
-      bankLines.forEach(function (pair) {
+      bankLines.forEach(function (pair, idx) {
         var row = document.createElement('div');
-        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);';
-        var label = document.createElement('span');
-        label.style.cssText = 'color:rgba(255,255,255,0.35);font-size:12px;';
-        label.textContent = pair[0];
-        var value = document.createElement('span');
-        value.style.cssText = 'color:#e2e8f0;font-size:13px;font-weight:600;';
-        value.textContent = pair[1];
-        row.appendChild(label);
-        row.appendChild(value);
+        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:7px 0;' +
+          (idx < bankLines.length - 1 ? 'border-bottom:1px solid rgba(255,255,255,0.05);' : '');
+        var lbl = document.createElement('span');
+        lbl.style.cssText = 'color:rgba(255,255,255,0.35);font-size:12px;';
+        lbl.textContent = pair[0];
+        var val = document.createElement('span');
+        val.style.cssText = 'color:#e2e8f0;font-size:13px;font-weight:600;';
+        val.textContent = pair[1];
+        row.appendChild(lbl);
+        row.appendChild(val);
         bankCard.appendChild(row);
       });
-      var lastRow = bankCard.querySelector('div:last-child');
-      if (lastRow) lastRow.style.borderBottom = 'none';
 
-      // After transfer note
-      var afterNote = document.createElement('p');
-      afterNote.style.cssText = 'color:rgba(255,255,255,0.3);font-size:12px;text-align:center;margin:0 0 20px;line-height:1.5;';
-      afterNote.textContent = 'After transfer, your link will be activated within a few minutes. We\'ll notify you.';
-
-      // CTA — dismiss (user has paid, waiting for activation)
-      var doneBtn = document.createElement('button');
-      doneBtn.type = 'button';
-      doneBtn.style.cssText = [
+      // WhatsApp CTA — primary action
+      var waBtn = document.createElement('button');
+      waBtn.type = 'button';
+      waBtn.style.cssText = [
         'width:100%;padding:15px;',
-        'background:linear-gradient(135deg,#7c3aed,#4f46e5);',
-        'border:0;border-radius:12px;',
-        'color:#fff;font-size:15px;font-weight:700;',
-        'cursor:pointer;letter-spacing:0.2px;',
-        'box-shadow:0 8px 24px rgba(124,58,237,0.35);',
-        'margin-bottom:10px;',
+        'background:linear-gradient(135deg,#22c55e,#16a34a);',
+        'border:0;border-radius:12px;color:#fff;',
+        'font-size:15px;font-weight:700;cursor:pointer;',
+        'letter-spacing:0.2px;margin-bottom:10px;',
+        'box-shadow:0 8px 24px rgba(34,197,94,0.3);',
       ].join('');
-      doneBtn.textContent = "I've Sent the Transfer";
+      waBtn.textContent = '✅ I\'ve Sent — Notify on WhatsApp';
 
+      // Cancel
       var cancelBtn = document.createElement('button');
       cancelBtn.type = 'button';
-      cancelBtn.style.cssText = [
-        'width:100%;padding:12px;',
-        'background:transparent;border:0;',
-        'color:rgba(255,255,255,0.3);',
-        'font-size:13px;cursor:pointer;',
-      ].join('');
+      cancelBtn.style.cssText = 'width:100%;padding:12px;background:transparent;border:0;color:rgba(255,255,255,0.3);font-size:13px;cursor:pointer;';
       cancelBtn.textContent = 'Maybe later';
 
-      function close() { backdrop.remove(); resolve(); }
+      function close() { backdrop.remove(); resolve('closed'); }
 
-      doneBtn.addEventListener('click', function () {
-        notify("Transfer noted! Your catalog link will be active within minutes.", 'success');
-        close();
+      waBtn.addEventListener('click', function () {
+        // 1. Mark pending — scoped to this user, timestamped
+        try { localStorage.setItem(pendingKey(userId), String(Date.now())); } catch (_) {}
+
+        // 2. Build pre-filled WhatsApp message
+        var msg = 'Hi, I just transferred ₦1,500 for QuickShop catalog access.\nAccount email: ' + (userEmail || 'N/A') + '\nPlease activate my store link. 🙏';
+        var waUrl = 'https://wa.me/' + VENDOR_WHATSAPP + '?text=' + encodeURIComponent(msg);
+        window.open(waUrl, '_blank', 'noopener,noreferrer');
+
+        // 3. Transition modal in-place to confirmation (no re-open)
+        backdrop.remove();
+        _showSentConfirmation(userId);
+        resolve('notified');
       });
+
       cancelBtn.addEventListener('click', close);
       backdrop.addEventListener('click', function (e) { if (e.target === backdrop) close(); });
       backdrop.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
 
-      box.appendChild(handle);
       box.appendChild(lockIcon);
       box.appendChild(title);
       box.appendChild(sub);
       box.appendChild(priceBadge);
       box.appendChild(bankCard);
-      box.appendChild(afterNote);
-      box.appendChild(doneBtn);
+      box.appendChild(waBtn);
       box.appendChild(cancelBtn);
-      backdrop.appendChild(box);
       document.body.appendChild(backdrop);
-
-      requestAnimationFrame(function () { doneBtn.focus(); });
+      requestAnimationFrame(function () { waBtn.focus(); });
     });
   }
 
-  // ── Subscription status check ────────────────────────────────────────────
+  // Inline confirmation — shown immediately after WhatsApp opens
+  // Not a new modal — replaces the paywall in place so there's no re-entry point
+  function _showSentConfirmation(userId) {
+    var _s = _buildSheet('qs-paywall-confirm');
+    var backdrop = _s.backdrop, box = _s.box;
 
-  async function checkSubscriptionActive(userId) {
-    try {
-      var sb = window.__QS_SUPABASE && window.__QS_SUPABASE.client;
-      if (!sb) return false;
-      var result = await sb
-        .from('profiles')
-        .select('is_active, subscription_expires')
-        .eq('id', userId)
-        .maybeSingle();
-      if (!result || !result.data) return false;
-      var d = result.data;
-      if (!d.is_active) return false;
-      if (d.subscription_expires && new Date(d.subscription_expires) < new Date()) return false;
-      return true;
-    } catch (_) { return false; }
+    var icon = document.createElement('div');
+    icon.style.cssText = 'font-size:44px;text-align:center;margin-bottom:12px;';
+    icon.textContent = '⏳';
+
+    var title = document.createElement('h2');
+    title.style.cssText = 'color:#fff;font-size:19px;font-weight:800;text-align:center;margin:0 0 10px;';
+    title.textContent = 'Payment Noted';
+
+    var msg = document.createElement('p');
+    msg.style.cssText = 'color:rgba(255,255,255,0.5);font-size:14px;text-align:center;margin:0 0 24px;line-height:1.65;';
+    msg.textContent = "We've received your WhatsApp message. Your store link will be activated within a few minutes once we verify your transfer.";
+
+    var note = document.createElement('div');
+    note.style.cssText = [
+      'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);',
+      'border-radius:10px;padding:12px 16px;margin-bottom:20px;',
+      'font-size:12px;color:rgba(255,255,255,0.4);line-height:1.55;',
+    ].join('');
+    note.textContent = 'Come back and tap "Share Catalog" again after activation. If it\'s been more than 15 minutes, tap the button below.';
+
+    // Follow-up WhatsApp link (soft, not a CTA button)
+    var followUp = document.createElement('a');
+    followUp.href = 'https://wa.me/' + VENDOR_WHATSAPP + '?text=' + encodeURIComponent("Hi, I'm following up on my QuickShop catalog payment. Has my store been activated?");
+    followUp.target = '_blank';
+    followUp.rel = 'noopener noreferrer';
+    followUp.style.cssText = [
+      'display:block;text-align:center;',
+      'color:#a78bfa;font-size:13px;font-weight:600;',
+      'text-decoration:none;margin-bottom:20px;',
+    ].join('');
+    followUp.textContent = 'Still waiting? Follow up on WhatsApp →';
+
+    var doneBtn = document.createElement('button');
+    doneBtn.type = 'button';
+    doneBtn.style.cssText = [
+      'width:100%;padding:14px;',
+      'background:rgba(255,255,255,0.06);',
+      'border:1px solid rgba(255,255,255,0.1);',
+      'border-radius:12px;color:rgba(255,255,255,0.7);',
+      'font-size:14px;font-weight:600;cursor:pointer;',
+    ].join('');
+    doneBtn.textContent = 'Got it, I\'ll wait';
+
+    doneBtn.addEventListener('click', function () { backdrop.remove(); });
+    backdrop.addEventListener('click', function (e) { if (e.target === backdrop) backdrop.remove(); });
+    backdrop.addEventListener('keydown', function (e) { if (e.key === 'Escape') backdrop.remove(); });
+
+    box.appendChild(icon);
+    box.appendChild(title);
+    box.appendChild(msg);
+    box.appendChild(note);
+    box.appendChild(followUp);
+    box.appendChild(doneBtn);
+    document.body.appendChild(backdrop);
+    requestAnimationFrame(function () { doneBtn.focus(); });
+  }
+
+  // State 2 — already notified, awaiting admin activation
+  function showPendingModal(userId, pendingTs) {
+    return new Promise(function (resolve) {
+      var _s = _buildSheet('qs-paywall-pending');
+      var backdrop = _s.backdrop, box = _s.box;
+      backdrop.setAttribute('aria-labelledby', 'qs-pending-title');
+
+      var icon = document.createElement('div');
+      icon.style.cssText = 'font-size:44px;text-align:center;margin-bottom:12px;';
+      icon.textContent = '⏳';
+
+      var title = document.createElement('h2');
+      title.id = 'qs-pending-title';
+      title.style.cssText = 'color:#fff;font-size:19px;font-weight:800;text-align:center;margin:0 0 10px;';
+      title.textContent = 'Awaiting Activation';
+
+      // Human-readable time since notification
+      var elapsed = Date.now() - (parseInt(pendingTs, 10) || Date.now());
+      var elapsedTxt = elapsed < 60000
+        ? 'just now'
+        : elapsed < 3600000
+          ? Math.floor(elapsed / 60000) + ' minute' + (Math.floor(elapsed / 60000) === 1 ? '' : 's') + ' ago'
+          : Math.floor(elapsed / 3600000) + ' hour' + (Math.floor(elapsed / 3600000) === 1 ? '' : 's') + ' ago';
+
+      var msg = document.createElement('p');
+      msg.style.cssText = 'color:rgba(255,255,255,0.5);font-size:14px;text-align:center;margin:0 0 20px;line-height:1.65;';
+      msg.textContent = 'You notified us ' + elapsedTxt + '. We\'re verifying your transfer — your store link will be live shortly.';
+
+      var note = document.createElement('div');
+      note.style.cssText = [
+        'background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);',
+        'border-radius:10px;padding:12px 16px;margin-bottom:20px;',
+        'font-size:12px;color:rgba(255,255,255,0.45);line-height:1.55;',
+      ].join('');
+      note.textContent = 'Once activated, tap "Share Catalog" and your link will work. Activation is usually within a few minutes during business hours.';
+
+      // Follow-up link — available after 15 mins
+      if (elapsed > 15 * 60 * 1000) {
+        var followUp = document.createElement('a');
+        followUp.href = 'https://wa.me/' + VENDOR_WHATSAPP + '?text=' + encodeURIComponent("Hi, I'm following up on my QuickShop catalog payment. Has my store been activated?");
+        followUp.target = '_blank';
+        followUp.rel = 'noopener noreferrer';
+        followUp.style.cssText = [
+          'display:block;text-align:center;',
+          'color:#a78bfa;font-size:13px;font-weight:600;',
+          'text-decoration:none;margin-bottom:20px;',
+        ].join('');
+        followUp.textContent = 'Still waiting? Follow up on WhatsApp →';
+        box.appendChild(followUp);
+      }
+
+      var doneBtn = document.createElement('button');
+      doneBtn.type = 'button';
+      doneBtn.style.cssText = [
+        'width:100%;padding:14px;',
+        'background:rgba(255,255,255,0.06);',
+        'border:1px solid rgba(255,255,255,0.1);',
+        'border-radius:12px;color:rgba(255,255,255,0.7);',
+        'font-size:14px;font-weight:600;cursor:pointer;',
+      ].join('');
+      doneBtn.textContent = 'OK, I\'ll wait';
+
+      function close() { backdrop.remove(); resolve(); }
+      doneBtn.addEventListener('click', close);
+      backdrop.addEventListener('click', function (e) { if (e.target === backdrop) close(); });
+      backdrop.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+
+      box.appendChild(icon);
+      box.appendChild(title);
+      box.appendChild(msg);
+      box.appendChild(note);
+      box.appendChild(doneBtn);
+      document.body.appendChild(backdrop);
+      requestAnimationFrame(function () { doneBtn.focus(); });
+    });
   }
 
   // ── Main share action ───────────────────────────────────────────────────────
@@ -479,13 +628,39 @@
       return;
     }
 
-    // ── Subscription gate ──────────────────────────────────────────────────
-    var isActive = await checkSubscriptionActive(userId);
-    if (!isActive) {
-      await showPaywallModal();
-      return; // abort share — user needs to pay and be manually activated
+    // ── Three-state subscription gate ─────────────────────────────────────────
+    var subStatus = await checkSubscriptionActive(userId);
+
+    if (!subStatus.active) {
+      var userEmail = '';
+      try {
+        var _u = window.__QS_APP && typeof window.__QS_APP.getUser === 'function' && window.__QS_APP.getUser();
+        userEmail = (_u && _u.email) || '';
+      } catch (_) {}
+
+      if (subStatus.expired) {
+        // Subscription lapsed — clear any stale pending key so they go through
+        // fresh payment flow, not "awaiting activation" (different situation).
+        try { localStorage.removeItem(pendingKey(userId)); } catch (_) {}
+        await showPaywallModal(userId, userEmail, true); // isRenewal = true
+        return;
+      }
+
+      // Check if already notified (pending activation)
+      var pendingTs = null;
+      try { pendingTs = localStorage.getItem(pendingKey(userId)); } catch (_) {}
+
+      if (pendingTs) {
+        // State 2 — show waiting screen, no bank details, no re-notify CTA
+        await showPendingModal(userId, pendingTs);
+        return;
+      }
+
+      // State 1 — first time, show full paywall
+      await showPaywallModal(userId, userEmail, false);
+      return;
     }
-    // ── End subscription gate ─────────────────────────────────────────────
+    // ── End subscription gate ─────────────────────────────────────────────────
 
     var phone = await getSellerPhone();
     if (!phone) return;
