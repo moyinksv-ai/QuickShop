@@ -643,7 +643,9 @@ body.keyboard-open .modal { top: 8vh !important; }
 
 /* ── PANELS — consistent spacing ─────────────────────────────────── */
 .panel { display: none; min-height: calc(100vh - var(--topbar-h) - var(--nav-h)); overflow-anchor: none; padding-top: 16px; }
-.panel.active { display: block; animation: panelEnter 0.3s cubic-bezier(0.16,1,0.3,1) both; }
+.panel.active { display: block; animation: panelEnter 0.26s cubic-bezier(0.16,1,0.3,1) both; will-change: transform, opacity; }
+.panel.active.from-right { animation: panelEnterRight 0.24s cubic-bezier(0.16,1,0.3,1) both; will-change: transform, opacity; }
+.panel.active.from-left  { animation: panelEnterLeft  0.24s cubic-bezier(0.16,1,0.3,1) both; will-change: transform, opacity; }
 /* Panels with sticky-header-wrapper should NOT have extra top padding — the header creates it */
 #inventoryPanel { padding-top: 0; }
 #settingsPanel { padding-bottom: calc(var(--nav-h) + 40px + env(safe-area-inset-bottom)) !important; padding-top: 0; }
@@ -656,14 +658,13 @@ body.keyboard-open .modal { top: 8vh !important; }
 #homePanel .chips { margin-top: 2px; margin-bottom: 14px; }
 
 /*
- * Directional panel overrides — override the default panelEnter animation.
+ * Directional panel overrides consolidated into .panel.active rules above.
  * from-right: navigating to a higher-indexed tab → new panel arrives from right.
  * from-left:  navigating to a lower-indexed tab  → new panel arrives from left.
- * Specificity: .panel.active.from-right > .panel.active ✓
- * JS adds the class before .active, removes it after 320ms (animation duration).
+ * will-change: transform, opacity pre-promotes the compositor layer so the
+ * browser never paints a display:block frame before opacity:0 is applied —
+ * this eliminates the white flash between panels.
  */
-.panel.active.from-right { animation: panelEnterRight 0.3s cubic-bezier(0.16,1,0.3,1) both; }
-.panel.active.from-left  { animation: panelEnterLeft  0.3s cubic-bezier(0.16,1,0.3,1) both; }
 
 /* ── REPORTS ─────────────────────────────────────────────────────── */
 #reportChartCard { margin-top: 10px; background: var(--card-glass); padding: 10px; border-radius: var(--radius); box-shadow: var(--shadow-glass); border: 1px solid var(--border-glass); }
@@ -1014,16 +1015,16 @@ input[type="file"]::file-selector-button:hover { background: var(--accent-primar
 
 /*
  * Directional panel enter keyframes.
- * 24px horizontal offset — enough to read as navigation direction without
- * feeling like a page transition. Same expo-out curve as panelEnter.
- * No scale — horizontal slides don't need depth cue, just direction.
+ * 16px horizontal offset — reduced from 24px. On a 360px screen 24px read
+ * as sluggish; 16px gives the same directional cue with a snappier feel.
+ * No scale — horizontal slides don't need the depth cue, just direction.
  */
 @keyframes panelEnterRight {
-  from { opacity: 0; transform: translateX(24px); }
+  from { opacity: 0; transform: translateX(16px); }
   to   { opacity: 1; transform: translateX(0); }
 }
 @keyframes panelEnterLeft {
-  from { opacity: 0; transform: translateX(-24px); }
+  from { opacity: 0; transform: translateX(-16px); }
   to   { opacity: 1; transform: translateX(0); }
 }
 

@@ -371,9 +371,9 @@
       bankTitle.textContent = 'Transfer Details';
 
       var bankLines = [
-        ['Bank',       'YOUR_BANK_NAME'],
-        ['Account No', 'YOUR_ACCOUNT_NUMBER'],
-        ['Name',       'YOUR_ACCOUNT_NAME'],
+        ['Bank',       'OPAY (Paycom)'],
+        ['Account No', '7035023138'],
+        ['Name',       'Moses Olayinka O'],
         ['Reference',  'QS-CATALOG'],
       ];
 
