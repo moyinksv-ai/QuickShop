@@ -44,6 +44,21 @@
 
   if (!STORE_ID && !TOKEN) return; // not a catalog URL — do nothing
 
+  /* ── 0b. REFERRAL CAPTURE ──────────────────────────────────────────────── */
+  // When a buyer lands on this catalog via the branding link (?ref=<UUID>),
+  // save the referrer's user_id to sessionStorage immediately — before any
+  // async work. sessionStorage persists across same-tab navigation (sign up
+  // form redirect) but dies with the tab, which is the correct scope.
+  // UUID validated here so garbage params never reach Supabase.
+  (function () {
+    try {
+      var _refRaw = _p.get('ref') || '';
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_refRaw)) {
+        sessionStorage.setItem('qs_referrer_id', _refRaw);
+      }
+    } catch (_) {}
+  })();
+
   /* ── 1. WAIT FOR SUPABASE ──────────────────────────────────────────────── */
 
   function waitForClient(timeoutMs) {
@@ -818,74 +833,6 @@
 
     document.body.appendChild(root);
     return root;
-  }
-
-  /* ── 6a. SUBSCRIPTION GATE SCREEN ───────────────────────────────────────
-   * Shown when is_active = false OR subscription_expires is in the past.
-   * Hides skeletons and grid. Never shows "subscription expired" to customers
-   * — that's the vendor's business. Shows a soft offline message instead,
-   * with a WhatsApp direct-order button so the customer isn't abandoned. */
-
-  function showSubscriptionGate(businessName, sellerPhone) {
-    var skels = document.getElementById('cat-skeletons');
-    var grid  = document.getElementById('cat-grid');
-    var err   = document.getElementById('cat-error');
-    if (skels) skels.style.display = 'none';
-    if (grid)  grid.style.display  = 'none';
-    if (err)   err.style.display   = 'none'; // hide generic error — we build our own
-
-    // Build a custom gate screen that reuses catalog state classes for consistency
-    var existing = document.getElementById('cat-sub-gate');
-    if (existing) existing.remove();
-
-    var gate = document.createElement('div');
-    gate.id = 'cat-sub-gate';
-    gate.style.cssText = 'padding:60px 20px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px;';
-
-    var icon = document.createElement('div');
-    icon.className = 'cat-state-icon';
-    icon.textContent = '🏪';
-
-    var title = document.createElement('div');
-    title.className = 'cat-state-title';
-    // Use business name if available — keeps it personal
-    title.textContent = businessName
-      ? (businessName.trimEnd().endsWith('s') ? businessName + "' Store" : businessName + "'s Store") + ' is temporarily offline'
-      : 'This store is temporarily offline';
-
-    var sub = document.createElement('div');
-    sub.className = 'cat-state-sub';
-    sub.style.marginBottom = '24px';
-    sub.textContent = 'The catalog is not available right now. Contact the seller directly to place an order.';
-
-    gate.appendChild(icon);
-    gate.appendChild(title);
-    gate.appendChild(sub);
-
-    // WhatsApp direct-order button — only if we have the seller's phone
-    if (sellerPhone) {
-      var waBtn = document.createElement('a');
-      var waMsg = businessName
-        ? 'Hi, I saw your QuickShop catalog and wanted to place an order directly.'
-        : 'Hi, I wanted to place an order directly.';
-      waBtn.href = 'https://wa.me/' + sellerPhone + '?text=' + encodeURIComponent(waMsg);
-      waBtn.target = '_blank';
-      waBtn.rel = 'noopener noreferrer';
-      waBtn.style.cssText = [
-        'display:inline-flex;align-items:center;gap:8px;',
-        'background:#22c55e;color:#fff;',
-        'padding:13px 22px;border-radius:12px;',
-        'font-size:14px;font-weight:700;',
-        'text-decoration:none;',
-        'box-shadow:0 6px 20px rgba(34,197,94,0.3);',
-      ].join('');
-      waBtn.textContent = '💬 Order via WhatsApp';
-      gate.appendChild(waBtn);
-    }
-
-    // Append into the catalog root so it's properly positioned in the scroll flow
-    var root = document.getElementById('qs-catalog');
-    if (root) root.appendChild(gate);
   }
 
   /* ── 6. SHOW ERROR STATE ─────────────────────────────────────────────── */
@@ -2152,6 +2099,17 @@
       return;
     }
 
+    // ── Referral growth loop ────────────────────────────────────────────────
+    // Patch the branding CTA link to include ?ref=<storeId> so any buyer
+    // who taps "Create yours free" arrives at signup pre-tagged with this
+    // vendor as referrer. The link is on the static branding footer built in
+    // buildShell() — storeId is only available here after resolveStore().
+    var _brandingLink = document.getElementById('cat-branding-link');
+    if (_brandingLink) {
+      _brandingLink.href = window.location.origin + '/?ref=' + encodeURIComponent(storeId);
+    }
+    // ── End referral growth loop ────────────────────────────────────────────
+
     // Fetch profile + products.
     // Strategy: try the security-scoped views first (post-migration).
     // If either view is missing ("not in schema cache"), fall back to querying
@@ -2191,11 +2149,10 @@
 
       // View missing — fall back to profiles table.
       // Explicit columns only — never expose email.
-      // is_active + subscription_expires included for subscription gate check.
       console.warn('[Catalog] Profile view missing, falling back to profiles table:', vr.error.message);
       return client
         .from('profiles')
-        .select('id, name, business_name, tagline, is_active, subscription_expires')
+        .select('id, name, business_name, tagline')
         .eq('id', storeId)
         .maybeSingle();
     }
@@ -2216,25 +2173,6 @@
       showError('Could not load products. (' + errMsg + ')');
       return;
     }
-
-    // ── Subscription gate ────────────────────────────────────────────────────
-    // Check is_active and subscription_expires from the profile data.
-    // The view (public_catalog_profiles) returns * so it includes these columns
-    // if they exist in the view. The fallback table query explicitly selects them.
-    // Rule: null subscription_expires = no clock, treat as active indefinitely.
-    //       is_active must be explicitly true — false or missing = gated.
-    var _sub = profileResult.data;
-    var _isActive = _sub && _sub.is_active === true;
-    var _isExpired = _sub && _sub.subscription_expires
-      && new Date(_sub.subscription_expires) < new Date();
-
-    if (!_isActive || _isExpired) {
-      // Extract business name and phone for the gate screen
-      var _gateName = (_sub && (_sub.business_name || _sub.name)) || '';
-      showSubscriptionGate(_gateName, SELLER_PHONE);
-      return;
-    }
-    // ── End subscription gate ────────────────────────────────────────────────
 
     // Profile
     var profile   = profileResult.data;

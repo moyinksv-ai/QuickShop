@@ -29,6 +29,20 @@ function initApp() {
   const IS_PROD = window.location.hostname !== 'localhost' && !window.location.hostname.includes('127.0.0.1');
   const log = IS_PROD ? () => {} : (...a) => console.log('[QS]', ...a);
 
+  // ── Referral capture ─────────────────────────────────────────────────────
+  // If the user arrived via a catalog's branding link (?ref=<UUID>), capture
+  // the referrer's user_id into sessionStorage immediately at boot so it
+  // survives navigation between Login ↔ Signup tabs. Consumed once at signup
+  // then cleared. UUID-validated here to prevent garbage data reaching the DB.
+  (function captureReferral() {
+    try {
+      var _refParam = new URLSearchParams(window.location.search).get('ref');
+      if (_refParam && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_refParam)) {
+        sessionStorage.setItem('qs_referrer_id', _refParam);
+      }
+    } catch (_) {}
+  })();
+
   // ── Sentry initialisation ────────────────────────────────────────────────
   // Replace YOUR_SENTRY_DSN with the DSN from your Sentry project settings.
   // The DSN is public-safe — it only lets data IN, never exposes your data.
@@ -935,16 +949,10 @@ function handleTouchEnd() {
       }
       // If cloud returned nothing, keep local state unchanged.
       state.categories = cloudCategories.length > 0 ? cloudCategories : (state.categories.length > 0 ? state.categories : [...DEFAULT_CATEGORIES]);
-      // Merge logs: cloud is authoritative for known IDs, but preserve
-      // local-only logs not yet synced (same pattern as notes merge above).
-      // Overwriting state.logs wholesale with cloudLogs discards any entries
-      // created offline since the last sync — this merge prevents that data loss.
       if (cloudLogs.length > 0) {
         const cloudLogIds = new Set(cloudLogs.map(l => l.id));
         const localOnly = (state.logs || []).filter(l => !cloudLogIds.has(l.id));
-        state.logs = [...cloudLogs, ...localOnly]
-          .sort((a, b) => b.ts - a.ts)
-          .slice(0, 200);
+        state.logs = [...cloudLogs, ...localOnly].sort((a, b) => b.ts - a.ts).slice(0, 200);
       }
       // else: cloud returned nothing — keep local state.logs unchanged
       toast('Data synced from cloud', 'info', 1500);
@@ -1107,6 +1115,29 @@ function handleTouchEnd() {
           const user = data.user;
           const profile = { uid: user.id, name, businessName: business || null, email: user.email, createdAt: Date.now() };
           await setUserProfile(user.id, profile);
+
+          // ── Referral attribution ────────────────────────────────────────
+          // Consume the pending referral captured at boot or from catalog.js.
+          // Written once — never overwritten. Self-referral blocked here and
+          // at DB level (trigger also checks referred_by !== id).
+          try {
+            var _pendingRef = sessionStorage.getItem('qs_referrer_id');
+            if (
+              _pendingRef &&
+              /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_pendingRef) &&
+              _pendingRef !== user.id
+            ) {
+              const supabaseRef = getClient();
+              if (supabaseRef) {
+                await supabaseRef.from('profiles')
+                  .update({ referred_by: _pendingRef })
+                  .eq('id', user.id);
+              }
+            }
+            sessionStorage.removeItem('qs_referrer_id');
+          } catch (_refErr) { errlog('referral attribution', _refErr); }
+          // ── End referral attribution ─────────────────────────────────────
+
           showVerificationNotice(email);
           toast('Account created — verification email sent. Please verify before logging in.');
         } catch (e) {
@@ -2878,7 +2909,16 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       tbl.appendChild(tbody);
       outer.appendChild(tbl);
       reportBreakdown.appendChild(outer);
+
+      if (range === 'monthly') {
+        const notice = document.createElement('div');
+        notice.style.cssText = 'margin-top:10px;padding:10px 14px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);border-radius:10px;font-size:11.5px;color:rgba(255,255,255,0.4);line-height:1.55;';
+        notice.textContent = '⚠ Data beyond 90 days is stored on this device only. Clearing browser storage will remove it.';
+        reportBreakdown.appendChild(notice);
+      }
+
       // Spacer accounts for the fixed navbar height + Android gesture bar safe area.
+      // env(safe-area-inset-bottom) is 0 in desktop/Acode, ~34px in installed PWA.
       // env(safe-area-inset-bottom) is 0 in desktop/Acode, ~34px in installed PWA.
       const spacer = document.createElement('div');
       spacer.style.cssText = 'height:calc(var(--nav-h, 68px) + 16px + env(safe-area-inset-bottom));flex-shrink:0;pointer-events:none;';
@@ -2943,8 +2983,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     const dailyRate = totalSold / 30;
     
     if (dailyRate === 0) return null;
-    const daysUntilStockout = Math.floor(product.qty / dailyRate);
-    
+    const daysUntilStockout = Math.min(90, Math.floor(product.qty / dailyRate));
     return { daysUntilStockout, dailyRate };
   }
 
@@ -3114,8 +3153,6 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       return `<button class="ai-action-btn" ${dataAttrs} style="background:${color};border:0;padding:6px 13px;border-radius:8px;font-size:12px;font-weight:700;color:#fff;cursor:pointer;white-space:nowrap;letter-spacing:0.2px;">${label}</button>`;
     }
     function productLine(name, sub) {
-      // Both name and sub escaped — sub is currently always numeric-derived
-      // but escaping closes the surface if a future caller passes user input.
       return `<div style="font-weight:600;font-size:13.5px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;">${escapeHtml(name)}</div>
               <div style="font-size:11.5px;color:rgba(255,255,255,0.5);margin-top:1px;">${escapeHtml(String(sub))}</div>`;
     }
@@ -3932,6 +3969,14 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
         <div id="activityLogArea"></div>
       </div>
 
+      <!-- ── Referral Programme ─────────────────────────────────────── -->
+      <div class="qs-s-section" id="qs-referral-section">
+        <div class="qs-s-section-title">Referral Programme</div>
+        <div id="qs-referral-body" style="padding:4px 0 8px;">
+          <div style="color:var(--text-muted);font-size:13px;padding:8px 0;">Loading…</div>
+        </div>
+      </div>
+
       <!-- ── About (tappable → full overlay) ───────────────────────── -->
       <div class="qs-s-section">
         <button id="qs-about-btn" class="qs-s-row"
@@ -4227,7 +4272,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
           '\n\nMy name: \nMy store: \nIssue / feedback: ' +
           '\n\nThank you.'
         );
-        window.open('https://wa.me/234812439876?text=' + msg, '_blank', 'noopener,noreferrer');
+        window.open('https://wa.me/2347035023138?text=' + msg, '_blank', 'noopener,noreferrer');
       });
       sup.appendChild(contactBtn);
       body.appendChild(sup);
@@ -4296,6 +4341,203 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
 
     // Render categories into the store drawer slot
     renderCategoryEditor();
+
+    // ── Referral dashboard — async, non-blocking ──────────────────────────
+    // Queries the referrals and payout_requests tables for the current user.
+    // Computes totals from ledger rows — never from stored counters.
+    // Renders into #qs-referral-body which is already in the DOM above.
+    (async function renderReferralDashboard() {
+      const _u  = getUser();
+      const _sb = getClient();
+      const _body = settingsPanel.querySelector('#qs-referral-body');
+      if (!_u || !_sb || !_body) return;
+
+      const MILESTONE = 10;
+      const AMOUNT_PER = 500;
+
+      try {
+        // Fetch referrals + pending payout requests in parallel
+        const [refResult, payResult] = await Promise.all([
+          _sb.from('referrals')
+            .select('id, status, created_at')
+            .eq('referrer_id', _u.id),
+          _sb.from('payout_requests')
+            .select('id, status')
+            .eq('user_id', _u.id)
+            .eq('status', 'pending')
+        ]);
+
+        const rows       = refResult.data  || [];
+        const pendingPay = payResult.data  || [];
+
+        const earned = rows.filter(r => r.status === 'earned').length;
+        const paid   = rows.filter(r => r.status === 'paid').length;
+        const total  = rows.length;
+
+        const earningsNgn  = earned * AMOUNT_PER;
+        const hasPending   = pendingPay.length > 0;
+        const canRequest   = total >= MILESTONE && !hasPending;
+
+        // Build UI — Obsidian Glass style, dark, 16px radius, glassmorphism
+        _body.innerHTML = '';
+
+        // Stats row
+        const stats = document.createElement('div');
+        stats.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;';
+
+        function statCard(label, value, accent) {
+          const c = document.createElement('div');
+          c.style.cssText = [
+            'background:rgba(255,255,255,0.03);',
+            'border:1px solid rgba(255,255,255,0.07);',
+            'border-radius:16px;padding:14px 16px;',
+          ].join('');
+          const v = document.createElement('div');
+          v.style.cssText = 'font-size:22px;font-weight:800;color:' + accent + ';letter-spacing:-0.5px;margin-bottom:3px;';
+          v.textContent = value;
+          const l = document.createElement('div');
+          l.style.cssText = 'font-size:11px;font-weight:600;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.5px;';
+          l.textContent = label;
+          c.appendChild(v);
+          c.appendChild(l);
+          return c;
+        }
+
+        stats.appendChild(statCard('Referrals', total + ' / ' + MILESTONE, '#a78bfa'));
+        stats.appendChild(statCard('Earnings',  '₦' + earningsNgn.toLocaleString('en-NG'), '#10b981'));
+        _body.appendChild(stats);
+
+        // Progress bar toward milestone
+        const progressWrap = document.createElement('div');
+        progressWrap.style.cssText = 'margin-bottom:14px;';
+        const progressLbl = document.createElement('div');
+        progressLbl.style.cssText = 'display:flex;justify-content:space-between;font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:6px;font-weight:600;';
+        const progressLeft = document.createElement('span');
+        progressLeft.textContent = total >= MILESTONE
+          ? '🎉 Milestone reached!'
+          : (MILESTONE - total) + ' more referral' + (MILESTONE - total === 1 ? '' : 's') + ' to unlock payout';
+        const progressRight = document.createElement('span');
+        progressRight.textContent = total + ' / ' + MILESTONE;
+        progressLbl.appendChild(progressLeft);
+        progressLbl.appendChild(progressRight);
+
+        const track = document.createElement('div');
+        track.style.cssText = 'height:6px;background:rgba(255,255,255,0.07);border-radius:99px;overflow:hidden;';
+        const fill = document.createElement('div');
+        const fillPct = Math.min(100, Math.round((total / MILESTONE) * 100));
+        fill.style.cssText = 'height:100%;width:' + fillPct + '%;border-radius:99px;background:linear-gradient(90deg,#7c3aed,#a78bfa);transition:width 0.4s ease;';
+        track.appendChild(fill);
+        progressWrap.appendChild(progressLbl);
+        progressWrap.appendChild(track);
+        _body.appendChild(progressWrap);
+
+        // Referral link row — shows their unique referral URL
+        const linkRow = document.createElement('div');
+        linkRow.style.cssText = [
+          'background:rgba(99,102,241,0.07);',
+          'border:1px solid rgba(99,102,241,0.18);',
+          'border-radius:12px;padding:12px 14px;',
+          'margin-bottom:14px;',
+        ].join('');
+        const linkLabel = document.createElement('div');
+        linkLabel.style.cssText = 'font-size:11px;font-weight:700;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;';
+        linkLabel.textContent = 'Your Referral Link';
+        const linkVal = document.createElement('div');
+        linkVal.style.cssText = 'font-size:12px;color:#a78bfa;word-break:break-all;line-height:1.5;cursor:pointer;';
+        const refUrl = window.location.origin + '/?ref=' + encodeURIComponent(_u.id);
+        linkVal.textContent = refUrl;
+        linkVal.title = 'Tap to copy';
+        linkVal.addEventListener('click', function () {
+          try {
+            navigator.clipboard.writeText(refUrl).then(function () {
+              toast('Referral link copied ✓', 'success');
+            }).catch(function () {
+              toast('Copy failed — long-press to copy manually', 'error');
+            });
+          } catch (_) { toast('Copy failed — long-press to copy manually', 'error'); }
+        });
+        linkRow.appendChild(linkLabel);
+        linkRow.appendChild(linkVal);
+        _body.appendChild(linkRow);
+
+        // Payout button
+        const payBtn = document.createElement('button');
+        payBtn.type = 'button';
+        payBtn.style.cssText = [
+          'width:100%;padding:13px;border-radius:16px;border:0;',
+          'font-size:14px;font-weight:700;cursor:pointer;',
+          'transition:opacity 0.2s,transform 0.1s;',
+          canRequest
+            ? 'background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;box-shadow:0 6px 20px rgba(124,58,237,0.3);'
+            : 'background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.25);cursor:not-allowed;border:1px solid rgba(255,255,255,0.07);',
+        ].join('');
+
+        if (hasPending) {
+          payBtn.textContent = '⏳ Payout Request Pending';
+          payBtn.disabled = true;
+        } else if (total < MILESTONE) {
+          payBtn.textContent = 'Request Payout (need ' + MILESTONE + ' referrals)';
+          payBtn.disabled = true;
+        } else {
+          payBtn.textContent = '💸 Request Payout — ₦' + (earningsNgn).toLocaleString('en-NG');
+          payBtn.disabled = false;
+        }
+
+        payBtn.addEventListener('click', async function () {
+          if (!canRequest) return;
+          payBtn.disabled = true;
+          payBtn.textContent = 'Submitting…';
+          try {
+            // Anti-fraud: check for existing pending request server-side before inserting
+            const { data: existingPending } = await _sb
+              .from('payout_requests')
+              .select('id')
+              .eq('user_id', _u.id)
+              .eq('status', 'pending');
+            if (existingPending && existingPending.length > 0) {
+              toast('You already have a pending payout request.', 'warning');
+              payBtn.textContent = '⏳ Payout Request Pending';
+              return;
+            }
+            const { error: insErr } = await _sb
+              .from('payout_requests')
+              .insert({ user_id: _u.id, status: 'pending' });
+            if (insErr) throw insErr;
+            toast('Payout requested ✓ We\'ll process it shortly.', 'success');
+            payBtn.textContent = '⏳ Payout Request Pending';
+            payBtn.disabled = true;
+            payBtn.style.background = 'rgba(255,255,255,0.05)';
+            payBtn.style.color = 'rgba(255,255,255,0.25)';
+            payBtn.style.boxShadow = 'none';
+            payBtn.style.border = '1px solid rgba(255,255,255,0.07)';
+          } catch (e) {
+            errlog('payout request failed', e);
+            toast('Failed to submit request: ' + (e.message || 'unknown'), 'error');
+            payBtn.disabled = false;
+            payBtn.textContent = '💸 Request Payout — ₦' + earningsNgn.toLocaleString('en-NG');
+          }
+        });
+
+        _body.appendChild(payBtn);
+
+        // Sub-note
+        const note = document.createElement('div');
+        note.style.cssText = 'font-size:11px;color:rgba(255,255,255,0.2);text-align:center;margin-top:8px;line-height:1.5;';
+        note.textContent = 'Share your referral link. Every vendor who signs up and gets activated earns you ₦500.';
+        _body.appendChild(note);
+
+      } catch (e) {
+        errlog('renderReferralDashboard', e);
+        if (_body) {
+          _body.innerHTML = '';
+          const errDiv = document.createElement('div');
+          errDiv.style.cssText = 'font-size:12px;color:rgba(255,255,255,0.3);padding:8px 0;';
+          errDiv.textContent = 'Could not load referral data. Check your connection.';
+          _body.appendChild(errDiv);
+        }
+      }
+    })();
+    // ── End referral dashboard ────────────────────────────────────────────
 
     // Wire Share Catalog action button — calls share-catalog.js handleShareClick directly
     const actionShareBtn = settingsPanel.querySelector('#qs-action-share');

@@ -31,7 +31,7 @@
  *      Ensures the app opens offline after first visit.
  */
 
-var CACHE_NAME    = 'qs-v6.3';
+var CACHE_NAME    = 'qs-v6.4';
 var IMAGE_CACHE   = 'qs-images-v4.0';
 /* ── Install ─────────────────────────────────────────────────────────────────
  * Nothing to pre-cache. Skip waiting so this SW activates immediately
