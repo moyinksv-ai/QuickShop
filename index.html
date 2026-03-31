@@ -193,7 +193,7 @@
       grid-template-columns: 1fr;
       position: relative;
       background: var(--c-bg);
-      min-height: calc(100dvh - var(--nav-h));
+      min-height: auto;
       overflow: visible;
       isolation: isolate;
       background-image: radial-gradient(
@@ -344,15 +344,15 @@
 
     @media (min-width: 900px) {
       #qs-landing .ql-hero {
-        min-height: 100dvh;
+        min-height: auto;
       }
       #qs-landing .ql-hero-left {
-        height: 100%;
-        min-height: 100dvh;
+        height: auto;
+        min-height: unset;
         display: flex;
         flex-direction: column;
-        justify-content: center;
-        padding-top:    calc(var(--nav-h) + 40px);
+        justify-content: flex-start;
+        padding-top:    calc(var(--nav-h) + 60px);
         padding-bottom: 40px; /* tighter on desktop */
         padding-right:  48px;
         padding-left:   clamp(48px, 6vw, 80px);
