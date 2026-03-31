@@ -2152,7 +2152,7 @@
       console.warn('[Catalog] Profile view missing, falling back to profiles table:', vr.error.message);
       return client
         .from('profiles')
-        .select('id, name, business_name, tagline')
+               .select('id, name, business_name, tagline, is_active')
         .eq('id', storeId)
         .maybeSingle();
     }
@@ -2176,7 +2176,15 @@
 
     // Profile
     var profile   = profileResult.data;
+
+    // SECURITY GATE: Hard stop if the vendor has not paid.
+    if (profile && profile.is_active === false) {
+      showError('This catalog is currently unavailable.');
+      return;
+    }
+
     var _rawName = (profile && (profile.business_name || profile.name)) || '';
+
     var storeName;
     if (_rawName) {
       // Possessive: "Moyinks" → "Moyinks' Store", "James" → "James' Store"
