@@ -491,6 +491,11 @@
           let product, syncType;
 
           if (editingId) {
+            // Snapshot the existing product BEFORE updateProduct mutates it in-place.
+            // FIXED: the original code called updateProduct first, then read the
+            // already-mutated live object and merged patch onto it again — a
+            // double-apply. We snapshot first so the sync payload is clean.
+            const _existing = state().products.find(p => p.id === editingId);
             const patch = {
               name, barcode: barcode || null, price, cost, qty, category,
               image, image2: image2 || null, description: desc || null,
@@ -498,7 +503,7 @@
             };
             const updated = app().updateProduct(editingId, patch);
             if (!updated) { toast('Product not found', 'error'); return; }
-            product = Object.assign({}, state().products.find(p => p.id === editingId), patch);
+            product = Object.assign({}, _existing, patch);
             syncType = 'updateProduct';
             addActivityLog('Edit', 'Updated product: ' + name);
             toast('Product updated ✓');
@@ -552,10 +557,10 @@
 
       function updateDescCounter() {
         var len = invDescEl.value.length;
-        var max = 300;
+        var max = 500;
         descCounter.textContent = len + ' / ' + max;
-        if (len >= 290)      descCounter.style.color = 'var(--danger, #ef4444)';
-        else if (len >= 260) descCounter.style.color = 'var(--accent-amber, #f59e0b)';
+        if (len >= 480)      descCounter.style.color = 'var(--danger, #ef4444)';
+        else if (len >= 430) descCounter.style.color = 'var(--accent-amber, #f59e0b)';
         else                 descCounter.style.color = 'var(--text-muted)';
       }
 
@@ -692,22 +697,28 @@
   async function removeProduct(id) {
     const _preDelete = state().products.find(x => x.id === id);
     if (!_preDelete) return;
+    // Snapshot the product name now — before the async confirm dialog opens.
+    // A cloud sync running during the dialog could remove this product from
+    // state, making name lookup return undefined after confirm resolves.
+    const _snapshot = Object.assign({}, _preDelete);
     const confirmed = await showConfirm({
-      title:    'Delete ' + _preDelete.name + '?',
+      title:    'Delete ' + _snapshot.name + '?',
       message:  'This will permanently remove the product and all its sales history.',
       okText:   'Delete Product',
       okDanger: true,
     });
     if (!confirmed) return;
 
+    // FIXED: re-verify the product still exists after the async dialog.
+    // A sync running during the dialog may have already removed it from state,
+    // in which case deleteProduct returns null and we must still queue the
+    // cloud delete using our snapshot — otherwise Supabase keeps a stale row.
     const deleted = app().deleteProduct(id);
-    if (!deleted) return; 
-    const { productCopy: productToRemove, orphanedSaleIds } = deleted;
+    const productToRemove = deleted ? deleted.productCopy : _snapshot;
+    const orphanedSaleIds = deleted ? deleted.orphanedSaleIds : [];
 
     renderInventory(); renderProducts(); renderDashboard(); renderChips();
     toast('Product deleted');
-    
-    // ── FIXED LINE ──────────────────────────────────────────────────────────
     addActivityLog('Delete', 'Deleted product: ' + productToRemove.name);
 
     if (window.qsdb && window.qsdb.addPendingChange) {

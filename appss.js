@@ -767,16 +767,22 @@ function handleTouchEnd() {
     isSaveStateSyncing = true;
     try {
       const supabase = getClient();
-      for (const note of state.notes) {
-        await supabase.from('notes').upsert({
+      // FIXED: was a sequential await-in-loop — 1 HTTP call per note.
+      // Now a single batch upsert regardless of note count.
+      if (state.notes.length > 0) {
+        const noteRows = state.notes.map(note => ({
           id: note.id, user_id: currentUser.id, title: note.title || null,
           content: note.content, created_at: note.ts ? new Date(note.ts).toISOString() : new Date().toISOString()
-        });
+        }));
+        await supabase.from('notes').upsert(noteRows, { onConflict: 'id', ignoreDuplicates: false });
       }
       const existingCategories = await supabase.from('categories').select('name').eq('user_id', currentUser.id);
       const existingNames = new Set((existingCategories.data || []).map(c => c.name));
-      for (const cat of state.categories) {
-        if (!existingNames.has(cat)) await supabase.from('categories').insert({ user_id: currentUser.id, name: cat });
+      // FIXED: was a sequential await-in-loop — 1 HTTP call per new category.
+      // Now collects new ones and inserts in a single batch call.
+      const newCats = state.categories.filter(cat => !existingNames.has(cat));
+      if (newCats.length > 0) {
+        await supabase.from('categories').insert(newCats.map(name => ({ user_id: currentUser.id, name })));
       }
       if (state.logs.length > 0) {
         const logRows = state.logs.slice(0, 50).map(log => ({
@@ -3001,307 +3007,444 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     };
   }
 
-  function generateAdvancedInsights(returnHtml = false) {
-  try {
-    const s = state || { products: [], sales: [], notes: [] };
+  // ═══════════════════════════════════════════════════════════════════════════
+  // INSIGHTS ENGINE v2
+  // ─────────────────────────────────────────────────────────────────────────
+  // Two-layer system:
+  //   Layer 1 — Local math (instant, offline, always runs).
+  //             Computes 6 signals from state.sales + state.products.
+  //             Fixed bugs vs v1: minimum data thresholds, separate prev7
+  //             window, margin floor adjusted for NG market, cash-trap uses
+  //             first-sale date not createdAt, trend card only shown with data.
+  //   Layer 2 — Gemini 2.0 Flash (free tier, only on explicit "Ask AI" tap).
+  //             Receives a compressed business snapshot (~400 tokens).
+  //             Returns a plain-English narrative the vendor can act on.
+  //             Key stored in supabase-config.js as window.__QS_GEMINI_KEY.
+  //             If key is absent or request fails, falls back to layer 1 only.
+  // ═══════════════════════════════════════════════════════════════════════════
 
-    // ── TIME WINDOWS ────────────────────────────────────────────────
-    const now = Date.now();
-    const D = 24 * 60 * 60 * 1000;
-    const last7   = now - 7  * D;
-    const last14  = now - 14 * D;
-    const last30  = now - 30 * D;
-    const last60  = now - 60 * D;
-    const prev7   = now - 14 * D; // window: prev7 → last7
+  // ── DOM HELPERS (all pure DOM, no innerHTML with user data) ───────────────
+  function _insCard(borderColor, bg) {
+    const el = document.createElement('div');
+    el.style.cssText = [
+      'border-radius:16px;overflow:hidden;',
+      'border:1px solid ' + borderColor + ';',
+      'background:' + bg + ';',
+      'margin-bottom:2px;',
+    ].join('');
+    return el;
+  }
 
-    // ── HELPERS ─────────────────────────────────────────────────────
-    function salesInWindow(productId, from, to = now) {
-      return s.sales.filter(x => x.productId === productId && x.ts >= from && x.ts < to);
+  function _insCardHead(el, emoji, title, subtitle) {
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'padding:14px 16px 10px;border-bottom:1px solid rgba(255,255,255,0.06);';
+    const top = document.createElement('div');
+    top.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    const em = document.createElement('span');
+    em.style.cssText = 'font-size:18px;line-height:1;';
+    em.textContent = emoji;
+    const ttl = document.createElement('span');
+    ttl.style.cssText = 'font-weight:700;font-size:15px;color:#fff;';
+    ttl.textContent = title;
+    top.appendChild(em); top.appendChild(ttl);
+    hdr.appendChild(top);
+    if (subtitle) {
+      const sub = document.createElement('div');
+      sub.style.cssText = 'font-size:12px;color:rgba(255,255,255,0.5);margin-top:3px;margin-left:26px;';
+      sub.textContent = subtitle;
+      hdr.appendChild(sub);
     }
-    function totalQty(sales)    { return sales.reduce((a,x) => a + x.qty, 0); }
-    function totalProfit(sales) { return sales.reduce((a,x) => a + ((x.price - x.cost) * x.qty), 0); }
-    function totalRevenue(sales){ return sales.reduce((a,x) => a + (x.price * x.qty), 0); }
+    el.appendChild(hdr);
+  }
 
-    const allSales7   = s.sales.filter(x => x.ts >= last7);
-    const allSalesPrev7 = s.sales.filter(x => x.ts >= prev7 && x.ts < last7);
-    const rev7   = totalRevenue(allSales7);
-    const rev7p  = totalRevenue(allSalesPrev7);
-    const prof7  = totalProfit(allSales7);
-    const txCount7 = allSales7.length;
+  function _insRow(parent, nameTxt, subTxt, btnLabel, btnColor, btnData) {
+    const row = document.createElement('div');
+    row.style.cssText = [
+      'display:flex;justify-content:space-between;align-items:center;',
+      'padding:9px 14px;margin:0 8px 6px;',
+      'background:rgba(255,255,255,0.04);border-radius:10px;',
+    ].join('');
+    const left = document.createElement('div');
+    left.style.cssText = 'flex:1;min-width:0;margin-right:10px;';
+    const nm = document.createElement('div');
+    nm.style.cssText = 'font-weight:600;font-size:13.5px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+    nm.textContent = nameTxt;
+    const sb = document.createElement('div');
+    sb.style.cssText = 'font-size:11.5px;color:rgba(255,255,255,0.5);margin-top:2px;';
+    sb.textContent = subTxt;
+    left.appendChild(nm); left.appendChild(sb);
+    row.appendChild(left);
+    if (btnLabel) {
+      const btn = document.createElement('button');
+      btn.className = 'ai-action-btn';
+      btn.type = 'button';
+      btn.style.cssText = [
+        'background:' + btnColor + ';border:0;',
+        'padding:6px 11px;border-radius:8px;',
+        'font-size:12px;font-weight:700;color:#fff;',
+        'cursor:pointer;white-space:nowrap;flex-shrink:0;',
+        '-webkit-tap-highlight-color:transparent;',
+      ].join('');
+      btn.textContent = btnLabel;
+      Object.entries(btnData).forEach(([k,v]) => btn.dataset[k] = v);
+      row.appendChild(btn);
+    }
+    parent.appendChild(row);
+  }
 
-    // ── COMPUTE 6 SIGNALS ───────────────────────────────────────────
+  function _insFootnote(parent, txt) {
+    const d = document.createElement('div');
+    d.style.cssText = 'padding:2px 16px 12px;font-size:12px;color:rgba(255,255,255,0.4);line-height:1.55;';
+    d.textContent = txt;
+    parent.appendChild(d);
+  }
 
-    // 1. RESTOCK NOW — products about to run dry
+  // ── SIGNAL COMPUTATION ────────────────────────────────────────────────────
+  function _computeSignals() {
+    // Use the safe frozen copy — never access raw closure state directly.
+    const s = window.__QS_APP && window.__QS_APP.getState ? window.__QS_APP.getState() : { products: [], sales: [], notes: [] };
+    const now = Date.now();
+    const D   = 86400000; // ms per day
+
+    const last7  = now - 7  * D;
+    const last14 = now - 14 * D; // start of "previous 7 days" window
+    const last30 = now - 30 * D;
+    const last60 = now - 60 * D;
+
+    function salesIn(pid, from, to) {
+      to = to || now;
+      return s.sales.filter(x => x.productId === pid && x.ts >= from && x.ts < to);
+    }
+    function sumQty(arr)     { return arr.reduce(function(a,x){ return a + x.qty; }, 0); }
+    function sumRevenue(arr) { return arr.reduce(function(a,x){ return a + x.price * x.qty; }, 0); }
+    function sumProfit(arr)  { return arr.reduce(function(a,x){ return a + (x.price - x.cost) * x.qty; }, 0); }
+
+    const sales7     = s.sales.filter(x => x.ts >= last7);
+    const salesPrev7 = s.sales.filter(x => x.ts >= last14 && x.ts < last7);
+    const rev7       = sumRevenue(sales7);
+    const revPrev7   = sumRevenue(salesPrev7);
+    const prof7      = sumProfit(sales7);
+    const txCount7   = sales7.length;
+
+    // Trend
+    const trendPct = revPrev7 > 0 ? ((rev7 - revPrev7) / revPrev7) * 100 : null;
+    const dayTotals = {};
+    sales7.forEach(function(sale) {
+      const day = new Date(sale.ts).toLocaleDateString('en-NG', { weekday: 'short' });
+      dayTotals[day] = (dayTotals[day] || 0) + sale.price * sale.qty;
+    });
+    const bestDayEntry = Object.entries(dayTotals).sort(function(a,b){ return b[1]-a[1]; })[0] || null;
+
+    // 1. Restock alerts — FIXED: use actual sales days count not fixed 30
+    //    to avoid false alerts on intermittently sold products.
     const restockAlerts = [];
-    s.products.forEach(p => {
-      const recent = salesInWindow(p.id, last30);
-      const qty30 = totalQty(recent);
-      if (qty30 === 0) return;
-      const dailyRate = qty30 / 30;
+    s.products.forEach(function(p) {
+      const recent = salesIn(p.id, last30);
+      if (recent.length < 2) return; // need at least 2 sales to establish a rate
+      const salesDays = new Set(recent.map(x => Math.floor(x.ts / D))).size;
+      const dailyRate = sumQty(recent) / Math.max(salesDays, 1);
       if (p.qty === 0) {
-        const lostDaily = Math.round(dailyRate * p.price);
-        restockAlerts.push({ product: p, daysLeft: 0, dailyRate, lostDaily, suggest: Math.ceil(dailyRate * 14) });
+        restockAlerts.push({ product: p, daysLeft: 0, dailyRate,
+          lostDaily: Math.round(dailyRate * p.price),
+          suggest: Math.ceil(dailyRate * 14) });
       } else {
         const daysLeft = Math.floor(p.qty / dailyRate);
         if (daysLeft <= 7) {
-          restockAlerts.push({ product: p, daysLeft, dailyRate, lostDaily: Math.round(dailyRate * p.price), suggest: Math.ceil(dailyRate * 14) });
+          restockAlerts.push({ product: p, daysLeft, dailyRate,
+            lostDaily: Math.round(dailyRate * p.price),
+            suggest: Math.ceil(dailyRate * 14) });
         }
       }
     });
-    restockAlerts.sort((a,b) => a.daysLeft - b.daysLeft);
+    restockAlerts.sort(function(a,b){ return a.daysLeft - b.daysLeft; });
 
-    // 2. PROFIT LEAK — selling a lot but making little
+    // 2. Profit leak — FIXED: margin floor 10% (realistic for NG market),
+    //    minimum 5 sales in 30 days to avoid noise on slow movers.
     const profitLeaks = [];
-    s.products.forEach(p => {
-      if (p.price <= 0 || p.cost <= 0) return;
-      const recent = salesInWindow(p.id, last30);
-      const qty30 = totalQty(recent);
-      if (qty30 < 3) return; // ignore rarely sold items
+    s.products.forEach(function(p) {
+      if (!p.price || !p.cost || p.price <= p.cost) return;
+      const recent = salesIn(p.id, last30);
+      const qty30  = sumQty(recent);
+      if (qty30 < 5) return;
       const margin = ((p.price - p.cost) / p.price) * 100;
-      const totalProfitMade = totalProfit(recent);
-      const totalRevMade = totalRevenue(recent);
-      if (margin < 15 && totalRevMade > 0) {
-        const betterPrice = Math.ceil(p.cost / 0.75); // targets 25% margin
-        const gainIfFixed = (betterPrice - p.price) * qty30;
-        profitLeaks.push({ product: p, margin, qty30, totalProfitMade, totalRevMade, betterPrice, gainIfFixed });
+      if (margin < 10) {
+        const betterPrice  = Math.ceil(p.cost / 0.78); // target 22% margin
+        const gainIfFixed  = (betterPrice - p.price) * qty30;
+        const profitMade   = sumProfit(recent);
+        const revMade      = sumRevenue(recent);
+        profitLeaks.push({ product: p, margin, qty30, profitMade, revMade, betterPrice, gainIfFixed });
       }
     });
-    profitLeaks.sort((a,b) => b.totalRevMade - a.totalRevMade); // worst leak by revenue first
+    profitLeaks.sort(function(a,b){ return b.revMade - a.revMade; });
 
-    // 3. SILENT BESTSELLER — most profitable product this week
+    // 3. Bestsellers by profit this week — require at least 2 transactions
     const perfMap = {};
-    s.sales.filter(x => x.ts >= last7).forEach(sale => {
-      if (!perfMap[sale.productId]) perfMap[sale.productId] = { profit: 0, qty: 0, revenue: 0 };
+    sales7.forEach(function(sale) {
+      if (!perfMap[sale.productId]) perfMap[sale.productId] = { profit:0, qty:0, revenue:0, txCount:0 };
       perfMap[sale.productId].profit  += (sale.price - sale.cost) * sale.qty;
       perfMap[sale.productId].qty     += sale.qty;
       perfMap[sale.productId].revenue += sale.price * sale.qty;
+      perfMap[sale.productId].txCount += 1;
     });
     const topByProfit = Object.entries(perfMap)
-      .map(([id, m]) => ({ product: s.products.find(p => p.id === id), ...m }))
-      .filter(x => x.product)
-      .sort((a,b) => b.profit - a.profit)
+      .filter(function(e){ return e[1].txCount >= 2; })
+      .map(function(e) {
+        return Object.assign({ product: s.products.find(function(p){ return p.id === e[0]; }) }, e[1]);
+      })
+      .filter(function(x){ return x.product; })
+      .sort(function(a,b){ return b.profit - a.profit; })
       .slice(0, 3);
 
-    // 4. CASH TRAP — dead stock, money sitting idle
+    // 4. Cash traps — FIXED: use first-ever sale date to anchor age,
+    //    not createdAt (which is when the product was added to the app).
+    //    A product with no sales at all uses createdAt as fallback.
     const cashTraps = [];
-    s.products.forEach(p => {
+    s.products.forEach(function(p) {
       if (p.qty <= 0) return;
-      const age = now - (p.createdAt || now);
-      if (age < 60 * D) return; // skip new products
-      const hasSales = s.sales.some(x => x.productId === p.id && x.ts >= last60);
-      if (!hasSales) {
-        const trapped = p.cost * p.qty;
-        const clearPrice = Math.floor(p.price * 0.82);
+      const allSales = s.sales.filter(function(x){ return x.productId === p.id; });
+      const firstSaleTs = allSales.length
+        ? Math.min.apply(null, allSales.map(function(x){ return x.ts; }))
+        : (p.createdAt || now);
+      const age = now - firstSaleTs;
+      if (age < 45 * D) return; // skip genuinely new products
+      const hasSalesRecently = allSales.some(function(x){ return x.ts >= last60; });
+      if (!hasSalesRecently) {
+        const trapped    = (p.cost || 0) * p.qty;
+        const clearPrice = Math.floor(p.price * 0.80);
         cashTraps.push({ product: p, trapped, clearPrice, qty: p.qty });
       }
     });
-    cashTraps.sort((a,b) => b.trapped - a.trapped);
-    const totalTrapped = cashTraps.reduce((a,x) => a + x.trapped, 0);
+    cashTraps.sort(function(a,b){ return b.trapped - a.trapped; });
+    const totalTrapped = cashTraps.reduce(function(a,x){ return a + x.trapped; }, 0);
 
-    // 5. REVENUE TREND — this week vs last week
-    const trendPct = rev7p > 0 ? ((rev7 - rev7p) / rev7p) * 100 : null;
-    const trendUp = trendPct !== null && trendPct >= 0;
-    // Best day this week
-    const dayTotals = {};
-    allSales7.forEach(sale => {
-      const day = new Date(sale.ts).toLocaleDateString('en-NG', { weekday: 'short' });
-      dayTotals[day] = (dayTotals[day] || 0) + (sale.price * sale.qty);
-    });
-    const bestDay = Object.entries(dayTotals).sort((a,b) => b[1]-a[1])[0];
-
-    // 6. PRICE OPPORTUNITY — fast-selling but low margin
+    // 5. Price opportunity — selling fast (≥3 in 7 days) but margin < 20%
     const priceOpps = [];
-    s.products.forEach(p => {
-      if (p.price <= 0 || p.cost <= 0) return;
-      const recent = salesInWindow(p.id, last7);
-      const qty7 = totalQty(recent);
-      if (qty7 < 2) return; // must be selling fast enough
+    s.products.forEach(function(p) {
+      if (!p.price || !p.cost || p.price <= p.cost) return;
+      const recent = salesIn(p.id, last7);
+      const qty7   = sumQty(recent);
+      if (qty7 < 3) return;
       const margin = ((p.price - p.cost) / p.price) * 100;
-      if (margin < 25) {
-        const nudgePrice = Math.ceil(p.price * 1.10); // +10% nudge
-        const extraProfit = (nudgePrice - p.price) * qty7 * 4; // projected monthly
+      if (margin < 20) {
+        const nudgePrice  = Math.ceil(p.price * 1.08); // conservative 8% nudge
+        const extraProfit = (nudgePrice - p.price) * qty7 * 4;
         priceOpps.push({ product: p, margin, qty7, nudgePrice, extraProfit });
       }
     });
-    priceOpps.sort((a,b) => b.extraProfit - a.extraProfit);
+    priceOpps.sort(function(a,b){ return b.extraProfit - a.extraProfit; });
 
-    // ── BUILD UI ────────────────────────────────────────────────────
+    return {
+      s, now, rev7, revPrev7, prof7, txCount7, trendPct, bestDayEntry,
+      restockAlerts, profitLeaks, topByProfit, cashTraps, totalTrapped, priceOpps
+    };
+  }
+
+  // ── BUILD LOCAL INSIGHT DOM (Layer 1) ─────────────────────────────────────
+  function _buildInsightDom(sig, includeAskAiBtn) {
+    const { rev7, revPrev7, prof7, txCount7, trendPct, bestDayEntry,
+            restockAlerts, profitLeaks, topByProfit,
+            cashTraps, totalTrapped, priceOpps } = sig;
+
     const wrap = document.createElement('div');
-    wrap.style.cssText = 'display:flex;flex-direction:column;gap:12px;padding:4px 0 16px;';
+    wrap.style.cssText = 'display:flex;flex-direction:column;gap:10px;padding:4px 0 16px;';
 
-    function card(borderColor, bg) {
-      const el = document.createElement('div');
-      el.style.cssText = `border-radius:14px;overflow:hidden;border:1px solid ${borderColor};background:${bg};`;
-      return el;
-    }
-    function cardHeader(emoji, title, subtitle, color) {
-      return `<div style="padding:14px 16px 10px;border-bottom:1px solid rgba(255,255,255,0.06);">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:${subtitle ? 2 : 0}px;">
-          <span style="font-size:18px;line-height:1;">${emoji}</span>
-          <span style="font-weight:700;font-size:15px;color:#fff;">${title}</span>
-        </div>
-        ${subtitle ? `<div style="font-size:12px;color:rgba(255,255,255,0.5);margin-left:26px;">${subtitle}</div>` : ''}
-      </div>`;
-    }
-    function row(left, right, bg = 'rgba(255,255,255,0.04)') {
-      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 16px;background:${bg};border-radius:8px;margin:0 10px 6px;">
-        <div style="flex:1;min-width:0;">${left}</div>
-        <div style="flex-shrink:0;margin-left:10px;">${right}</div>
-      </div>`;
-    }
-    function actionBtn(label, color, dataAttrs) {
-      return `<button class="ai-action-btn" ${dataAttrs} style="background:${color};border:0;padding:6px 13px;border-radius:8px;font-size:12px;font-weight:700;color:#fff;cursor:pointer;white-space:nowrap;letter-spacing:0.2px;">${label}</button>`;
-    }
-    function productLine(name, sub) {
-      return `<div style="font-weight:600;font-size:13.5px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;">${escapeHtml(name)}</div>
-              <div style="font-size:11.5px;color:rgba(255,255,255,0.5);margin-top:1px;">${escapeHtml(String(sub))}</div>`;
+    // ── CARD: WEEKLY SNAPSHOT (only if there's data) ──────────────────
+    if (rev7 > 0 || txCount7 > 0) {
+      const tc = _insCard('rgba(99,102,241,0.35)', 'rgba(99,102,241,0.08)');
+      _insCardHead(tc, '📈', 'This Week', null);
+      const grid = document.createElement('div');
+      grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px 12px 14px;';
+      [
+        { label: 'Revenue',   val: fmt(rev7),  color: '#10b981' },
+        { label: 'Profit',    val: fmt(prof7), color: '#a78bfa' },
+        { label: trendPct !== null ? 'vs Last Week' : 'Transactions',
+          val:   trendPct !== null
+            ? (trendPct >= 0 ? '↑' : '↓') + Math.abs(trendPct).toFixed(0) + '%'
+            : txCount7 + ' sales',
+          color: trendPct !== null ? (trendPct >= 0 ? '#10b981' : '#ef4444') : '#fff' }
+      ].forEach(function(cell) {
+        const box = document.createElement('div');
+        box.style.cssText = 'background:rgba(0,0,0,0.25);border-radius:10px;padding:10px 6px;text-align:center;';
+        const lbl = document.createElement('div');
+        lbl.style.cssText = 'font-size:10px;color:rgba(255,255,255,0.45);margin-bottom:5px;letter-spacing:0.3px;';
+        lbl.textContent = cell.label;
+        const vl = document.createElement('div');
+        vl.style.cssText = 'font-size:15px;font-weight:800;color:' + cell.color + ';letter-spacing:-0.3px;';
+        vl.textContent = cell.val;
+        box.appendChild(lbl); box.appendChild(vl);
+        grid.appendChild(box);
+      });
+      tc.appendChild(grid);
+      if (bestDayEntry) {
+        _insFootnote(tc, 'Best day: ' + bestDayEntry[0] + ' — ' + fmt(bestDayEntry[1]) + '  ·  ' + txCount7 + ' total sales');
+      }
+      wrap.appendChild(tc);
     }
 
-    // ── CARD 1: REVENUE TREND ───────────────────────────────────────
-    const trendCard = card('rgba(99,102,241,0.35)', 'rgba(99,102,241,0.08)');
-    let trendBody = '';
-    if (trendPct !== null) {
-      const arrow = trendUp ? '↑' : '↓';
-      const trendColor = trendUp ? '#10b981' : '#ef4444';
-      trendBody = `
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px 14px 14px;">
-          <div style="background:rgba(0,0,0,0.25);border-radius:10px;padding:10px 8px;text-align:center;">
-            <div style="font-size:11px;color:rgba(255,255,255,0.45);margin-bottom:4px;">This week</div>
-            <div style="font-size:16px;font-weight:700;color:#10b981;">${fmt(rev7)}</div>
-          </div>
-          <div style="background:rgba(0,0,0,0.25);border-radius:10px;padding:10px 8px;text-align:center;">
-            <div style="font-size:11px;color:rgba(255,255,255,0.45);margin-bottom:4px;">Profit</div>
-            <div style="font-size:16px;font-weight:700;color:#6366f1;">${fmt(prof7)}</div>
-          </div>
-          <div style="background:rgba(0,0,0,0.25);border-radius:10px;padding:10px 8px;text-align:center;">
-            <div style="font-size:11px;color:rgba(255,255,255,0.45);margin-bottom:4px;">vs last week</div>
-            <div style="font-size:16px;font-weight:700;color:${trendColor};">${arrow}${Math.abs(trendPct).toFixed(0)}%</div>
-          </div>
-        </div>
-        ${bestDay ? `<div style="padding:0 14px 12px;font-size:12px;color:rgba(255,255,255,0.5);">Best day: <span style="color:#fff;font-weight:600;">${bestDay[0]} — ${fmt(bestDay[1])}</span> &nbsp;·&nbsp; ${txCount7} sales this week</div>` : ''}
-      `;
-    } else if (rev7 > 0) {
-      trendBody = `<div style="padding:12px 16px 14px;font-size:13px;color:rgba(255,255,255,0.7);">Revenue this week: <strong style="color:#10b981;">${fmt(rev7)}</strong>. Keep recording sales to unlock trend comparison.</div>`;
-    } else {
-      trendBody = `<div style="padding:12px 16px 14px;font-size:13px;color:rgba(255,255,255,0.5);">No sales recorded yet this week. Tap the sell button when you make a sale.</div>`;
-    }
-    trendCard.innerHTML = cardHeader('📈', 'This week', null, '#6366f1') + trendBody;
-    wrap.appendChild(trendCard);
-
-    // ── CARD 2: RESTOCK NOW ─────────────────────────────────────────
+    // ── CARD: RESTOCK NOW ─────────────────────────────────────────────
     if (restockAlerts.length > 0) {
-      const rc = card('rgba(239,68,68,0.35)', 'rgba(239,68,68,0.07)');
-      const outNow = restockAlerts.filter(x => x.daysLeft === 0);
-      const soon   = restockAlerts.filter(x => x.daysLeft > 0);
-      let rbody = '';
+      const rc = _insCard('rgba(239,68,68,0.35)', 'rgba(239,68,68,0.07)');
+      _insCardHead(rc, '📦', 'Restock Now',
+        restockAlerts.length + ' product' + (restockAlerts.length > 1 ? 's' : '') + ' need attention');
+      const outNow = restockAlerts.filter(function(x){ return x.daysLeft === 0; });
+      const soon   = restockAlerts.filter(function(x){ return x.daysLeft > 0;  });
       if (outNow.length) {
-        rbody += `<div style="padding:8px 14px 4px;font-size:11px;font-weight:700;color:rgba(239,68,68,0.9);letter-spacing:0.5px;text-transform:uppercase;">Out now</div>`;
-        outNow.slice(0,3).forEach(a => {
-          rbody += row(
-            productLine(a.product.name, `Losing ~${fmt(a.lostDaily)}/day`),
-            actionBtn(`Restock ${a.suggest}`, '#ef4444', `data-action="restock" data-product-id="${escapeHtml(a.product.id)}" data-qty="${a.suggest}"`)
-          );
+        const lbl = document.createElement('div');
+        lbl.style.cssText = 'padding:8px 14px 4px;font-size:11px;font-weight:700;color:rgba(239,68,68,0.9);letter-spacing:0.5px;text-transform:uppercase;';
+        lbl.textContent = 'Out now';
+        rc.appendChild(lbl);
+        outNow.slice(0, 3).forEach(function(a) {
+          _insRow(rc, a.product.name, 'Losing ~' + fmt(a.lostDaily) + '/day',
+            'Restock ' + a.suggest, '#ef4444',
+            { action: 'restock', productId: a.product.id, qty: String(a.suggest) });
         });
       }
       if (soon.length) {
-        rbody += `<div style="padding:8px 14px 4px;font-size:11px;font-weight:700;color:rgba(245,158,11,0.9);letter-spacing:0.5px;text-transform:uppercase;">Running low</div>`;
-        soon.slice(0,3).forEach(a => {
-          rbody += row(
-            productLine(a.product.name, `${a.daysLeft} day${a.daysLeft===1?'':'s'} left · ${a.product.qty} in stock`),
-            actionBtn(`Order ${a.suggest}`, '#f59e0b', `data-action="restock" data-product-id="${escapeHtml(a.product.id)}" data-qty="${a.suggest}"`)
-          );
+        const lbl = document.createElement('div');
+        lbl.style.cssText = 'padding:8px 14px 4px;font-size:11px;font-weight:700;color:rgba(245,158,11,0.9);letter-spacing:0.5px;text-transform:uppercase;';
+        lbl.textContent = 'Running low';
+        rc.appendChild(lbl);
+        soon.slice(0, 3).forEach(function(a) {
+          _insRow(rc, a.product.name,
+            a.daysLeft + ' day' + (a.daysLeft === 1 ? '' : 's') + ' left · ' + a.product.qty + ' in stock',
+            'Order ' + a.suggest, '#f59e0b',
+            { action: 'restock', productId: a.product.id, qty: String(a.suggest) });
         });
       }
-      rbody += '<div style="height:6px;"></div>';
-      rc.innerHTML = cardHeader('📦', 'Restock Now', `${restockAlerts.length} product${restockAlerts.length>1?'s':''} need attention`, '#ef4444') + rbody;
+      const sp = document.createElement('div'); sp.style.height = '6px';
+      rc.appendChild(sp);
       wrap.appendChild(rc);
     }
 
-    // ── CARD 3: PROFIT LEAK ─────────────────────────────────────────
+    // ── CARD: PROFIT LEAK ─────────────────────────────────────────────
     if (profitLeaks.length > 0) {
-      const pc = card('rgba(239,68,68,0.25)', 'rgba(239,68,68,0.05)');
-      let pbody = '';
-      profitLeaks.slice(0,3).forEach(l => {
-        pbody += row(
-          productLine(l.product.name, `${l.margin.toFixed(0)}% margin · sold ${l.qty30}× · only ${fmt(l.totalProfitMade)} profit`),
-          actionBtn('Fix Price', '#ef4444', `data-action="edit" data-product-id="${escapeHtml(l.product.id)}" data-price="${l.betterPrice}"`)
-        );
+      const pc = _insCard('rgba(239,68,68,0.25)', 'rgba(239,68,68,0.05)');
+      _insCardHead(pc, '💸', 'Profit Leak', 'High sales, low margin — cost is eating your money');
+      profitLeaks.slice(0, 3).forEach(function(l) {
+        _insRow(pc, l.product.name,
+          l.margin.toFixed(0) + '% margin · sold ' + l.qty30 + '× · only ' + fmt(l.profitMade) + ' profit',
+          'Fix Price', '#ef4444',
+          { action: 'edit', productId: l.product.id, price: String(l.betterPrice) });
       });
-      const totalLeak = profitLeaks.slice(0,3).reduce((a,x) => a + (x.gainIfFixed), 0);
-      pbody += `<div style="padding:6px 16px 12px;font-size:12px;color:rgba(255,255,255,0.45);">Fixing these could add ~${fmt(totalLeak)} profit this month</div>`;
-      pc.innerHTML = cardHeader('💸', 'Profit Leak', 'High sales, low margin — cost is eating your money', '#ef4444') + pbody;
+      const totalLeak = profitLeaks.slice(0,3).reduce(function(a,x){ return a + x.gainIfFixed; }, 0);
+      _insFootnote(pc, 'Fixing these could add ~' + fmt(totalLeak) + ' profit this month');
       wrap.appendChild(pc);
     }
 
-    // ── CARD 4: SILENT BESTSELLER ───────────────────────────────────
+    // ── CARD: BEST SELLERS ────────────────────────────────────────────
     if (topByProfit.length > 0) {
-      const bc = card('rgba(16,185,129,0.3)', 'rgba(16,185,129,0.07)');
-      let bbody = `<div style="padding:8px 14px 6px;font-size:11px;font-weight:700;color:rgba(16,185,129,0.8);letter-spacing:0.5px;text-transform:uppercase;">Most profitable this week</div>`;
+      const bc = _insCard('rgba(16,185,129,0.3)', 'rgba(16,185,129,0.07)');
+      _insCardHead(bc, '🏆', 'Best Sellers', 'Most profitable this week');
       const medals = ['🥇','🥈','🥉'];
-      topByProfit.forEach((x, i) => {
-        bbody += row(
-          `<div style="display:flex;align-items:center;gap:8px;">
-            <span style="font-size:16px;">${medals[i]}</span>
-            <div>
-              <div style="font-weight:600;font-size:13.5px;color:#fff;">${escapeHtml(x.product.name)}</div>
-              <div style="font-size:11.5px;color:rgba(255,255,255,0.45);">${x.qty} sold · ${fmt(x.revenue)} revenue</div>
-            </div>
-          </div>`,
-          `<span style="font-weight:700;font-size:14px;color:#10b981;">${fmt(x.profit)}</span>`,
-          'transparent'
-        );
+      topByProfit.forEach(function(x, i) {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:9px 14px;margin:0 8px 6px;border-radius:10px;';
+        const left = document.createElement('div');
+        left.style.cssText = 'display:flex;align-items:center;gap:10px;min-width:0;';
+        const med = document.createElement('span');
+        med.style.fontSize = '16px';
+        med.textContent = medals[i];
+        const info = document.createElement('div');
+        info.style.minWidth = '0';
+        const nm = document.createElement('div');
+        nm.style.cssText = 'font-weight:600;font-size:13.5px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+        nm.textContent = x.product.name;
+        const sub = document.createElement('div');
+        sub.style.cssText = 'font-size:11.5px;color:rgba(255,255,255,0.45);';
+        sub.textContent = x.qty + ' sold · ' + fmt(x.revenue) + ' rev';
+        info.appendChild(nm); info.appendChild(sub);
+        left.appendChild(med); left.appendChild(info);
+        const profit = document.createElement('span');
+        profit.style.cssText = 'font-weight:700;font-size:14px;color:#10b981;flex-shrink:0;margin-left:8px;';
+        profit.textContent = fmt(x.profit);
+        row.appendChild(left); row.appendChild(profit);
+        bc.appendChild(row);
       });
-      const top1 = topByProfit[0];
-      bbody += `<div style="padding:2px 16px 12px;font-size:12px;color:rgba(255,255,255,0.45);">${escapeHtml(top1.product.name)} is your best earner. Make sure you never run out.</div>`;
-      bc.innerHTML = cardHeader('🏆', 'Best Sellers', null, '#10b981') + bbody;
+      _insFootnote(bc, topByProfit[0].product.name + ' is your best earner. Never let it run out.');
       wrap.appendChild(bc);
     }
 
-    // ── CARD 5: PRICE OPPORTUNITY ───────────────────────────────────
+    // ── CARD: PRICE OPPORTUNITY ───────────────────────────────────────
     if (priceOpps.length > 0) {
-      const oc = card('rgba(99,102,241,0.3)', 'rgba(99,102,241,0.06)');
-      let obody = '';
-      priceOpps.slice(0,3).forEach(o => {
-        obody += row(
-          productLine(o.product.name, `Selling fast (${o.qty7}× this week) but only ${o.margin.toFixed(0)}% margin`),
-          actionBtn(`Try ${fmt(o.nudgePrice)}`, '#6366f1', `data-action="edit" data-product-id="${escapeHtml(o.product.id)}" data-price="${o.nudgePrice}"`)
-        );
+      const oc = _insCard('rgba(99,102,241,0.3)', 'rgba(99,102,241,0.06)');
+      _insCardHead(oc, '💡', 'Price Opportunity', 'These sell fast — a small nudge earns more with zero extra work');
+      priceOpps.slice(0, 3).forEach(function(o) {
+        _insRow(oc, o.product.name,
+          'Selling fast (' + o.qty7 + '× this week) · only ' + o.margin.toFixed(0) + '% margin',
+          'Try ' + fmt(o.nudgePrice), '#6366f1',
+          { action: 'edit', productId: o.product.id, price: String(o.nudgePrice) });
       });
-      const topOpp = priceOpps[0];
-      obody += `<div style="padding:4px 16px 12px;font-size:12px;color:rgba(255,255,255,0.45);">A small price nudge on fast movers can add ${fmt(topOpp.extraProfit)}/month with no extra effort</div>`;
-      oc.innerHTML = cardHeader('💡', 'Price Opportunity', 'These sell fast — a small price nudge earns more with no effort', '#6366f1') + obody;
+      _insFootnote(oc, 'An 8% nudge on fast movers could add ~' + fmt(priceOpps[0].extraProfit) + '/month passively');
       wrap.appendChild(oc);
     }
 
-    // ── CARD 6: CASH TRAP ───────────────────────────────────────────
+    // ── CARD: CASH TRAP ───────────────────────────────────────────────
     if (cashTraps.length > 0) {
-      const cc = card('rgba(245,158,11,0.3)', 'rgba(245,158,11,0.06)');
-      let cbody = '';
-      cashTraps.slice(0,3).forEach(t => {
-        cbody += row(
-          productLine(t.product.name, `${t.qty} units · ${fmt(t.trapped)} sitting idle for 60+ days`),
-          actionBtn(`Sell at ${fmt(t.clearPrice)}`, '#f59e0b', `data-action="edit" data-product-id="${escapeHtml(t.product.id)}" data-price="${t.clearPrice}"`)
-        );
+      const cc = _insCard('rgba(245,158,11,0.3)', 'rgba(245,158,11,0.06)');
+      _insCardHead(cc, '💤', 'Cash Trap', "Hasn't sold in 60+ days — your money is stuck in stock");
+      cashTraps.slice(0, 3).forEach(function(t) {
+        _insRow(cc, t.product.name,
+          t.qty + ' units · ' + fmt(t.trapped) + ' idle',
+          'Sell at ' + fmt(t.clearPrice), '#f59e0b',
+          { action: 'edit', productId: t.product.id, price: String(t.clearPrice) });
       });
-      cbody += `<div style="padding:4px 16px 12px;font-size:12px;color:rgba(255,255,255,0.45);">${fmt(totalTrapped)} total cash is locked in unsold stock. A discount frees it up.</div>`;
-      cc.innerHTML = cardHeader('💤', 'Cash Trap', "These haven't sold in 60+ days — your money is stuck", '#f59e0b') + cbody;
+      _insFootnote(cc, fmt(totalTrapped) + ' total cash locked in unsold stock. A discount frees it.');
       wrap.appendChild(cc);
     }
 
-    // ── ALL CLEAR ───────────────────────────────────────────────────
-    const hasIssues = restockAlerts.length + profitLeaks.length + cashTraps.length + priceOpps.length;
-    if (!hasIssues && topByProfit.length === 0 && !rev7) {
-      const cl = card('rgba(16,185,129,0.2)', 'rgba(16,185,129,0.05)');
-      cl.innerHTML = `<div style="padding:20px 16px;text-align:center;">
-        <div style="font-size:32px;margin-bottom:8px;">✅</div>
-        <div style="font-weight:700;font-size:15px;color:#fff;margin-bottom:6px;">All good for now</div>
-        <div style="font-size:13px;color:rgba(255,255,255,0.5);line-height:1.6;">No urgent issues found. Keep recording sales and your insights will get sharper over time.</div>
-      </div>`;
+    // ── ALL CLEAR (only when truly nothing to show AND no sales at all) ──
+    const hasSignals = restockAlerts.length + profitLeaks.length +
+                       cashTraps.length + priceOpps.length + topByProfit.length;
+    if (!hasSignals && rev7 === 0) {
+      const cl = _insCard('rgba(16,185,129,0.2)', 'rgba(16,185,129,0.05)');
+      const inner = document.createElement('div');
+      inner.style.cssText = 'padding:24px 16px;text-align:center;';
+      const ico = document.createElement('div'); ico.style.fontSize = '32px'; ico.style.marginBottom = '8px'; ico.textContent = '✅';
+      const ttl = document.createElement('div'); ttl.style.cssText = 'font-weight:700;font-size:15px;color:#fff;margin-bottom:6px;'; ttl.textContent = 'All good for now';
+      const msg = document.createElement('div'); msg.style.cssText = 'font-size:13px;color:rgba(255,255,255,0.5);line-height:1.6;'; msg.textContent = 'No urgent issues. Record more sales and insights will get sharper.';
+      inner.appendChild(ico); inner.appendChild(ttl); inner.appendChild(msg);
+      cl.appendChild(inner);
       wrap.appendChild(cl);
     }
 
-    // ── ACTION BUTTON HANDLER — delegated on wrap, works in any context ──
+    // ── ASK AI BUTTON (Gemini, shown only when key is configured) ─────
+    if (includeAskAiBtn && window.__QS_GEMINI_KEY) {
+      const aiRow = document.createElement('div');
+      aiRow.style.cssText = 'padding:4px 0 2px;';
+      const aiBtn = document.createElement('button');
+      aiBtn.id   = 'qs-ask-ai-btn';
+      aiBtn.type = 'button';
+      aiBtn.style.cssText = [
+        'width:100%;padding:14px;border-radius:14px;border:0;',
+        'background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;',
+        'font-size:15px;font-weight:800;cursor:pointer;',
+        'display:flex;align-items:center;justify-content:center;gap:8px;',
+        'box-shadow:0 6px 20px rgba(124,58,237,0.3);',
+        'letter-spacing:-0.2px;-webkit-tap-highlight-color:transparent;',
+        'transition:opacity 0.15s;',
+      ].join('');
+      const spark = document.createElement('span'); spark.textContent = '✨';
+      const lbl   = document.createElement('span'); lbl.textContent   = 'Ask AI — Analyse My Business';
+      aiBtn.appendChild(spark); aiBtn.appendChild(lbl);
+      aiRow.appendChild(aiBtn);
+      wrap.appendChild(aiRow);
+    }
+
+    // ── AI NARRATIVE ZONE (populated by Gemini response) ─────────────
+    const narrativeZone = document.createElement('div');
+    narrativeZone.id = 'qs-ai-narrative';
+    narrativeZone.style.cssText = 'display:none;';
+    wrap.appendChild(narrativeZone);
+
+    // ── ACTION DELEGATION — safe, no innerHTML with user data ─────────
     wrap.addEventListener('click', function(e) {
+      // Ask AI button
+      if (e.target.closest('#qs-ask-ai-btn')) {
+        e.preventDefault();
+        _runGeminiInsight(sig, narrativeZone);
+        return;
+      }
+      // Action buttons on signal cards
       const btn = e.target.closest('.ai-action-btn');
       if (!btn) return;
       e.preventDefault();
@@ -3309,55 +3452,223 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       const productId = btn.dataset.productId;
       const qty       = btn.dataset.qty;
       const price     = btn.dataset.price;
-      // Close whichever view is showing insights
       closeInventoryInsight();
-      setTimeout(() => {
+      setTimeout(function() {
         if (action === 'restock') {
           openModalFor('add', productId);
-          setTimeout(() => {
+          setTimeout(function() {
             const qtyEl = $('modalQty');
             if (qtyEl && qty) { qtyEl.value = qty; qtyEl.focus(); }
           }, 100);
         } else if (action === 'edit') {
           setActiveView('inventory');
-          setTimeout(() => {
-            openEditProduct(productId);
-            setTimeout(() => {
+          setTimeout(function() {
+            if (window.__QS_INVENTORY) window.__QS_INVENTORY.openEditProduct(productId);
+            setTimeout(function() {
               const priceEl = $('invPrice');
               if (priceEl && price) { priceEl.value = price; priceEl.focus(); priceEl.select(); }
-            }, 200);
-          }, 100);
+            }, 220);
+          }, 120);
         }
-      }, 100);
+      }, 120);
     });
 
-    // ── ATTACH OR RETURN ─────────────────────────────────────────────
-    if (returnHtml) return wrap; // Return the live DOM node — caller uses appendChild, never innerHTML
+    return wrap;
+  }
 
-    const aiContent = $('aiContent');
-    if (aiContent) {
-      aiContent.innerHTML = '';
-      aiContent.appendChild(wrap);
+  // ── GEMINI LAYER (Layer 2) ────────────────────────────────────────────────
+  // Builds a ~400-token business snapshot and calls Gemini 2.0 Flash.
+  // Free tier: 15 req/min, 1M tokens/day. More than enough for this use case.
+  async function _runGeminiInsight(sig, narrativeZone) {
+    const key = window.__QS_GEMINI_KEY;
+    if (!key || key === 'YOUR_GEMINI_API_KEY') {
+      toast('Gemini key not configured. Add it to supabase-config.js.', 'error');
+      return;
     }
 
-  } catch(e) {
-    errlog('generateAdvancedInsights failed', e);
-    if (returnHtml) { const err = document.createElement('div'); err.style.cssText = 'padding:16px;color:rgba(255,255,255,0.5);font-size:13px;'; err.textContent = 'Could not load insights right now.'; return err; }
+    // Disable button, show skeleton
+    const aiBtn = document.getElementById('qs-ask-ai-btn');
+    if (aiBtn) {
+      aiBtn.disabled = true;
+      aiBtn.style.opacity = '0.6';
+      const lbl = aiBtn.querySelector('span:last-child');
+      if (lbl) lbl.textContent = 'Analysing your business…';
+    }
+
+    narrativeZone.style.display = 'block';
+    narrativeZone.innerHTML = '';
+    const skel = document.createElement('div');
+    skel.style.cssText = [
+      'background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.2);',
+      'border-radius:16px;padding:20px 18px;',
+    ].join('');
+    const skelLbl = document.createElement('div');
+    skelLbl.style.cssText = 'font-size:11px;font-weight:700;color:rgba(167,139,250,0.7);letter-spacing:0.5px;text-transform:uppercase;margin-bottom:12px;';
+    skelLbl.textContent = '✨ AI is reading your data…';
+    const skelLines = [90, 75, 85, 60, 78].map(function(w) {
+      const l = document.createElement('div');
+      l.style.cssText = 'height:12px;border-radius:6px;background:rgba(255,255,255,0.07);margin-bottom:8px;width:' + w + '%;';
+      return l;
+    });
+    skel.appendChild(skelLbl);
+    skelLines.forEach(function(l){ skel.appendChild(l); });
+    narrativeZone.appendChild(skel);
+
+    // Build compressed snapshot — structured to minimise tokens
+    const { s, rev7, revPrev7, prof7, txCount7, trendPct,
+            restockAlerts, profitLeaks, topByProfit, cashTraps, priceOpps } = sig;
+
+    const top5products = s.products.slice(0, 20).map(function(p) {
+      const sales30 = s.sales.filter(function(x){ return x.productId === p.id && x.ts >= (Date.now() - 30*86400000); });
+      const qty30   = sales30.reduce(function(a,x){ return a+x.qty; }, 0);
+      const rev30   = sales30.reduce(function(a,x){ return a+x.price*x.qty; }, 0);
+      const margin  = p.price > 0 && p.cost > 0 ? Math.round(((p.price-p.cost)/p.price)*100) : null;
+      return p.name + ' [stock:' + p.qty + ', price:' + p.price + ', margin:' + (margin !== null ? margin + '%' : 'unknown') + ', sold30d:' + qty30 + ', rev30d:' + rev30 + ']';
+    }).join('\n');
+
+    const alerts = [
+      restockAlerts.length ? restockAlerts.length + ' products critically low/out of stock' : '',
+      profitLeaks.length   ? profitLeaks.length   + ' products with <10% margin selling actively' : '',
+      cashTraps.length     ? cashTraps.length      + ' products unsold 60+ days (trapped capital: ₦' + Math.round(sig.totalTrapped) + ')' : '',
+      priceOpps.length     ? priceOpps.length      + ' fast-selling products with <20% margin' : '',
+    ].filter(Boolean).join('\n');
+
+    const snapshot = [
+      'Business: small retail vendor in Nigeria. Currency: NGN.',
+      'Period: last 7 days.',
+      'Revenue: ₦' + Math.round(rev7) + ' (prev 7d: ₦' + Math.round(revPrev7) + ', trend: ' + (trendPct !== null ? (trendPct >= 0 ? '+' : '') + trendPct.toFixed(0) + '%' : 'n/a') + ')',
+      'Profit this week: ₦' + Math.round(prof7) + '. Transactions: ' + txCount7 + '.',
+      'Products (' + s.products.length + ' total, top 20 shown):',
+      top5products,
+      alerts ? ('Alerts:\n' + alerts) : 'No critical alerts.',
+    ].join('\n');
+
+    const prompt = [
+      'You are a sharp business advisor for a small Nigerian retail vendor using QuickShop.',
+      'Analyse the snapshot below and write 3–5 short, direct, actionable paragraphs.',
+      'Be specific: name products, name amounts in ₦, give concrete next steps.',
+      'Write like a trusted market-savvy friend — warm but no fluff.',
+      'Never repeat the raw numbers back — interpret them.',
+      'End with one "This week, focus on:" sentence.',
+      '',
+      'SNAPSHOT:',
+      snapshot,
+    ].join('\n');
+
+    try {
+      const res = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.7, maxOutputTokens: 600 }
+          })
+        }
+      );
+      if (!res.ok) {
+        const errBody = await res.text().catch(function(){ return ''; });
+        throw new Error('Gemini HTTP ' + res.status + ': ' + errBody.slice(0, 120));
+      }
+      const data = await res.json();
+      const text = (data.candidates &&
+                    data.candidates[0] &&
+                    data.candidates[0].content &&
+                    data.candidates[0].content.parts &&
+                    data.candidates[0].content.parts[0] &&
+                    data.candidates[0].content.parts[0].text) || '';
+      if (!text) throw new Error('Empty response from Gemini');
+
+      // Render narrative — text only, no innerHTML with API response
+      narrativeZone.innerHTML = '';
+      const card = document.createElement('div');
+      card.style.cssText = [
+        'background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.2);',
+        'border-radius:16px;padding:18px;',
+      ].join('');
+      const hdr = document.createElement('div');
+      hdr.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:14px;';
+      const gem = document.createElement('span'); gem.textContent = '✨';
+      const hdrtxt = document.createElement('span');
+      hdrtxt.style.cssText = 'font-size:13px;font-weight:700;color:#a78bfa;letter-spacing:0.3px;text-transform:uppercase;';
+      hdrtxt.textContent = 'Gemini AI Analysis';
+      hdr.appendChild(gem); hdr.appendChild(hdrtxt);
+      card.appendChild(hdr);
+
+      // Split into paragraphs and render each as a <p> — never innerHTML
+      text.split(/\n{1,}/).forEach(function(para) {
+        para = para.trim();
+        if (!para) return;
+        const p = document.createElement('p');
+        p.style.cssText = 'font-size:14px;color:rgba(240,240,246,0.85);line-height:1.7;margin:0 0 10px;';
+        p.textContent = para;
+        card.appendChild(p);
+      });
+
+      const ts = document.createElement('div');
+      ts.style.cssText = 'font-size:11px;color:rgba(255,255,255,0.25);margin-top:4px;';
+      ts.textContent = 'Generated ' + new Date().toLocaleTimeString('en-NG', { hour:'2-digit', minute:'2-digit' });
+      card.appendChild(ts);
+      narrativeZone.appendChild(card);
+
+      if (aiBtn) {
+        aiBtn.disabled = false;
+        aiBtn.style.opacity = '1';
+        const lbl = aiBtn.querySelector('span:last-child');
+        if (lbl) lbl.textContent = 'Refresh AI Analysis';
+      }
+    } catch (e) {
+      errlog('Gemini insight failed', e);
+      narrativeZone.innerHTML = '';
+      const errCard = document.createElement('div');
+      errCard.style.cssText = 'background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);border-radius:14px;padding:16px;';
+      const errTxt = document.createElement('div');
+      errTxt.style.cssText = 'font-size:13px;color:rgba(255,255,255,0.6);';
+      errTxt.textContent = 'AI analysis unavailable right now. Your data cards above are still accurate.';
+      errCard.appendChild(errTxt);
+      narrativeZone.appendChild(errCard);
+      if (aiBtn) {
+        aiBtn.disabled = false;
+        aiBtn.style.opacity = '1';
+        const lbl = aiBtn.querySelector('span:last-child');
+        if (lbl) lbl.textContent = 'Try Again';
+      }
+      toast('AI analysis failed — check your Gemini key or connection.', 'error');
+    }
   }
-}
+
+  // ── PUBLIC ENTRY POINT ────────────────────────────────────────────────────
+  function generateAdvancedInsights(returnHtml) {
+    try {
+      const sig = _computeSignals();
+      const dom = _buildInsightDom(sig, true);
+      if (returnHtml) return dom;
+      const aiContent = $('aiContent');
+      if (aiContent) { aiContent.innerHTML = ''; aiContent.appendChild(dom); }
+    } catch (e) {
+      errlog('generateAdvancedInsights failed', e);
+      if (returnHtml) {
+        const err = document.createElement('div');
+        err.style.cssText = 'padding:16px;color:rgba(255,255,255,0.5);font-size:13px;';
+        err.textContent = 'Could not load insights right now.';
+        return err;
+      }
+    }
+  }
 
   function initInsightsHandlers() {
     const closeInventoryInsightBtn = $('closeInventoryInsightBtn');
     if (closeInventoryInsightBtn) closeInventoryInsightBtn.addEventListener('click', closeInventoryInsight);
-    
+
     const insightBtn = $('insightBtn');
     if (insightBtn) {
       insightBtn.addEventListener('click', function () {
-        const html = generateAdvancedInsights(true);
-        showInventoryInsight(html);
+        const dom = generateAdvancedInsights(true);
+        if (dom) showInventoryInsight(dom);
       });
     }
-    
+
     const toggleInsightsBtn = $('toggleInsightsBtn');
     if (toggleInsightsBtn) {
       toggleInsightsBtn.addEventListener('click', function () {
@@ -3374,10 +3685,10 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
         }
       });
     }
-    
+
     const refreshInsightsBtn = $('refreshInsights');
     if (refreshInsightsBtn) {
-      refreshInsightsBtn.addEventListener('click', function() {
+      refreshInsightsBtn.addEventListener('click', function () {
         generateAdvancedInsights();
         toast('Insights refreshed', 'info', 1500);
       });

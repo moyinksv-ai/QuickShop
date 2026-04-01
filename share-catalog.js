@@ -296,8 +296,11 @@
       if (!d.is_active) return { active: false, expired: false };
       return { active: true, expired: false };
     } catch (_) {
-      // Network failure — fail open so a glitch doesn't block an active vendor
-      return { active: true, expired: false };
+      // FAIL-CLOSED: a network error or DB fault denies access.
+      // Only a confirmed is_active = true from the database grants the share flow.
+      // We return a distinct networkError flag so the caller shows a connection
+      // error rather than the paywall (which would confuse a paid vendor who is offline).
+      return { active: false, expired: false, networkError: true };
     }
   }
 
@@ -405,9 +408,9 @@
       bankCard.appendChild(bankTitle);
 
       var bankLines = [
-        ['Bank',       BANK_NAME],
-        ['Account No', ACCOUNT_NUMBER],
-        ['Name',       ACCOUNT_NAME],
+        ['Bank',       'Zenith Bank'],
+        ['Account No', '2119868917'],
+        ['Name',       'Moses Olayinka O'],
         ['Amount',     '₦1,500'],
       ];
       bankLines.forEach(function (pair, idx) {
@@ -632,6 +635,13 @@
     var subStatus = await checkSubscriptionActive(userId);
 
     if (!subStatus.active) {
+      // Network/DB failure — don't show the paywall to a potentially paid vendor.
+      // Gate is closed but we surface a clear reason, not a payment screen.
+      if (subStatus.networkError) {
+        notify('Could not verify your subscription — check your connection and try again.', 'error');
+        return;
+      }
+
       var userEmail = '';
       try {
         var _u = window.__QS_APP && typeof window.__QS_APP.getUser === 'function' && window.__QS_APP.getUser();
@@ -788,8 +798,15 @@
     if (ex.data && ex.data.slug) return ex.data.slug;
     var base = slugify(businessName || (ex.data && ex.data.business_name) || 'store');
     var slug = base;
+    // First collision check — append last 4 chars of userId
     var clash = await sb.from('profiles').select('id').eq('slug', slug).neq('id', userId).maybeSingle();
-    if (clash.data) slug = base + '-' + userId.replace(/-/g,'').slice(-4);
+    if (clash.data) {
+      slug = base + '-' + userId.replace(/-/g,'').slice(-4);
+      // Second collision check — extremely unlikely but guarded.
+      // Append a 6-char timestamp suffix to guarantee uniqueness.
+      var clash2 = await sb.from('profiles').select('id').eq('slug', slug).neq('id', userId).maybeSingle();
+      if (clash2.data) slug = base + '-' + Date.now().toString(36).slice(-6);
+    }
     await sb.from('profiles').update({ slug: slug }).eq('id', userId);
     return slug;
   }

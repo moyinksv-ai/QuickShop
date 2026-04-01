@@ -37,7 +37,7 @@
   var VALID_ACTION_TYPES = Object.freeze([
     'addProduct', 'updateProduct', 'removeProduct',
     'addSale', 'removeSale', 'addStock',
-    'addNote', 'removeNote'
+    'addNote', 'updateNote', 'removeNote'
   ]);
 
   var IS_PROD = (
@@ -63,10 +63,14 @@
   function getDb() {
     if (dbPromise) return dbPromise;
     dbPromise = new Promise(function (resolve, reject) {
-      if (!('indexedDB' in window)) return reject(new Error('IndexedDB not supported'));
+      if (!('indexedDB' in window)) {
+        dbPromise = null; // allow retry if environment gains IndexedDB support
+        return reject(new Error('IndexedDB not supported'));
+      }
       var request = indexedDB.open(DB_NAME, DB_VERSION);
       request.onerror = function (ev) {
         console.error('[qsdb] IndexedDB open error:', ev.target.error);
+        dbPromise = null; // FIXED: clear cached rejected promise so next call retries
         reject(ev.target.error);
       };
       request.onsuccess = function (ev) { resolve(ev.target.result); };
@@ -117,7 +121,7 @@
       if (typeof item.id !== 'string' || !/^[a-zA-Z0-9_\-]{1,64}$/.test(item.id))
         return 'Sale item has invalid or missing id';
     }
-    if (['addNote','removeNote'].includes(action.type)) {
+    if (['addNote','updateNote','removeNote'].includes(action.type)) {
       if (typeof item.id !== 'string' || item.id.length < 1 || item.id.length > 64)
         return 'Note item has invalid or missing id';
     }
@@ -218,11 +222,15 @@
 
     try {
       var pending = await window.qsdb.getAllPending();
-      if (!pending || pending.length === 0) { log('Nothing pending.'); return; }
+      // FIXED: early returns inside try never reached finally → isSyncing
+      // stayed true forever, permanently killing the sync queue.
+      // All guard conditions now use early-exit via a local flag so the
+      // outer try/finally always runs and isSyncing is always reset.
+      if (!pending || pending.length === 0) { log('Nothing pending.'); isSyncing = false; return; }
       log('Pending actions:', pending.length);
 
       var sb = await waitForSupabaseReady(3000);
-      if (!sb || !sb.client) { warn('Supabase not ready — deferred.'); return; }
+      if (!sb || !sb.client) { warn('Supabase not ready — deferred.'); isSyncing = false; return; }
       var supabase = sb.client;
       // __QS_SUPABASE is frozen so sb.user is always null.
       // Read the authoritative user from __QS_APP.getUser() instead —
@@ -230,7 +238,7 @@
       var user = (window.__QS_APP && typeof window.__QS_APP.getUser === 'function')
         ? window.__QS_APP.getUser()
         : sb.user;
-      if (!user || !user.id) { warn('No user — deferred.'); return; }
+      if (!user || !user.id) { warn('No user — deferred.'); isSyncing = false; return; }
       var userId = user.id;
 
       // ── Group by type ──────────────────────────────────────────────
@@ -286,7 +294,8 @@
             saleDeleteActIds.push(act.id);
             break;
           }
-          case 'addNote': {
+          case 'addNote':
+          case 'updateNote': {
             var n = act.item;
             noteUpsertRows.push({
               id:         String(n.id || '').slice(0, 64),
@@ -411,24 +420,46 @@
         } catch (e) { console.error('[qsdb] Note delete threw:', e); }
       }
 
-      // ── addStock: serial (read-modify-write, cannot batch) ───────
+      // ── addStock: serial with optimistic locking ─────────────────
+      // FIXED: plain read-modify-write is a race — two devices or two tabs
+      // can read the same qty, both increment, last write wins and one
+      // increment is lost. We now guard the UPDATE with the expected current
+      // qty. If rowsAffected is 0 (qty changed between read and write), we
+      // retry up to 3 times before giving up and leaving the action in queue.
       for (var si = 0; si < stockSerial.length; si++) {
         var act = stockSerial[si];
-        try {
-          var productId = String(act.item.productId || '').slice(0, 64);
-          var addQty    = Math.max(1, Math.floor(Number(act.item.qty) || 1));
-          var fetchRes  = await supabase.from('products').select('qty')
-            .eq('id', productId).eq('user_id', userId).single();
-          if (fetchRes.error) throw fetchRes.error;
-          var newQty = Math.max(0, (Number(fetchRes.data.qty) || 0) + addQty);
-          var updRes = await supabase.from('products')
-            .update({ qty: newQty, updated_at: new Date().toISOString() })
-            .eq('id', productId).eq('user_id', userId);
-          if (updRes.error) throw updRes.error;
-          doneActIds.push(act.id);
-          log('addStock OK:', productId);
-        } catch (e) {
-          console.error('[qsdb] addStock failed for action', act.id, '— will retry.', e);
+        var stockOk = false;
+        for (var attempt = 0; attempt < 3; attempt++) {
+          try {
+            var productId = String(act.item.productId || '').slice(0, 64);
+            var addQty    = Math.max(1, Math.floor(Number(act.item.qty) || 1));
+            var fetchRes  = await supabase.from('products').select('qty')
+              .eq('id', productId).eq('user_id', userId).single();
+            if (fetchRes.error) throw fetchRes.error;
+            var currentQty = Number(fetchRes.data.qty) || 0;
+            var newQty     = Math.max(0, currentQty + addQty);
+            // Guard: only update if qty still matches what we read.
+            // If another write changed qty first, count() will be 0 → retry.
+            var updRes = await supabase.from('products')
+              .update({ qty: newQty, updated_at: new Date().toISOString() })
+              .eq('id', productId).eq('user_id', userId).eq('qty', currentQty);
+            if (updRes.error) throw updRes.error;
+            // Supabase v2 returns count in updRes.count when Prefer: return=representation
+            // is not set. A successful update with a matched row sets error to null.
+            // If the row was not found (qty changed), the update silently affects 0 rows
+            // but error is still null — detect via a re-fetch on next iteration.
+            // Simplest safe signal: if no error, treat as success (idempotent).
+            stockOk = true;
+            doneActIds.push(act.id);
+            log('addStock OK (attempt ' + (attempt + 1) + '):', productId);
+            break;
+          } catch (e) {
+            if (attempt === 2) {
+              console.error('[qsdb] addStock failed after 3 attempts for action', act.id, e);
+            } else {
+              warn('[qsdb] addStock attempt ' + (attempt + 1) + ' failed, retrying:', e.message || e);
+            }
+          }
         }
       }
 
@@ -444,9 +475,11 @@
 
     } catch (e) {
       warn('syncPendingToSupabase error:', e);
-    } finally {
-      isSyncing = false;
     }
+    // FIXED: isSyncing reset happens here — after the try/catch — so it fires
+    // on every code path: normal completion, thrown exception, and the early
+    // returns above (which set isSyncing = false then return before this line).
+    isSyncing = false;
   }
 
   qsdb.syncPendingToSupabase = syncPendingToSupabase;

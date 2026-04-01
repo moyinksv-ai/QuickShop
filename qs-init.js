@@ -94,10 +94,24 @@
 
     function showSignup() {
       showAuth();
-      setTimeout(function () {
+      // FIXED: the original setTimeout(click, 60) was a race — on slow networks
+      // or cold loads appss.js hasn't bound its listener to btnShowSignup yet,
+      // so the click fires on a deaf element and the vendor lands on login.
+      // Strategy: poll for the listener being ready (signalled by appss.js
+      // setting window.__QS_APP), then click. Fall back to direct DOM click
+      // after 2s regardless so the UI never hangs.
+      var elapsed = 0;
+      var iv = setInterval(function () {
+        elapsed += 50;
         var b = document.getElementById('btnShowSignup');
-        if (b) b.click();
-      }, 60);
+        if (window.__QS_APP && b) {
+          clearInterval(iv);
+          b.click();
+        } else if (elapsed >= 2000) {
+          clearInterval(iv);
+          if (b) b.click(); // best-effort fallback
+        }
+      }, 50);
     }
 
     var signupBtnIds = ['qs-nav-up', 'qs-hero-up', 'qs-plan-free', 'qs-plan-pro', 'qs-final'];
@@ -177,7 +191,10 @@
   var isCatalog = params.has('store') || params.has('token');
 
   if (isCatalog) {
-    // Customer storefront — catalog.js is standalone, async is fine
+    // Customer storefront — catalog.js is fully standalone, no load-order
+    // dependency. Dynamic scripts default to async=true which is correct here.
+    // NOTE: do NOT add a second script to this branch assuming ordered loading —
+    // async=false only applies when ordered=true is passed to addScript().
     addScript('catalog.js', false);
   } else {
     // Admin app — ordered load required (inventory.js depends on __QS_APP from appss.js)
