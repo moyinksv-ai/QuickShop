@@ -3407,28 +3407,38 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       wrap.appendChild(cl);
     }
 
-    // ── ASK AI BUTTON (Gemini, shown only when key is configured) ─────
-    if (includeAskAiBtn && window.__QS_GEMINI_KEY) {
-      const aiRow = document.createElement('div');
-      aiRow.style.cssText = 'padding:4px 0 2px;';
-      const aiBtn = document.createElement('button');
-      aiBtn.id   = 'qs-ask-ai-btn';
-      aiBtn.type = 'button';
-      aiBtn.style.cssText = [
-        'width:100%;padding:14px;border-radius:14px;border:0;',
-        'background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;',
-        'font-size:15px;font-weight:800;cursor:pointer;',
-        'display:flex;align-items:center;justify-content:center;gap:8px;',
-        'box-shadow:0 6px 20px rgba(124,58,237,0.3);',
-        'letter-spacing:-0.2px;-webkit-tap-highlight-color:transparent;',
-        'transition:opacity 0.15s;',
-      ].join('');
-      const spark = document.createElement('span'); spark.textContent = '✨';
-      const lbl   = document.createElement('span'); lbl.textContent   = 'Ask AI — Analyse My Business';
-      aiBtn.appendChild(spark); aiBtn.appendChild(lbl);
-      aiRow.appendChild(aiBtn);
-      wrap.appendChild(aiRow);
-    }
+    // ── ASK AI BUTTON — always rendered, state depends on key presence ──
+    // FIXED: previously hidden when key absent — vendor never knew it existed.
+    // Now always visible: "Ask AI" when key is set, "Enable AI" when not.
+    const aiRow = document.createElement('div');
+    aiRow.style.cssText = 'padding:4px 0 2px;';
+    const aiBtn = document.createElement('button');
+    aiBtn.id   = 'qs-ask-ai-btn';
+    aiBtn.type = 'button';
+
+    const hasKey = !!(window.__QS_GEMINI_KEY);
+
+    aiBtn.style.cssText = [
+      'width:100%;padding:14px;border-radius:14px;border:0;',
+      hasKey
+        ? 'background:linear-gradient(135deg,#7c3aed,#4f46e5);box-shadow:0 6px 20px rgba(124,58,237,0.3);'
+        : 'background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);',
+      'color:#fff;font-size:15px;font-weight:800;cursor:pointer;',
+      'display:flex;align-items:center;justify-content:center;gap:8px;',
+      'letter-spacing:-0.2px;-webkit-tap-highlight-color:transparent;',
+      'transition:opacity 0.15s;',
+    ].join('');
+
+    const spark = document.createElement('span');
+    spark.textContent = hasKey ? '✨' : '🔑';
+    const lbl = document.createElement('span');
+    lbl.textContent = hasKey
+      ? 'Ask AI — Analyse My Business'
+      : 'Enable AI Insights — tap to learn how';
+    aiBtn.appendChild(spark);
+    aiBtn.appendChild(lbl);
+    aiRow.appendChild(aiBtn);
+    wrap.appendChild(aiRow);
 
     // ── AI NARRATIVE ZONE (populated by Gemini response) ─────────────
     const narrativeZone = document.createElement('div');
@@ -3441,6 +3451,44 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       // Ask AI button
       if (e.target.closest('#qs-ask-ai-btn')) {
         e.preventDefault();
+        if (!window.__QS_GEMINI_KEY) {
+          // No key — show setup instructions in the narrative zone
+          narrativeZone.style.display = 'block';
+          narrativeZone.innerHTML = '';
+          const setupCard = document.createElement('div');
+          setupCard.style.cssText = [
+            'background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.2);',
+            'border-radius:16px;padding:18px;',
+          ].join('');
+          const steps = [
+            { icon: '1️⃣', text: 'Go to aistudio.google.com/app/apikey' },
+            { icon: '2️⃣', text: 'Sign in with any Google account — it\'s free' },
+            { icon: '3️⃣', text: 'Click "Create API Key" and copy it' },
+            { icon: '4️⃣', text: 'Vercel Dashboard → your project → Settings → Environment Variables' },
+            { icon: '5️⃣', text: 'Add variable: name = GEMINI_API_KEY, value = your key' },
+            { icon: '6️⃣', text: 'Redeploy. The "Ask AI" button will activate.' },
+          ];
+          const hdr = document.createElement('div');
+          hdr.style.cssText = 'font-size:14px;font-weight:700;color:#a78bfa;margin-bottom:12px;';
+          hdr.textContent = '🔑 Enable Free AI Insights (2 minutes)';
+          setupCard.appendChild(hdr);
+          steps.forEach(function(step) {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;';
+            const ic = document.createElement('span'); ic.textContent = step.icon;
+            const tx = document.createElement('span');
+            tx.style.cssText = 'font-size:13px;color:rgba(240,240,246,0.75);line-height:1.5;';
+            tx.textContent = step.text;
+            row.appendChild(ic); row.appendChild(tx);
+            setupCard.appendChild(row);
+          });
+          const note = document.createElement('div');
+          note.style.cssText = 'font-size:11.5px;color:rgba(255,255,255,0.3);margin-top:10px;line-height:1.5;';
+          note.textContent = 'Free tier: 15 requests/min, 1M tokens/day. No credit card required.';
+          setupCard.appendChild(note);
+          narrativeZone.appendChild(setupCard);
+          return;
+        }
         _runGeminiInsight(sig, narrativeZone);
         return;
       }
@@ -3557,7 +3605,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
 
     try {
       const res = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key,
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=' + key,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -3624,9 +3672,14 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       const errCard = document.createElement('div');
       errCard.style.cssText = 'background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);border-radius:14px;padding:16px;';
       const errTxt = document.createElement('div');
-      errTxt.style.cssText = 'font-size:13px;color:rgba(255,255,255,0.6);';
-      errTxt.textContent = 'AI analysis unavailable right now. Your data cards above are still accurate.';
+      errTxt.style.cssText = 'font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:8px;';
+      errTxt.textContent = 'AI analysis failed. Your data cards above are still accurate.';
+      // Show the real error so it can be diagnosed — not just a generic message
+      const errDetail = document.createElement('div');
+      errDetail.style.cssText = 'font-size:11px;color:rgba(239,68,68,0.7);font-family:monospace;word-break:break-all;line-height:1.5;';
+      errDetail.textContent = 'Error: ' + (e && e.message ? e.message : String(e));
       errCard.appendChild(errTxt);
+      errCard.appendChild(errDetail);
       narrativeZone.appendChild(errCard);
       if (aiBtn) {
         aiBtn.disabled = false;
