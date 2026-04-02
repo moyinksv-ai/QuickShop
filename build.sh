@@ -74,11 +74,11 @@ else
 fi
 
 # ── Verification ──────────────────────────────────────────────────────────────
-# If any %% placeholder survives, a substitution silently failed.
-# Fail the build now rather than deploy a broken config.
-if grep -q '%%' supabase-config.js; then
+# Match only %%PLACEHOLDER%% patterns (uppercase + underscores between %%).
+# This avoids false positives from literal '%%' strings in JS validation code.
+if grep -qE '%%[A-Z_]+%%' supabase-config.js; then
   echo "[build] ERROR: supabase-config.js still contains unreplaced placeholders:" >&2
-  grep -n '%%' supabase-config.js >&2
+  grep -nE '%%[A-Z_]+%%' supabase-config.js >&2
   exit 1
 fi
 
