@@ -421,11 +421,20 @@
       }
 
       // ── addStock: serial with optimistic locking ─────────────────
-      // FIXED: plain read-modify-write is a race — two devices or two tabs
-      // can read the same qty, both increment, last write wins and one
-      // increment is lost. We now guard the UPDATE with the expected current
-      // qty. If rowsAffected is 0 (qty changed between read and write), we
-      // retry up to 3 times before giving up and leaving the action in queue.
+      // A plain read-modify-write is a race — two devices or two tabs can
+      // read the same qty, both increment, and one increment is silently lost.
+      //
+      // The UPDATE is guarded with .eq('qty', currentQty) so it only affects
+      // a row if qty has not changed since we read it. When another writer
+      // changes qty between our read and write, Supabase updates 0 rows and
+      // returns error=null (Supabase v2 does not expose rowsAffected directly).
+      //
+      // FIX: after a null-error update we re-fetch qty and compare it to the
+      // newQty we intended to write. If they match, the update landed. If they
+      // differ, a concurrent writer changed qty under us — treat as a lock-miss
+      // and retry. This is the only reliable way to detect a zero-row update
+      // in Supabase v2 without enabling Prefer:return=representation (which
+      // would double the response payload on every stock update).
       for (var si = 0; si < stockSerial.length; si++) {
         var act = stockSerial[si];
         var stockOk = false;
@@ -433,26 +442,41 @@
           try {
             var productId = String(act.item.productId || '').slice(0, 64);
             var addQty    = Math.max(1, Math.floor(Number(act.item.qty) || 1));
-            var fetchRes  = await supabase.from('products').select('qty')
+
+            // Step 1: read current qty
+            var fetchRes = await supabase.from('products').select('qty')
               .eq('id', productId).eq('user_id', userId).single();
             if (fetchRes.error) throw fetchRes.error;
+
             var currentQty = Number(fetchRes.data.qty) || 0;
             var newQty     = Math.max(0, currentQty + addQty);
-            // Guard: only update if qty still matches what we read.
-            // If another write changed qty first, count() will be 0 → retry.
+
+            // Step 2: conditional update — only applies if qty still matches
             var updRes = await supabase.from('products')
               .update({ qty: newQty, updated_at: new Date().toISOString() })
               .eq('id', productId).eq('user_id', userId).eq('qty', currentQty);
             if (updRes.error) throw updRes.error;
-            // Supabase v2 returns count in updRes.count when Prefer: return=representation
-            // is not set. A successful update with a matched row sets error to null.
-            // If the row was not found (qty changed), the update silently affects 0 rows
-            // but error is still null — detect via a re-fetch on next iteration.
-            // Simplest safe signal: if no error, treat as success (idempotent).
+
+            // Step 3: verify the update actually landed by re-reading qty.
+            // If qty equals newQty, our write won. If it differs, a concurrent
+            // writer changed it between our read and write (lock-miss) — retry.
+            var verifyRes = await supabase.from('products').select('qty')
+              .eq('id', productId).eq('user_id', userId).single();
+            if (verifyRes.error) throw verifyRes.error;
+
+            var confirmedQty = Number(verifyRes.data.qty);
+            if (confirmedQty !== newQty) {
+              warn('[qsdb] addStock lock-miss on attempt ' + (attempt + 1) +
+                   ' for ' + productId +
+                   ' (expected ' + newQty + ', got ' + confirmedQty + ') — retrying.');
+              continue;
+            }
+
             stockOk = true;
             doneActIds.push(act.id);
             log('addStock OK (attempt ' + (attempt + 1) + '):', productId);
             break;
+
           } catch (e) {
             if (attempt === 2) {
               console.error('[qsdb] addStock failed after 3 attempts for action', act.id, e);
@@ -460,6 +484,9 @@
               warn('[qsdb] addStock attempt ' + (attempt + 1) + ' failed, retrying:', e.message || e);
             }
           }
+        }
+        if (!stockOk) {
+          warn('[qsdb] addStock action id=' + act.id + ' left in queue for next sync.');
         }
       }
 

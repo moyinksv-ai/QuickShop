@@ -289,6 +289,7 @@ function initApp() {
   let state = { products: [], sales: [], changes: [], notes: [], categories: [], logs: [] };
   let isSyncing = false;
   let isSyncInProgress = false;
+  let _lastSyncAt = 0; // timestamp of the last completed syncCloudData call
   let isSaveStateSyncing = false;
   let editingNoteId = null;
   let editingProductId = null;
@@ -966,6 +967,7 @@ function handleTouchEnd() {
     finally {
       showLoading(false);
       isSyncInProgress = false;
+      _lastSyncAt = Date.now();
     }
     initAppUI();
     await saveState();
@@ -1284,25 +1286,45 @@ function handleTouchEnd() {
       return;
     }
     const supabase = sb.client;
+
+    // Dedup guard: track the last user ID that handleAuthUser was called for
+    // so that getSession() and the immediate INITIAL_SESSION event — which
+    // both fire on a warm session — do not run the full boot sequence twice.
+    // SIGNED_IN always runs regardless (it represents a new login action).
+    let _lastHandledUserId = null;
+
     const { data: { session } } = await supabase.auth.getSession();
-    if (session && session.user) handleAuthUser(session.user);
+    if (session && session.user) {
+      _lastHandledUserId = session.user.id;
+      handleAuthUser(session.user);
+    }
+
     supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'INITIAL_SESSION') {
-  if (session && session.user) {
-    handleAuthUser(session.user);
-  } else {
-    handleAuthLogout();
-  }
-  return;
-}
+        if (session && session.user) {
+          // Skip if getSession() already handled this user above.
+          if (session.user.id !== _lastHandledUserId) {
+            _lastHandledUserId = session.user.id;
+            handleAuthUser(session.user);
+          }
+        } else {
+          handleAuthLogout();
+        }
+        return;
+      }
       if (event === 'SIGNED_IN' && session && session.user) {
+        // Always run on explicit sign-in — user may have switched accounts.
+        _lastHandledUserId = session.user.id;
         handleAuthUser(session.user);
       } else if (event === 'USER_UPDATED' && session && session.user) {
+        _lastHandledUserId = session.user.id;
         handleAuthUser(session.user);
       } else if (event === 'SIGNED_OUT') {
+        _lastHandledUserId = null;
         handleAuthLogout();
       } else if (event === 'TOKEN_REFRESH_ERROR') {
         console.warn('[QS] Token refresh failed — forcing logout.');
+        _lastHandledUserId = null;
         handleAuthLogout();
       }
     });
@@ -2472,6 +2494,20 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     const nextIdx = _TAB_ORDER.indexOf(view);
     const dir = (prevIdx === -1 || nextIdx === -1) ? ''
               : nextIdx > prevIdx ? 'from-right' : 'from-left';
+
+    // ── View persistence ───────────────────────────────────────────────
+    // Persist the active view so a page refresh restores the same panel
+    // instead of always landing on Home.
+    try { sessionStorage.setItem('qs_active_view', view); } catch(_) {}
+
+    // ── History stack for back-button interception ─────────────────────
+    // Push a synthetic entry on every real navigation so the browser has
+    // something to pop when the vendor presses the system back button.
+    // The popstate handler intercepts the pop and routes within the app.
+    if (prevIdx !== -1) {
+      try { history.pushState({ qsView: view }, ''); } catch(_) {}
+    }
+
     _prevViewName = view;
 
     const navButtons = Array.from(document.querySelectorAll('.nav-btn'));
@@ -3790,311 +3826,506 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     const s = document.createElement('style');
     s.id = 'qs-settings-styles';
     s.textContent = `
-        .qs-s-section {
-          background: var(--card-glass);
-          border: 1px solid var(--border-glass);
-          border-radius: 16px;
-          margin-bottom: 12px;
-          overflow: hidden;
-        }
-        .qs-s-row {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 14px 16px;
-          gap: 12px;
-          border-bottom: 1px solid var(--border-glass);
-        }
-        .qs-s-row:last-child { border-bottom: none; }
-        .qs-s-row-label { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; }
-        .qs-s-row-sub { font-size: 12px; color: var(--text-muted); }
-        .qs-s-section-title {
-          font-size: 11px; font-weight: 700; letter-spacing: 0.8px;
-          text-transform: uppercase; color: var(--text-muted);
-          padding: 14px 16px 8px;
-        }
-        .qs-avatar {
-          width: 64px; height: 64px; border-radius: 50%;
-          background: linear-gradient(135deg, #6366f1, #a78bfa);
-          display: flex; align-items: center; justify-content: center;
-          font-size: 22px; font-weight: 800; color: #fff;
-          flex-shrink: 0; letter-spacing: -0.5px;
-          overflow: hidden; cursor: pointer; position: relative;
-          border: 2px solid rgba(124,58,237,0.5);
-          box-shadow: 0 0 0 3px rgba(124,58,237,0.12);
-        }
-        .qs-avatar img {
-          width: 100%; height: 100%; object-fit: cover; border-radius: 50%;
-        }
-        .qs-avatar-overlay {
-          position: absolute; inset: 0; border-radius: 50%;
-          background: rgba(0,0,0,0.45);
-          display: flex; align-items: center; justify-content: center;
-          opacity: 0; transition: opacity .18s;
-          font-size: 18px;
-        }
-        .qs-avatar:hover .qs-avatar-overlay,
-        .qs-avatar:focus .qs-avatar-overlay { opacity: 1; }
-        .qs-avatar-uploading { opacity: 0.5; pointer-events: none; }
-        .qs-theme-toggle-btn {
-          background: var(--card-glass);
-          border: 1px solid var(--border-glass);
-          border-radius: 10px;
-          padding: 8px 14px;
-          font-size: 13px; font-weight: 700;
-          color: var(--text-primary);
-          cursor: pointer;
-          transition: background 0.2s, border-color 0.2s;
-          white-space: nowrap;
-        }
-        .qs-theme-toggle-btn:hover { background: var(--card-glass-hover); border-color: var(--accent-primary); }
-        .qs-danger-btn {
-          width: 100%; padding: 13px;
-          background: rgba(239,68,68,0.08);
-          border: 1px solid rgba(239,68,68,0.25);
-          border-radius: 12px;
-          color: #ef4444; font-size: 14px; font-weight: 700;
-          cursor: pointer; transition: all 0.2s;
-        }
-        .qs-danger-btn:hover { background: rgba(239,68,68,0.15); border-color: #ef4444; }
-        .qs-ghost-btn {
-          background: var(--card-glass);
-          border: 1px solid var(--border-glass);
-          border-radius: 10px; padding: 8px 14px;
-          font-size: 13px; font-weight: 600;
-          color: var(--text-secondary); cursor: pointer;
-          transition: all 0.2s;
-        }
-        .qs-ghost-btn:hover { background: var(--card-glass-hover); color: var(--text-primary); }
-        /* Category row */
-        .qs-cat-row {
-          display: flex; align-items: center;
-          padding: 10px 16px; gap: 10px;
-          border-bottom: 1px solid var(--border-glass);
-          transition: background 0.15s;
-        }
-        .qs-cat-row:last-child { border-bottom: none; }
-        .qs-cat-row:hover { background: var(--card-glass-hover); }
-        .qs-cat-dot {
-          width: 8px; height: 8px; border-radius: 50%;
-          background: var(--accent-primary); flex-shrink: 0;
-        }
-        .qs-cat-name {
-          flex: 1; font-size: 14px; font-weight: 600; color: var(--text-primary);
-        }
-        .qs-cat-edit-input {
-          flex: 1; font-size: 14px; font-weight: 600;
-          background: var(--bg-glass) !important;
-          border: 1.5px solid var(--accent-primary) !important;
-          border-radius: 8px; padding: 5px 10px;
-          color: var(--text-primary) !important;
-          outline: none;
-        }
-        .qs-cat-icon-btn {
-          background: transparent; border: 0;
-          padding: 5px 8px; border-radius: 8px;
-          font-size: 14px; cursor: pointer;
-          color: var(--text-muted); transition: all 0.2s;
-        }
-        .qs-cat-icon-btn:hover { background: var(--card-glass-hover); color: var(--text-primary); }
-        .qs-cat-icon-btn.danger:hover { color: #ef4444; }
-        .qs-cat-save-btn {
-          background: var(--accent-primary); border: 0;
-          padding: 5px 12px; border-radius: 8px;
-          font-size: 12px; font-weight: 700;
-          color: #fff; cursor: pointer; transition: background 0.2s;
-        }
-        .qs-cat-save-btn:hover { background: #4f52e0; }
-        .qs-cat-cancel-btn {
-          background: transparent; border: 1px solid var(--border-glass);
-          padding: 5px 10px; border-radius: 8px;
-          font-size: 12px; font-weight: 600;
-          color: var(--text-muted); cursor: pointer;
-        }
-        .qs-add-cat-row {
-          display: flex; gap: 8px; align-items: center;
-          padding: 12px 16px;
-          border-top: 1px solid var(--border-glass);
-        }
-        .qs-add-cat-input {
-          flex: 1; font-size: 13.5px;
-          background: var(--bg-glass) !important;
-          border: 1.5px solid var(--border-glass);
-          border-radius: 10px; padding: 8px 12px;
-          color: var(--text-primary) !important; outline: none;
-          transition: border-color 0.2s;
-        }
-        .qs-add-cat-input:focus { border-color: var(--accent-primary); }
-        .qs-add-cat-btn {
-          background: var(--accent-primary); border: 0;
-          padding: 8px 16px; border-radius: 10px;
-          font-size: 13px; font-weight: 700;
-          color: #fff; cursor: pointer; transition: background 0.2s;
-          white-space: nowrap;
-        }
-        .qs-add-cat-btn:hover { background: #4f52e0; }
 
-        /* ── Sticky profile header ── */
-        .qs-sticky-profile {
-          position: sticky;
-          top: var(--topbar-h);
-          z-index: 100;
-          background: var(--bg-obsidian);
-          margin-left: -12px;
-          margin-right: -12px;
-          padding: 10px 12px 10px;
-          border-bottom: 1px solid var(--border-subtle);
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
-        /* Avatar — compact 44px with camera badge */
-        .qs-sp-avatar {
-          position: relative;
-          width: 44px; height: 44px;
-          border-radius: 50%;
-          background: linear-gradient(135deg, #6366f1, #a78bfa);
-          display: flex; align-items: center; justify-content: center;
-          font-size: 16px; font-weight: 800; color: #fff;
-          flex-shrink: 0; overflow: visible;
-          border: 2px solid rgba(124,58,237,0.45);
-          box-shadow: 0 0 0 3px rgba(124,58,237,0.10);
-          cursor: pointer;
-        }
-        .qs-sp-avatar img {
-          width: 100%; height: 100%;
-          object-fit: cover; border-radius: 50%;
-        }
-        /* Camera badge — bottom-right pip */
-        .qs-sp-cam {
-          position: absolute;
-          bottom: -2px; right: -2px;
-          width: 18px; height: 18px;
-          background: var(--accent-primary);
-          border-radius: 50%;
-          border: 2px solid var(--bg-obsidian);
-          display: flex; align-items: center; justify-content: center;
-          font-size: 9px; line-height: 1;
-          pointer-events: none;
-        }
-        .qs-sp-uploading { opacity: 0.5; pointer-events: none; }
-        /* Text block */
-        .qs-sp-info {
-          flex: 1; min-width: 0;
-        }
-        .qs-sp-name {
-          font-size: 14px; font-weight: 700;
-          color: var(--text-primary);
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-          line-height: 1.3;
-          letter-spacing: -0.01em;
-        }
-        .qs-sp-email {
-          font-size: 11.5px;
-          color: var(--text-muted);
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-          margin-top: 1px;
-        }
-        /* Status badge pill — online/offline */
-        .qs-sp-badge {
-          display: inline-flex; align-items: center; gap: 5px;
-          border-radius: 100px;
-          padding: 3px 9px 3px 7px;
-          font-size: 10px; font-weight: 700;
-          white-space: nowrap; flex-shrink: 0;
-          letter-spacing: 0.02em;
-          transition: background 0.4s, border-color 0.4s, color 0.4s;
-        }
-        .qs-sp-badge.online {
-          background: rgba(16,185,129,0.10);
-          border: 1px solid rgba(16,185,129,0.22);
-          color: #10b981;
-        }
-        .qs-sp-badge.offline {
-          background: rgba(239,68,68,0.10);
-          border: 1px solid rgba(239,68,68,0.22);
-          color: #ef4444;
-        }
-        /* Animated status dot */
-        .qs-sp-dot {
-          width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
-          position: relative;
-        }
-        .qs-sp-badge.online  .qs-sp-dot { background: #10b981; }
-        .qs-sp-badge.offline .qs-sp-dot { background: #ef4444; }
-        /* Pulse ring — online only */
-        .qs-sp-badge.online .qs-sp-dot::after {
-          content: '';
-          position: absolute; inset: -3px;
-          border-radius: 50%;
-          background: rgba(16,185,129,0.35);
-          animation: qs-dot-pulse 2s ease-out infinite;
-        }
-        @keyframes qs-dot-pulse {
-          0%   { transform: scale(0.8); opacity: 0.8; }
-          100% { transform: scale(2.2); opacity: 0; }
-        }
-        /* Scrollable body below sticky */
-        /* Action row */
-        .qs-action-row {
-          display: flex;
-          gap: 8px;
-          padding: 12px 16px 4px;
-          align-items: stretch;
-        }
-        .qs-action-btn {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 4px;
-          padding: 11px 6px;
-          background: var(--card-glass);
-          border: 1px solid var(--border-glass);
-          border-radius: var(--radius-sm);
-          color: var(--text-primary);
-          font-size: 11.5px;
-          font-weight: 700;
-          cursor: pointer;
-          letter-spacing: .2px;
-          transition: background .15s, border-color .15s;
-          -webkit-tap-highlight-color: transparent;
-          position: relative;
-        }
-        .qs-action-btn:active { background: rgba(255,255,255,0.1); }
-        .qs-action-btn[aria-expanded="true"] {
-          border-color: rgba(99,102,241,0.5);
-          background: rgba(99,102,241,0.1);
-          color: var(--accent-primary);
-        }
-        .qs-action-icon { font-size: 18px; line-height: 1; }
-        .qs-action-arrow {
-          font-size: 13px;
-          color: var(--text-muted);
-          transition: transform .28s cubic-bezier(.4,0,.2,1);
-          display: inline-block;
-        }
-        .qs-action-btn[aria-expanded="true"] .qs-action-arrow {
-          transform: rotate(90deg);
-        }
-        /* Share button rendered inside action row — inherit sizing */
+      /* ═══════════════════════════════════════════════════════════════
+         SETTINGS PANEL — Redesigned
+         Design language: Obsidian Glass · iOS-inspired list rows ·
+         Consistent 8-pt spacing grid · Smooth grid-row animations
+         All values use the app's existing CSS custom properties.
+      ═══════════════════════════════════════════════════════════════ */
 
-        /* Slide-down drawers */
-        .qs-drawer {
-          overflow: hidden;
-          max-height: 0;
-          transition: max-height .32s cubic-bezier(.4,0,.2,1);
-        }
-        .qs-drawer.open { max-height: 700px; }
-        .qs-drawer-inner {
-          padding: 0 16px 4px;
-          border-bottom: 1px solid var(--border-glass);
-        }
+      /* ── Panel shell ─────────────────────────────────────────────── */
+      #settingsPanel {
+        padding: 0 0 calc(var(--nav-h) + 40px + env(safe-area-inset-bottom, 0px)) !important;
+        background: var(--bg-obsidian);
+      }
 
-        .qs-settings-body {
-          padding-top: 12px;
-        }
+      /* ── Sticky profile header ───────────────────────────────────── */
+      .qs-sticky-profile {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background: var(--bg-obsidian);
+        padding: 16px 20px 14px;
+        border-bottom: 1px solid var(--border-subtle);
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        /* Subtle frosted glass on scroll */
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+      }
+
+      /* Avatar — 52 px, gradient ring, camera pip */
+      .qs-sp-avatar {
+        position: relative;
+        width: 52px; height: 52px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #6366f1 0%, #a78bfa 100%);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 18px; font-weight: 800; color: #fff;
+        flex-shrink: 0;
+        /* Gradient ring */
+        box-shadow:
+          0 0 0 2px var(--bg-obsidian),
+          0 0 0 4px rgba(99,102,241,0.45),
+          0 4px 16px rgba(99,102,241,0.2);
+        cursor: pointer;
+        transition: box-shadow 0.2s, transform 0.15s;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .qs-sp-avatar:active { transform: scale(0.95); }
+      .qs-sp-avatar img {
+        width: 100%; height: 100%;
+        object-fit: cover; border-radius: 50%;
+      }
+
+      /* Camera badge */
+      .qs-sp-cam {
+        position: absolute;
+        bottom: -1px; right: -1px;
+        width: 20px; height: 20px;
+        background: var(--accent-primary);
+        border-radius: 50%;
+        border: 2px solid var(--bg-obsidian);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 9px; line-height: 1;
+        pointer-events: none;
+        box-shadow: 0 2px 6px rgba(99,102,241,0.4);
+      }
+      .qs-sp-uploading { opacity: 0.4; pointer-events: none; }
+
+      /* Name / email text block */
+      .qs-sp-info { flex: 1; min-width: 0; }
+      .qs-sp-name {
+        font-size: 15px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        color: var(--text-primary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.25;
+      }
+      .qs-sp-email {
+        font-size: 11.5px;
+        color: var(--text-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-top: 3px;
+        line-height: 1.3;
+      }
+
+      /* Status pill */
+      .qs-sp-badge {
+        display: inline-flex; align-items: center; gap: 5px;
+        border-radius: 100px;
+        padding: 4px 10px 4px 8px;
+        font-size: 10px; font-weight: 700;
+        letter-spacing: 0.02em;
+        white-space: nowrap; flex-shrink: 0;
+        transition: background 0.4s, border-color 0.4s, color 0.4s;
+      }
+      .qs-sp-badge.online {
+        background: rgba(16,185,129,0.10);
+        border: 1px solid rgba(16,185,129,0.25);
+        color: #10b981;
+      }
+      .qs-sp-badge.offline {
+        background: rgba(239,68,68,0.10);
+        border: 1px solid rgba(239,68,68,0.25);
+        color: #ef4444;
+      }
+      .qs-sp-dot {
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        position: relative;
+      }
+      .qs-sp-badge.online  .qs-sp-dot { background: #10b981; }
+      .qs-sp-badge.offline .qs-sp-dot { background: #ef4444; animation: none; }
+      .qs-sp-badge.online .qs-sp-dot::after {
+        content: '';
+        position: absolute; inset: -3px;
+        border-radius: 50%;
+        background: rgba(16,185,129,0.4);
+        animation: qs-dot-pulse 2s ease-out infinite;
+      }
+      @keyframes qs-dot-pulse {
+        0%   { transform: scale(0.8); opacity: 0.9; }
+        100% { transform: scale(2.4); opacity: 0;   }
+      }
+
+      /* ── Settings body (scrollable region below sticky) ──────────── */
+      .qs-settings-body {
+        padding: 20px 16px 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      /* ── Section card ────────────────────────────────────────────── */
+      .qs-s-section {
+        background: var(--card-glass);
+        border: 1px solid var(--border-glass);
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: var(--shadow-soft);
+      }
+
+      /* Section label — floating above card */
+      .qs-s-section-title {
+        font-size: 10.5px;
+        font-weight: 700;
+        letter-spacing: 0.8px;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        padding: 0 4px 8px;
+      }
+
+      /* ── List row — the core unit ────────────────────────────────── */
+      .qs-s-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 13px 16px;
+        gap: 12px;
+        border-bottom: 1px solid var(--border-subtle);
+        transition: background 0.12s;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .qs-s-row:last-child { border-bottom: none; }
+      .qs-s-row-label {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 2px;
+        line-height: 1.3;
+      }
+      .qs-s-row-sub {
+        font-size: 11.5px;
+        color: var(--text-muted);
+        line-height: 1.4;
+      }
+
+      /* ── Row icon container (left side of action rows) ───────────── */
+      .qs-row-icon {
+        width: 34px; height: 34px;
+        border-radius: 9px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 17px;
+        flex-shrink: 0;
+        background: rgba(255,255,255,0.06);
+      }
+
+      /* ── Right chevron SVG ───────────────────────────────────────── */
+      .qs-row-chevron {
+        color: var(--text-muted);
+        opacity: 0.5;
+        flex-shrink: 0;
+        transition: opacity 0.2s, transform 0.28s cubic-bezier(0.4,0,0.2,1);
+      }
+      .qs-row-chevron svg { display: block; }
+
+      /* ── Action rows (Edit Account, Edit Store, Share) ───────────── */
+      .qs-action-row {
+        display: flex;
+        flex-direction: column;
+      }
+      .qs-action-btn {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 13px 16px;
+        background: transparent;
+        border: none;
+        border-bottom: 1px solid var(--border-subtle);
+        color: var(--text-primary);
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        text-align: left;
+        width: 100%;
+        transition: background 0.12s;
+        -webkit-tap-highlight-color: transparent;
+        position: relative;
+      }
+      .qs-action-btn:last-child { border-bottom: none; }
+      .qs-action-btn:active { background: rgba(255,255,255,0.04); }
+
+      /* Active / expanded state — accent left border */
+      .qs-action-btn[aria-expanded="true"] {
+        background: rgba(99,102,241,0.06);
+        color: var(--accent-primary);
+      }
+      .qs-action-btn[aria-expanded="true"] .qs-row-chevron {
+        opacity: 1;
+        transform: rotate(90deg);
+        color: var(--accent-primary);
+      }
+      .qs-action-btn[aria-expanded="true"] .qs-row-icon {
+        background: rgba(99,102,241,0.15);
+      }
+
+      /* Share button accent variant */
+      .qs-action-btn.qs-action-share-btn .qs-row-icon {
+        background: rgba(99,102,241,0.12);
+        color: var(--accent-primary);
+      }
+      .qs-action-btn.qs-action-share-btn {
+        color: var(--accent-primary);
+      }
+
+      .qs-action-icon { font-size: 18px; line-height: 1; }
+      .qs-action-label { flex: 1; }
+      .qs-action-sub {
+        font-size: 11px;
+        color: var(--text-muted);
+        font-weight: 500;
+        margin-top: 1px;
+      }
+
+      /* ── Drawers — grid-row animation (true height, no max-height hack) */
+      .qs-drawer {
+        display: grid;
+        grid-template-rows: 0fr;
+        transition: grid-template-rows 0.32s cubic-bezier(0.4,0,0.2,1);
+        border-bottom: 1px solid var(--border-subtle);
+      }
+      .qs-drawer.open {
+        grid-template-rows: 1fr;
+      }
+      .qs-drawer-inner {
+        overflow: hidden;
+      }
+      .qs-drawer-content {
+        padding: 16px 16px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      /* ── Form fields inside drawers ──────────────────────────────── */
+      .qs-field-label {
+        font-size: 11.5px;
+        font-weight: 700;
+        letter-spacing: 0.3px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        margin-bottom: 6px;
+      }
+      .qs-field-sub {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+        line-height: 1.5;
+      }
+      .qs-input {
+        width: 100%;
+        box-sizing: border-box;
+        background: var(--bg-glass);
+        border: 1.5px solid var(--border-glass);
+        border-radius: 10px;
+        color: var(--text-primary);
+        font-size: 14px;
+        font-family: inherit;
+        padding: 11px 13px;
+        line-height: 1.4;
+        outline: none;
+        transition: border-color 0.18s, box-shadow 0.18s;
+        -webkit-appearance: none;
+      }
+      .qs-input:focus {
+        border-color: var(--accent-primary);
+        box-shadow: 0 0 0 3px rgba(99,102,241,0.14);
+      }
+      .qs-textarea {
+        resize: none;
+        line-height: 1.6;
+      }
+
+      /* ── Save buttons inside drawers — filled emerald ────────────── */
+      .qs-save-btn {
+        align-self: flex-end;
+        background: rgba(16,185,129,0.12);
+        border: 1px solid rgba(16,185,129,0.3);
+        border-radius: 10px;
+        padding: 9px 18px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #10b981;
+        cursor: pointer;
+        transition: background 0.15s, transform 0.12s, box-shadow 0.15s;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .qs-save-btn:active {
+        background: rgba(16,185,129,0.22);
+        transform: translateY(1px);
+        box-shadow: none;
+      }
+      .qs-save-btn:disabled {
+        opacity: 0.45;
+        pointer-events: none;
+      }
+
+      /* Drawer section divider */
+      .qs-drawer-divider {
+        height: 1px;
+        background: var(--border-subtle);
+        margin: 4px 0;
+      }
+
+      /* ── Ghost button (secondary actions in rows) ─────────────────── */
+      .qs-ghost-btn {
+        background: var(--card-glass);
+        border: 1px solid var(--border-glass);
+        border-radius: 10px;
+        padding: 8px 14px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background 0.15s, transform 0.12s;
+        -webkit-tap-highlight-color: transparent;
+        flex-shrink: 0;
+      }
+      .qs-ghost-btn:active {
+        background: var(--card-glass-hover);
+        transform: translateY(1px);
+      }
+
+      /* ── Danger button (Sign Out) ─────────────────────────────────── */
+      .qs-danger-btn {
+        width: 100%;
+        padding: 14px;
+        background: transparent;
+        border: 1.5px solid rgba(239,68,68,0.25);
+        border-radius: 14px;
+        color: #ef4444;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s, transform 0.12s;
+        -webkit-tap-highlight-color: transparent;
+        letter-spacing: 0.01em;
+      }
+      .qs-danger-btn:active {
+        background: rgba(239,68,68,0.08);
+        border-color: rgba(239,68,68,0.5);
+        transform: scale(0.99);
+      }
+
+      /* ── Theme toggle ─────────────────────────────────────────────── */
+      .qs-theme-toggle-btn {
+        background: var(--card-glass);
+        border: 1px solid var(--border-glass);
+        border-radius: 10px;
+        padding: 8px 14px;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text-primary);
+        cursor: pointer;
+        white-space: nowrap;
+        flex-shrink: 0;
+        transition: background 0.15s, border-color 0.15s, transform 0.12s;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .qs-theme-toggle-btn:active {
+        background: var(--card-glass-hover);
+        transform: translateY(1px);
+      }
+
+      /* ── Category rows ───────────────────────────────────────────── */
+      .qs-cat-row {
+        display: flex; align-items: center;
+        padding: 10px 0;
+        gap: 10px;
+        border-bottom: 1px solid var(--border-subtle);
+        transition: background 0.12s;
+      }
+      .qs-cat-row:last-child { border-bottom: none; }
+      .qs-cat-dot {
+        width: 8px; height: 8px;
+        border-radius: 50%;
+        background: var(--accent-primary);
+        flex-shrink: 0;
+      }
+      .qs-cat-name {
+        flex: 1;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+      .qs-cat-edit-input {
+        flex: 1; font-size: 14px; font-weight: 600;
+        background: var(--bg-glass) !important;
+        border: 1.5px solid var(--accent-primary) !important;
+        border-radius: 8px; padding: 5px 10px;
+        color: var(--text-primary) !important;
+        outline: none; font-family: inherit;
+      }
+      .qs-cat-icon-btn {
+        background: transparent; border: 0;
+        padding: 5px 8px; border-radius: 8px;
+        font-size: 14px; cursor: pointer;
+        color: var(--text-muted);
+        transition: color 0.15s, background 0.15s;
+      }
+      .qs-cat-icon-btn:active { background: var(--card-glass-hover); }
+      .qs-cat-icon-btn.danger:active { color: #ef4444; }
+      .qs-cat-save-btn {
+        background: var(--accent-primary); border: 0;
+        padding: 5px 12px; border-radius: 8px;
+        font-size: 12px; font-weight: 700;
+        color: #fff; cursor: pointer;
+        transition: background 0.15s;
+      }
+      .qs-cat-save-btn:active { background: var(--accent-primary-hover); }
+      .qs-cat-cancel-btn {
+        background: transparent;
+        border: 1px solid var(--border-glass);
+        padding: 5px 10px; border-radius: 8px;
+        font-size: 12px; font-weight: 600;
+        color: var(--text-muted); cursor: pointer;
+      }
+      .qs-add-cat-row {
+        display: flex; gap: 8px; align-items: center;
+        padding-top: 12px;
+        border-top: 1px solid var(--border-subtle);
+        margin-top: 4px;
+      }
+      .qs-add-cat-input {
+        flex: 1; font-size: 13.5px;
+        background: var(--bg-glass) !important;
+        border: 1.5px solid var(--border-glass);
+        border-radius: 10px; padding: 9px 12px;
+        color: var(--text-primary) !important;
+        outline: none; font-family: inherit;
+        transition: border-color 0.18s, box-shadow 0.18s;
+      }
+      .qs-add-cat-input:focus {
+        border-color: var(--accent-primary);
+        box-shadow: 0 0 0 3px rgba(99,102,241,0.14);
+      }
+      .qs-add-cat-btn {
+        background: var(--accent-primary); border: 0;
+        padding: 9px 16px; border-radius: 10px;
+        font-size: 13px; font-weight: 700;
+        color: #fff; cursor: pointer;
+        white-space: nowrap;
+        transition: background 0.15s, transform 0.12s;
+      }
+      .qs-add-cat-btn:active {
+        background: var(--accent-primary-hover);
+        transform: translateY(1px);
+      }
+
+      /* ── Sign out section spacer ─────────────────────────────────── */
+      .qs-signout-wrap {
+        padding: 4px 0 8px;
+      }
     `;
     document.head.appendChild(s);
   })();
@@ -4164,7 +4395,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
 
     settingsPanel.innerHTML = `
 
-      <!-- Sticky profile header -->
+      <!-- ── Sticky profile header ───────────────────────────────── -->
       <div class="qs-sticky-profile" id="qs-sticky-profile">
         <div class="qs-sp-avatar" id="qs-avatar-btn" tabindex="0" role="button"
              aria-label="Change profile photo">
@@ -4188,180 +4419,210 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
         </div>
       </div>
 
-      <!-- Scrollable settings body -->
+      <!-- ── Scrollable settings body ─────────────────────────────── -->
       <div class="qs-settings-body">
 
-      <!-- ── Action row: 3 top-level buttons ───────────────────────── -->
-      <div class="qs-action-row">
-        <button id="qs-btn-edit-account" class="qs-action-btn" aria-expanded="false">
-          <span class="qs-action-icon">✏️</span>
-          <span>Edit Account</span>
-          <span class="qs-action-arrow">›</span>
-        </button>
-        <button id="qs-btn-edit-store" class="qs-action-btn" aria-expanded="false">
-          <span class="qs-action-icon">🏪</span>
-          <span>Edit Store</span>
-          <span class="qs-action-arrow">›</span>
-        </button>
-        <button id="qs-action-share" class="qs-action-btn" type="button"
-          aria-label="Share your catalog to WhatsApp"
-          style="background:rgba(99,102,241,0.15);border-color:rgba(99,102,241,0.4);color:var(--accent-primary);">
-          <span class="qs-action-icon">📤</span>
-          <span>Share Catalog</span>
-        </button>
-      </div>
+        <!-- ── Account & Store actions ────────────────────────────── -->
+        <div>
+          <div class="qs-s-section-title">Account &amp; Store</div>
+          <div class="qs-s-section">
+            <div class="qs-action-row">
 
-      <!-- ── Edit Account drawer (hidden by default) ────────────────── -->
-      <div id="qs-drawer-account" class="qs-drawer" aria-hidden="true">
-        <div class="qs-drawer-inner">
-          <div class="qs-s-section" style="margin:0;border-radius:0;border-top:none;">
-            <div style="display:flex;flex-direction:column;gap:12px;padding:4px 0 8px;">
+              <!-- Edit Account row -->
+              <button id="qs-btn-edit-account" class="qs-action-btn" aria-expanded="false">
+                <div class="qs-row-icon">✏️</div>
+                <div class="qs-action-label">
+                  <div>Edit Account</div>
+                  <div class="qs-action-sub">Name, business name</div>
+                </div>
+                <div class="qs-row-chevron">
+                  <svg width="7" height="12" viewBox="0 0 7 12" fill="none">
+                    <path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.6"
+                          stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </div>
+              </button>
+
+              <!-- Edit Account drawer -->
+              <div id="qs-drawer-account" class="qs-drawer" aria-hidden="true">
+                <div class="qs-drawer-inner">
+                  <div class="qs-drawer-content">
+                    <div>
+                      <div class="qs-field-label">Full Name</div>
+                      <input id="qs-account-name" class="qs-input" type="text" maxlength="80"
+                        placeholder="Your full name"
+                        value="${escapeHtml(fullName)}" />
+                    </div>
+                    <div>
+                      <div class="qs-field-label">Business Name</div>
+                      <div class="qs-field-sub">Shown on your catalog header and share link</div>
+                      <input id="qs-account-business" class="qs-input" type="text" maxlength="80"
+                        placeholder="Your store or business name"
+                        value="${escapeHtml(businessName)}" />
+                    </div>
+                    <button id="qs-account-save" class="qs-save-btn">Save Changes</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Edit Store row -->
+              <button id="qs-btn-edit-store" class="qs-action-btn" aria-expanded="false">
+                <div class="qs-row-icon">🏪</div>
+                <div class="qs-action-label">
+                  <div>Edit Store</div>
+                  <div class="qs-action-sub">Tagline, categories</div>
+                </div>
+                <div class="qs-row-chevron">
+                  <svg width="7" height="12" viewBox="0 0 7 12" fill="none">
+                    <path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.6"
+                          stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </div>
+              </button>
+
+              <!-- Edit Store drawer -->
+              <div id="qs-drawer-store" class="qs-drawer" aria-hidden="true">
+                <div class="qs-drawer-inner">
+                  <div class="qs-drawer-content">
+                    <div>
+                      <div class="qs-field-label">Store Tagline</div>
+                      <div class="qs-field-sub">Shown on your catalog — max 120 characters</div>
+                      <textarea id="qs-tagline-input" class="qs-input qs-textarea"
+                        maxlength="120" rows="2"
+                        placeholder="e.g. Get confidence in a bottle from ALL'S Signature"></textarea>
+                    </div>
+                    <button id="qs-tagline-save" class="qs-save-btn">Save Tagline</button>
+                    <div class="qs-drawer-divider"></div>
+                    <div>
+                      <div class="qs-field-label" style="margin-bottom:10px;">Categories</div>
+                      <div id="qs-cat-list"></div>
+                      <div class="qs-add-cat-row">
+                        <input id="newCategoryName" class="qs-add-cat-input"
+                               type="text" placeholder="New category name…" />
+                        <button id="addCategoryBtn" class="qs-add-cat-btn">+ Add</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Share Catalog row -->
+              <button id="qs-action-share" class="qs-action-btn qs-action-share-btn" type="button"
+                aria-label="Share your catalog to WhatsApp">
+                <div class="qs-row-icon">📤</div>
+                <div class="qs-action-label">
+                  <div>Share Catalog</div>
+                  <div class="qs-action-sub">Send your store link to customers</div>
+                </div>
+                <div class="qs-row-chevron">
+                  <svg width="7" height="12" viewBox="0 0 7 12" fill="none">
+                    <path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.6"
+                          stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </div>
+              </button>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Appearance ──────────────────────────────────────────── -->
+        <div>
+          <div class="qs-s-section-title">Appearance</div>
+          <div class="qs-s-section">
+            <div class="qs-s-row">
               <div>
-                <div class="qs-s-row-label" style="margin-bottom:6px;">Full Name</div>
-                <input id="qs-account-name" type="text" maxlength="80"
-                  placeholder="Your full name"
-                  value="${escapeHtml(fullName)}"
-                  style="width:100%;box-sizing:border-box;
-                         background:var(--card-glass);border:1px solid var(--border-glass);
-                         border-radius:var(--radius-sm);color:var(--text-primary);
-                         font-size:13px;padding:10px 12px;font-family:inherit;
-                         transition:border-color .2s;" />
+                <div class="qs-s-row-label">Theme</div>
+                <div class="qs-s-row-sub qs-theme-sub">Currently ${currentTheme} mode</div>
               </div>
+              <button class="qs-theme-toggle-btn" data-current="${currentTheme}">
+                ${currentTheme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+              </button>
+            </div>
+            <div class="qs-s-row" id="qs-install-row">
               <div>
-                <div class="qs-s-row-label" style="margin-bottom:4px;">Business Name</div>
-                <div class="qs-s-row-sub" style="margin-bottom:6px;">Shown on your catalog header and share link</div>
-                <input id="qs-account-business" type="text" maxlength="80"
-                  placeholder="Your store or business name"
-                  value="${escapeHtml(businessName)}"
-                  style="width:100%;box-sizing:border-box;
-                         background:var(--card-glass);border:1px solid var(--border-glass);
-                         border-radius:var(--radius-sm);color:var(--text-primary);
-                         font-size:13px;padding:10px 12px;font-family:inherit;
-                         transition:border-color .2s;" />
+                <div class="qs-s-row-label">Install App</div>
+                <div class="qs-s-row-sub" id="qs-install-sub">Add QuickShop to your home screen</div>
               </div>
-              <div style="display:flex;justify-content:flex-end;">
-                <button id="qs-account-save" class="qs-ghost-btn"
-                  style="color:#10b981;border-color:rgba(16,185,129,0.3);">Save Changes</button>
-              </div>
+              <button id="qs-install-btn" class="qs-ghost-btn"
+                style="color:var(--accent-primary);border-color:rgba(99,102,241,0.3);">
+                📲 Install
+              </button>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- ── Edit Store drawer (hidden by default) ──────────────────── -->
-      <div id="qs-drawer-store" class="qs-drawer" aria-hidden="true">
-        <div class="qs-drawer-inner">
-          <div class="qs-s-section" style="margin:0;border-radius:0;border-top:none;">
-            <!-- Tagline -->
-            <div style="display:flex;flex-direction:column;gap:6px;padding-bottom:14px;border-bottom:1px solid var(--border-glass);">
-              <div class="qs-s-row-label">Store Tagline</div>
-              <div class="qs-s-row-sub">Shown on your catalog — max 120 characters</div>
-              <textarea id="qs-tagline-input" maxlength="120" rows="2"
-                placeholder="e.g. Get confidence in a bottle from ALL'S Signature"
-                style="width:100%;box-sizing:border-box;resize:none;
-                       background:var(--card-glass);border:1px solid var(--border-glass);
-                       border-radius:var(--radius-sm);color:var(--text-primary);
-                       font-size:13px;line-height:1.55;padding:10px 12px;
-                       font-family:inherit;transition:border-color .2s;"></textarea>
-              <div style="display:flex;justify-content:flex-end;">
-                <button id="qs-tagline-save" class="qs-ghost-btn"
-                  style="color:#10b981;border-color:rgba(16,185,129,0.3);">Save Tagline</button>
+        <!-- ── Store Data ──────────────────────────────────────────── -->
+        <div>
+          <div class="qs-s-section-title">Store Data</div>
+          <div class="qs-s-section">
+            <div class="qs-s-row">
+              <div>
+                <div class="qs-s-row-label">Sync to Cloud</div>
+                <div class="qs-s-row-sub">Push all local products to Supabase now</div>
               </div>
+              <button id="btnSyncNow" class="qs-ghost-btn"
+                style="color:#10b981;border-color:rgba(16,185,129,0.3);">☁️ Sync</button>
             </div>
-            <!-- Categories -->
-            <div style="padding-top:14px;">
-              <div class="qs-s-row-label" style="margin-bottom:10px;">Categories</div>
-              <div id="qs-cat-list"></div>
-              <div class="qs-add-cat-row">
-                <input id="newCategoryName" class="qs-add-cat-input" type="text" placeholder="New category name…" />
-                <button id="addCategoryBtn" class="qs-add-cat-btn">+ Add</button>
+            <div class="qs-s-row">
+              <div>
+                <div class="qs-s-row-label">Demo Products</div>
+                <div class="qs-s-row-sub">Load 4 sample products to explore the app</div>
               </div>
+              <button id="btnLoadDemo" class="qs-ghost-btn">Load Demo</button>
+            </div>
+            <div class="qs-s-row">
+              <div>
+                <div class="qs-s-row-label">Clear All Data</div>
+                <div class="qs-s-row-sub">Permanently delete all products and sales</div>
+              </div>
+              <button id="btnClearStore" class="qs-ghost-btn"
+                style="color:#ef4444;border-color:rgba(239,68,68,0.25);">Clear</button>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- ── Appearance ─────────────────────────────────────────────── -->
-      <div class="qs-s-section">
-        <div class="qs-s-section-title">Appearance</div>
-        <div class="qs-s-row">
-          <div>
-            <div class="qs-s-row-label">Theme</div>
-            <div class="qs-s-row-sub qs-theme-sub">Currently ${currentTheme} mode</div>
-          </div>
-          <button class="qs-theme-toggle-btn" data-current="${currentTheme}">
-            ${currentTheme === 'dark' ? '☀️  Light Mode' : '🌙  Dark Mode'}
-          </button>
+        <!-- ── Activity Log ────────────────────────────────────────── -->
+        <div class="qs-s-section">
+          <div id="activityLogArea"></div>
         </div>
-        <div class="qs-s-row" id="qs-install-row">
-          <div>
-            <div class="qs-s-row-label">Install App</div>
-            <div class="qs-s-row-sub" id="qs-install-sub">Add QuickShop to your home screen</div>
-          </div>
-          <button id="qs-install-btn" class="qs-ghost-btn" style="color:var(--accent-primary);border-color:rgba(99,102,241,0.3);">📲 Install</button>
-        </div>
-      </div>
 
-      <!-- ── Store Data ─────────────────────────────────────────────── -->
-      <div class="qs-s-section">
-        <div class="qs-s-section-title">Store Data</div>
-        <div class="qs-s-row">
-          <div>
-            <div class="qs-s-row-label">Sync to Cloud</div>
-            <div class="qs-s-row-sub">Push all local products to Supabase now</div>
+        <!-- ── Referral Programme ──────────────────────────────────── -->
+        <div>
+          <div class="qs-s-section-title">Referral Programme</div>
+          <div class="qs-s-section" id="qs-referral-section">
+            <div id="qs-referral-body" style="padding:16px;">
+              <div style="color:var(--text-muted);font-size:13px;">Loading…</div>
+            </div>
           </div>
-          <button id="btnSyncNow" class="qs-ghost-btn" style="color:#10b981;border-color:rgba(16,185,129,0.3);">☁️ Sync Now</button>
         </div>
-        <div class="qs-s-row">
-          <div>
-            <div class="qs-s-row-label">Demo Products</div>
-            <div class="qs-s-row-sub">Load 4 sample products to explore the app</div>
+
+        <!-- ── About ──────────────────────────────────────────────── -->
+        <div>
+          <div class="qs-s-section-title">More</div>
+          <div class="qs-s-section">
+            <button id="qs-about-btn" class="qs-action-btn"
+              style="border-bottom:none;"
+              aria-label="About QuickShop">
+              <div class="qs-row-icon">⚡</div>
+              <div class="qs-action-label">
+                <div>About QuickShop</div>
+                <div class="qs-action-sub">Version 2.5 · Built for traders</div>
+              </div>
+              <div class="qs-row-chevron">
+                <svg width="7" height="12" viewBox="0 0 7 12" fill="none">
+                  <path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.6"
+                        stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+            </button>
           </div>
-          <button id="btnLoadDemo" class="qs-ghost-btn">Load Demo</button>
         </div>
-        <div class="qs-s-row">
-          <div>
-            <div class="qs-s-row-label">Clear All Data</div>
-            <div class="qs-s-row-sub">Permanently delete all products and sales</div>
-          </div>
-          <button id="btnClearStore" class="qs-ghost-btn" style="color:#ef4444;border-color:rgba(239,68,68,0.25);">Clear</button>
+
+        <!-- ── Sign Out ────────────────────────────────────────────── -->
+        <div class="qs-signout-wrap">
+          <button id="btnLogout" class="qs-danger-btn">Sign Out</button>
         </div>
-      </div>
-
-      <!-- ── Activity Log (always visible) ─────────────────────────── -->
-      <div class="qs-s-section">
-        <div id="activityLogArea"></div>
-      </div>
-
-      <!-- ── Referral Programme ─────────────────────────────────────── -->
-      <div class="qs-s-section" id="qs-referral-section">
-        <div class="qs-s-section-title">Referral Programme</div>
-        <div id="qs-referral-body" style="padding:4px 0 8px;">
-          <div style="color:var(--text-muted);font-size:13px;padding:8px 0;">Loading…</div>
-        </div>
-      </div>
-
-      <!-- ── About (tappable → full overlay) ───────────────────────── -->
-      <div class="qs-s-section">
-        <button id="qs-about-btn" class="qs-s-row"
-          style="width:100%;background:none;border:none;cursor:pointer;text-align:left;
-                 -webkit-tap-highlight-color:transparent;"
-          aria-label="About QuickShop">
-          <div>
-            <div class="qs-s-row-label">About QuickShop</div>
-            <div class="qs-s-row-sub">Version 2.5 · Built for traders</div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span style="font-size:18px;">⚡</span>
-            <span style="font-size:16px;color:var(--text-muted);opacity:0.6;">›</span>
-          </div>
-        </button>
-      </div>
-
-      <!-- ── Sign out ───────────────────────────────────────────────── -->
-      <div style="padding:4px 0 20px;">
-        <button id="btnLogout" class="qs-danger-btn">Sign Out</button>
-      </div>
 
       </div><!-- /.qs-settings-body -->
 
@@ -4991,7 +5252,21 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
   function initAppUI() {
     try {
       renderChips(); renderProducts(); renderInventory(); renderDashboard(); renderNotes();
-      if (!document.querySelector('.panel.active')) setActiveView('home', false);
+      if (!document.querySelector('.panel.active')) {
+        // Restore the last active view from sessionStorage so a refresh
+        // lands the vendor on the same panel they were on.
+        // Fall back to 'home' if nothing is stored or the stored value is invalid.
+        const _TAB_VALID = ['home', 'inventory', 'reports', 'notes', 'settings'];
+        let restoredView = 'home';
+        try {
+          const saved = sessionStorage.getItem('qs_active_view');
+          if (saved && _TAB_VALID.includes(saved)) restoredView = saved;
+        } catch(_) {}
+        setActiveView(restoredView, false);
+        // Seed the history stack with the restored view so the back button
+        // has at least one entry to pop before trying to exit.
+        try { history.replaceState({ qsView: restoredView }, ''); } catch(_) {}
+      }
       showLoading(false);
       const modalBackdrop = $('modalBackdrop');
       if (modalBackdrop) modalBackdrop.style.display = 'none';
@@ -5035,6 +5310,83 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
   document.addEventListener('touchmove', handleTouchMove, { passive: true });
   document.addEventListener('touchend', handleTouchEnd, { passive: true });
 
+  // ── Visibility change: suppress full reload UX on short background trips ──
+  // When the vendor minimises the app to check WhatsApp and returns, the
+  // browser fires visibilitychange. If the last sync was recent (< 5 min)
+  // we skip re-syncing — data is fresh and the loading spinner is unnecessary.
+  // If the tab was discarded and reloaded (cold resume), _lastSyncAt is 0
+  // so the threshold is not met and a normal sync runs.
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState !== 'visible') return;
+    const SYNC_THROTTLE_MS = 5 * 60 * 1000; // 5 minutes
+    if (Date.now() - _lastSyncAt < SYNC_THROTTLE_MS) return; // recent sync — skip
+    const user = currentUser;
+    if (user && navigator.onLine) {
+      syncCloudData(user).catch(function(e) { errlog('visibilitychange sync failed', e); });
+    }
+  });
+
+  // ── Back button / system back gesture interception ─────────────────────────
+  // Without this, pressing the Android back button or swiping back exits the
+  // app immediately because the history stack is empty.
+  //
+  // Strategy:
+  //   • setActiveView() pushes a history entry on every panel navigation so
+  //     there is always something to pop before the browser exits.
+  //   • When the stack is exhausted (state is null or qsView is 'home' and
+  //     we are already on Home), we show a "press back again to exit" toast.
+  //     A second back press within 2 seconds exits naturally.
+  //   • When a modal or the add-form is open, back closes it instead.
+  let _backPressedOnce = false;
+  let _backPressTimer  = null;
+
+  window.addEventListener('popstate', function (e) {
+    // If a modal is open, close it and re-push the entry so the stack stays intact.
+    const modalOpen = document.querySelector('.modal-backdrop[style*="flex"]') ||
+                      document.querySelector('#modalBackdrop[style*="flex"]') ||
+                      document.querySelector('#confirmModalBackdrop[style*="flex"]');
+    if (modalOpen) {
+      hideModal();
+      try { history.pushState({ qsView: _prevViewName || 'home' }, ''); } catch(_) {}
+      return;
+    }
+
+    const addFormOpen = document.getElementById('addProductForm') &&
+                        document.getElementById('addProductForm').style.display !== 'none';
+    if (addFormOpen) {
+      hideAddForm();
+      try { history.pushState({ qsView: _prevViewName || 'home' }, ''); } catch(_) {}
+      return;
+    }
+
+    // Navigate within the app if the popped state belongs to us.
+    const targetView = e.state && e.state.qsView;
+    if (targetView && targetView !== 'home' && _TAB_ORDER.includes(targetView)) {
+      // We have a previous app view to return to — go there.
+      setActiveView(targetView, false);
+      return;
+    }
+
+    // Stack exhausted or already on Home — warn before exit.
+    const onHome = !_prevViewName || _prevViewName === 'home';
+    if (onHome) {
+      if (_backPressedOnce) {
+        // Second back — allow the browser to exit naturally.
+        clearTimeout(_backPressTimer);
+        return;
+      }
+      _backPressedOnce = true;
+      toast('Press back again to exit', 'info', 2000);
+      // Re-push so the browser has an entry for the second back press.
+      try { history.pushState({ qsView: 'home' }, ''); } catch(_) {}
+      _backPressTimer = setTimeout(function () { _backPressedOnce = false; }, 2000);
+    } else {
+      // Not on Home — navigate to Home instead of exiting.
+      setActiveView('home', false);
+      try { history.pushState({ qsView: 'home' }, ''); } catch(_) {}
+    }
+  });
+
   initAuth();
 
   window.addEventListener('unhandledrejection', function (ev) {
@@ -5060,7 +5412,14 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     saveState,
     // Returns a frozen shallow copy — callers can read but cannot mutate arrays
     // or replace top-level properties. Use the explicit mutation methods below.
-    getState: () => Object.freeze(Object.assign({}, state)),
+    getState: () => Object.freeze({
+      products:   Object.freeze(state.products.map(p => Object.freeze(Object.assign({}, p)))),
+      sales:      Object.freeze(state.sales.map(s => Object.freeze(Object.assign({}, s)))),
+      notes:      Object.freeze(state.notes.map(n => Object.freeze(Object.assign({}, n)))),
+      categories: Object.freeze(state.categories.slice()),
+      logs:       Object.freeze(state.logs.map(l => Object.freeze(Object.assign({}, l)))),
+      changes:    Object.freeze(state.changes.slice()),
+    }),
 
     // ── State mutation methods ──────────────────────────────────────────────
     // inventory.js must use these instead of mutating the getState() result.
