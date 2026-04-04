@@ -44,6 +44,11 @@
   /* ── Animation easing tokens ── */
   --ease-spring:   cubic-bezier(0.34,1.56,0.64,1);
   --ease-expo-out: cubic-bezier(0.16,1,0.3,1);
+  /* ── Settings section tokens (dark) ── */
+  --settings-section-bg:     #1c1c22;
+  --settings-section-border: rgba(255,255,255,0.08);
+  --settings-row-icon-bg:    rgba(255,255,255,0.06);
+  --settings-row-active-bg:  rgba(255,255,255,0.04);
 }
 
 /* ── LIGHT TOKENS ─────────────────────────────────────────────────── */
@@ -77,6 +82,11 @@
   --shadow-indigo:  0 4px 14px rgba(99,102,241,0.28);
   /* Select arrow — dark on light */
   --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' fill='rgba%289%2C9%2C11%2C0.5%29' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
+  /* ── Settings section tokens (light) ── */
+  --settings-section-bg:     #ffffff;
+  --settings-section-border: rgba(0,0,0,0.09);
+  --settings-row-icon-bg:    rgba(0,0,0,0.05);
+  --settings-row-active-bg:  rgba(0,0,0,0.03);
 }
 
 /* ── RESET ────────────────────────────────────────────────────────── */
@@ -98,9 +108,9 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
 button:disabled, input:disabled, select:disabled, textarea:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ── AUTH SCREEN ──────────────────────────────────────────────────── */
-/* ══════════════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════════════════════
    AUTH SCREEN — SaaS-grade, form-first, mobile & desktop
-══════════════════════════════════════════════════════════════ */
+══════════════════════════════════════════════════════════════════════ */
 #loginScreen {
   min-height: 100dvh;
   background: #07070d;
@@ -642,29 +652,80 @@ body.keyboard-open .modal { top: 8vh !important; }
 #barcodeValue { font-size: 16px; font-weight: 700; color: var(--text-primary); }
 
 /* ── PANELS — consistent spacing ─────────────────────────────────── */
-.panel { display: none; min-height: calc(100vh - var(--topbar-h) - var(--nav-h)); overflow-anchor: none; padding-top: 16px; }
-.panel.active { display: block; animation: panelEnter 0.26s cubic-bezier(0.16,1,0.3,1) both; will-change: transform, opacity; }
-.panel.active.from-right { animation: panelEnterRight 0.24s cubic-bezier(0.16,1,0.3,1) both; will-change: transform, opacity; }
-.panel.active.from-left  { animation: panelEnterLeft  0.24s cubic-bezier(0.16,1,0.3,1) both; will-change: transform, opacity; }
+/*
+ * CONTAINING-BLOCK BUG FIX:
+ * Both `contain: layout` and `will-change: transform/opacity` create a new
+ * containing block for `position: fixed` descendants (CSS Containment L1 spec,
+ * will-change spec). Previously these were on the base `.panel` rule, which
+ * meant .qs-composer-wrap { position: fixed } inside #notesPanel was NOT
+ * fixed to the viewport — it was fixed to the panel element. Every `bottom`
+ * calculation referenced the panel's own layout box, not the screen.
+ * That is why no amount of bottom-value tweaking closed the gap.
+ *
+ * Fix: move contain + will-change EXCLUSIVELY to the enter animation classes.
+ * The GPU layer is still pre-promoted in Frame 1 (when the enter class is
+ * stamped while the panel is display:none), before .active fires in Frame 2.
+ * So the flash-prevention behaviour is fully preserved. After the animation
+ * ends (320ms) the enter class is stripped, contain/will-change are gone,
+ * and any position:fixed children inside the panel correctly reference the
+ * viewport again for the rest of the panel's lifetime.
+ *
+ * FLICKER FIX — animation is intentionally absent from .panel.active:
+ * Previously panelEnter was on .panel.active directly. Removing a direction
+ * class (from-right/from-left) via setTimeout caused the engine to re-match
+ * .panel.active, firing a brand-new animation on an already-painted element.
+ * Animation is now gated behind an additional class so removal is harmless.
+ *
+ *   .panel-enter  → default panelEnter  (first load / non-tab navigations)
+ *   .from-right   → panelEnterRight     (navigating to a higher tab index)
+ *   .from-left    → panelEnterLeft      (navigating to a lower tab index)
+ */
+.panel {
+  display: none;
+  min-height: calc(100vh - var(--topbar-h) - var(--nav-h));
+  overflow-anchor: none;
+  padding-top: 16px;
+  /* NO contain or will-change here — both trap position:fixed children */
+}
+.panel.active {
+  display: block;
+  /* NO animation here — see FLICKER FIX comment above */
+}
+/* Default enter: GPU promotion + containment only during the animation window */
+.panel.active.panel-enter {
+  animation: panelEnter 0.26s cubic-bezier(0.16,1,0.3,1) both;
+  will-change: transform, opacity;
+  contain: layout style;
+}
+/* Directional enters: same — JS stamps in Frame 1, .active in Frame 2 */
+.panel.active.from-right {
+  animation: panelEnterRight 0.24s cubic-bezier(0.16,1,0.3,1) both;
+  will-change: transform, opacity;
+  contain: layout style;
+}
+.panel.active.from-left {
+  animation: panelEnterLeft 0.24s cubic-bezier(0.16,1,0.3,1) both;
+  will-change: transform, opacity;
+  contain: layout style;
+}
+
+/*
+ * After animation completes JS removes the enter class (via setTimeout 320ms).
+ * Since .panel.active alone has neither animation nor contain/will-change,
+ * that removal: (a) cannot retrigger an animation, (b) dissolves the fixed
+ * containing block so the composer snaps back to viewport coordinates. ✓
+ */
+
 /* Panels with sticky-header-wrapper should NOT have extra top padding — the header creates it */
 #inventoryPanel { padding-top: 0; }
 #settingsPanel { padding-bottom: calc(var(--nav-h) + 40px + env(safe-area-inset-bottom)) !important; padding-top: 0; }
 /* overflow-y:auto intentionally removed — it breaks position:sticky.
    The page scrolls (same as all other panels). Sticky profile bar sticks
    to top:var(--topbar-h) relative to the page scroll container. */
-#notesPanel #notesList { padding-bottom: calc(var(--nav-h) + 40px + env(safe-area-inset-bottom)); }
+#notesPanel { padding-top: 0; padding-bottom: 0; }
 /* Home panel: chips need top breathing room */
 #homePanel { padding-top: 14px; }
 #homePanel .chips { margin-top: 2px; margin-bottom: 14px; }
-
-/*
- * Directional panel overrides consolidated into .panel.active rules above.
- * from-right: navigating to a higher-indexed tab → new panel arrives from right.
- * from-left:  navigating to a lower-indexed tab  → new panel arrives from left.
- * will-change: transform, opacity pre-promotes the compositor layer so the
- * browser never paints a display:block frame before opacity:0 is applied —
- * this eliminates the white flash between panels.
- */
 
 /* ── REPORTS ─────────────────────────────────────────────────────── */
 #reportChartCard { margin-top: 10px; background: var(--card-glass); padding: 10px; border-radius: var(--radius); box-shadow: var(--shadow-glass); border: 1px solid var(--border-glass); }
@@ -764,14 +825,255 @@ table td { padding: 7px 8px; border-bottom: 1px solid var(--border-subtle); colo
 table tr:last-child td { border-bottom: none; }
 
 /* ── NOTES ───────────────────────────────────────────────────────── */
-.notes-panel { display: flex; flex-direction: column; gap: 10px; }
-.note-form { background: var(--card-glass); padding: 12px; border-radius: var(--radius); border: 1px solid var(--border-glass); box-shadow: var(--shadow-soft); display: flex; flex-direction: column; gap: 8px; }
-.note-form input[type="text"], .note-form textarea { width: 100%; padding: 9px 11px; border-radius: var(--radius-sm); border: 1.5px solid var(--border-glass); font-size: 14px; font-family: inherit; transition: var(--transition); outline: none; background: var(--bg-obsidian) !important; color: var(--text-primary) !important; }
-.note-form input:focus, .note-form textarea:focus { border-color: var(--accent-primary); box-shadow: 0 0 0 3px rgba(99,102,241,0.14); }
-.note-form textarea { min-height: 80px; resize: vertical; line-height: 1.55; }
-.note-item { background: var(--card-glass); padding: 12px; border-radius: var(--radius); border: 1px solid var(--border-glass); box-shadow: var(--shadow-soft); transition: var(--transition); }
-.note-item:hover { transform: translateY(-1px); box-shadow: var(--shadow-glass); background: var(--card-glass-hover); }
-.note-meta { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+/* ═══════════════════════════════════════════════════════════════
+   NOTES PANEL
+   Structure:
+     #notesPanel               — panel shell (no extra padding)
+     .qs-notes-list            — scrollable card list, pb clears composer
+     .note-item                — individual note card
+     .qs-composer-wrap         — sticky composer, sits above nav
+     .qs-composer-trigger      — collapsed state: single tap-to-open row
+     .qs-composer-form         — expanded state: full form, grid-row anim
+     .note-form                — inner form (IDs unchanged, handlers untouched)
+═══════════════════════════════════════════════════════════════ */
+
+/* List area — padding-bottom clears the composer bar + nav */
+.qs-notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 0 calc(var(--nav-h) + 120px + env(safe-area-inset-bottom, 0px));
+  min-height: calc(100vh - var(--topbar-h) - var(--nav-h));
+}
+
+/* Empty state helper — renderNotes() sets className="small" */
+.qs-notes-list .small {
+  text-align: center;
+  padding: 60px 24px 24px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+/* ── Note card ───────────────────────────────────────────────── */
+.note-item {
+  background: var(--card-glass);
+  padding: 14px 14px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-glass);
+  box-shadow: var(--shadow-soft);
+  transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
+  cursor: default;
+}
+.note-item:active { background: var(--card-glass-hover); }
+
+/* Title inside note card */
+.note-item-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  margin-bottom: 5px;
+  line-height: 1.3;
+}
+
+/* Content preview — clamped to 4 lines */
+.note-item-content {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Card footer row: timestamp + actions */
+.note-item-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+.note-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1;
+}
+.note-item-actions {
+  display: flex;
+  gap: 4px;
+}
+
+/* Icon-only edit / delete buttons */
+.note-icon-btn {
+  background: transparent;
+  border: none;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  transition: background 0.14s, color 0.14s;
+  -webkit-tap-highlight-color: transparent;
+}
+.note-icon-btn:active { background: var(--card-glass-hover); }
+.note-icon-btn.edit:active  { color: var(--accent-cyan); }
+.note-icon-btn.delete:active { color: var(--danger); }
+
+/* Editing highlight — applied by JS when a note is being edited */
+.note-item.is-editing {
+  border-color: rgba(99,102,241,0.45);
+  background: rgba(99,102,241,0.04);
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.08);
+}
+
+/* ── Floating composer ───────────────────────────────────────── */
+/*
+ * POSITIONING — now correct because contain/will-change are off .panel base:
+ * bottom: calc(var(--nav-h) + safe-area) places the wrap's bottom edge
+ * exactly at the nav bar's top edge (--nav-h is the total reserved space
+ * from the viewport bottom for the nav area). padding: 0 12px — no vertical
+ * padding — so the trigger's bottom = the wrap's bottom = the nav's top.
+ * Result: composer sits flush on the nav bar with zero gap.
+ *
+ * STOOL DESIGN:
+ * The wrap IS the stool. Brown background, rounded top corners, flat bottom
+ * (meets the nav cleanly). The trigger inside is transparent — the brown
+ * wrap shows through as the intentional surface. Shadow goes upward (↑)
+ * since the element is anchored to the bottom.
+ */
+.qs-composer-wrap {
+  position: fixed;
+  left: 0; right: 0;
+  bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
+  z-index: 200;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 0 12px;
+  pointer-events: none; /* children re-enable */
+  /* The stool */
+  background: #8B5835;
+  border-radius: 14px 14px 0 0;
+  box-shadow:
+    0 -4px 24px rgba(139,88,53,0.30),
+    inset 0 1px 0 rgba(255,255,255,0.12);
+}
+
+/* Trigger — transparent so the brown stool shows through */
+.qs-composer-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 13px 4px;
+  cursor: pointer;
+  pointer-events: all;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.14s;
+  width: 100%;
+}
+.qs-composer-trigger:active { opacity: 0.72; }
+
+/* Hidden when form is open */
+.qs-composer-wrap.is-open .qs-composer-trigger { display: none; }
+
+.qs-composer-trigger-icon { font-size: 17px; line-height: 1; flex-shrink: 0; }
+.qs-composer-trigger-text {
+  font-size: 14px;
+  color: rgba(255,255,255,0.72);
+  font-weight: 500;
+  flex: 1;
+}
+
+/* Expanded form — grid-row animation */
+.qs-composer-form {
+  display: grid;
+  grid-template-rows: 0fr;
+  overflow: hidden;
+  transition: grid-template-rows 0.28s cubic-bezier(0.4,0,0.2,1);
+  pointer-events: none;
+}
+.qs-composer-wrap.is-open .qs-composer-form {
+  grid-template-rows: 1fr;
+  pointer-events: all;
+}
+.qs-composer-form > .note-form {
+  /* min-height:0 required for grid-template-rows:0fr to collapse */
+  min-height: 0;
+  overflow: hidden;
+  /* NO box-shadow here — box-shadow is NOT clipped by parent overflow:hidden
+     and bleeds through the 0fr collapse as a visible phantom oval.
+     Shadow is added only in the open state below. */
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+/* Only show shadow when the form is actually visible */
+.qs-composer-wrap.is-open .qs-composer-form > .note-form {
+  box-shadow: var(--shadow-glass-lg);
+}
+
+/* ── note-form (shared by composer; IDs/handlers untouched) ─── */
+.note-form {
+  background: var(--card-glass);
+  padding: 14px 14px 10px;
+  border-radius: 16px;
+  border: 1px solid var(--border-glass);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.note-form input[type="text"],
+.note-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border-glass);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  background: var(--bg-obsidian) !important;
+  color: var(--text-primary) !important;
+  transition: border-color 0.18s, box-shadow 0.18s;
+}
+.note-form input:focus,
+.note-form textarea:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.14);
+}
+.note-form textarea {
+  min-height: 90px;
+  resize: none;
+  line-height: 1.6;
+}
+
+/* Textarea + char count wrapper */
+.qs-textarea-wrap { position: relative; }
+.qs-char-count {
+  position: absolute;
+  bottom: 8px; right: 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  pointer-events: none;
+  transition: color 0.2s;
+  line-height: 1;
+}
+.qs-char-count.warn   { color: var(--warn); }
+.qs-char-count.danger { color: var(--danger); }
+
+/* Composer action row */
+.qs-composer-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
 
 /* ── BOTTOM NAV ──────────────────────────────────────────────────── */
 .bottom-nav {
@@ -884,6 +1186,35 @@ body.keyboard-open .bottom-nav { transform: translateY(calc(110% + env(safe-area
 #activityLogArea > div[style*="font-weight:600"], #activityLogArea > div[style*="font-weight:700"] { color: var(--text-primary); background: transparent; }
 #categoryEditorArea { color: var(--text-primary); }
 #categoryEditorArea input { background: var(--bg-glass) !important; color: var(--text-primary) !important; border-color: var(--border-glass); }
+
+/*
+ * FIX: Light mode settings sections (Referral, About, and all .qs-s-section cards)
+ * go blank because --card-glass resolves to #ffffff in light mode, which is
+ * identical to the page background. Override with a visible background +
+ * explicit shadow so every section card renders in both themes.
+ * The injected <style id="qs-settings-styles"> in app.js uses
+ * --settings-section-bg / --settings-row-icon-bg / --settings-row-active-bg
+ * which are now defined as theme-aware tokens above (dark + light blocks).
+ */
+[data-theme="light"] .qs-s-section {
+  background: var(--settings-section-bg) !important;
+  border: 1px solid var(--settings-section-border) !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.07), 0 0 0 1px rgba(0,0,0,0.05) !important;
+}
+[data-theme="light"] .qs-row-icon {
+  background: var(--settings-row-icon-bg) !important;
+}
+[data-theme="light"] .qs-action-btn:active {
+  background: var(--settings-row-active-bg) !important;
+}
+[data-theme="light"] .qs-s-section-title {
+  color: var(--text-muted);
+}
+[data-theme="light"] #qs-referral-section,
+[data-theme="light"] #qs-referral-body {
+  background: var(--settings-section-bg);
+  color: var(--text-primary);
+}
 
 /* ── AUDIT LOG ───────────────────────────────────────────────────── */
 .full-screen-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg-glass); z-index: 999999; display: flex; flex-direction: column; animation: slideUp 0.3s cubic-bezier(0.16,1,0.3,1); }

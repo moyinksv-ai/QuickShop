@@ -2036,44 +2036,59 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     if (!notes.length) {
       const no = document.createElement('div');
       no.className = 'small';
-      no.textContent = 'No notes yet — add one above.';
+      // Empty state — points to the composer below, not "above"
+      no.innerHTML = '<div style="font-size:36px;margin-bottom:12px;">📓</div>' +
+        '<div style="font-weight:700;font-size:14px;color:var(--text-primary);margin-bottom:6px;">No notes yet</div>' +
+        '<div>Tap the compose bar below to write your first note.</div>';
       notesListEl.appendChild(no);
       return;
     }
     for (const note of notes) {
       const item = document.createElement('div');
-      item.className = 'note-item';
+      // Preserve is-editing highlight if this note is currently being edited
+      item.className = 'note-item' + (editingNoteId === note.id ? ' is-editing' : '');
+      item.dataset.noteId = note.id;
+
       if (note.title) {
         const t = document.createElement('div');
-        t.style.fontWeight = '700';
+        t.className = 'note-item-title';
         t.textContent = note.title;
         item.appendChild(t);
       }
+
       const c = document.createElement('div');
-      c.style.marginTop = '6px';
-      c.style.whiteSpace = 'pre-wrap';
+      c.className = 'note-item-content';
       c.textContent = note.content;
       item.appendChild(c);
+
+      // Footer: timestamp left, icon buttons right
+      const footer = document.createElement('div');
+      footer.className = 'note-item-footer';
+
       const meta = document.createElement('div');
       meta.className = 'note-meta';
       meta.textContent = formatDateTime(note.ts);
-      item.appendChild(meta);
-      const actions = document.createElement('div');
-      actions.style.display = 'flex';
-      actions.style.gap = '8px';
-      actions.style.justifyContent = 'flex-end';
-      actions.style.marginTop = '8px';
+      footer.appendChild(meta);
+
+      const acts = document.createElement('div');
+      acts.className = 'note-item-actions';
+
       const edit = document.createElement('button');
-      edit.className = 'btn-edit';
-      edit.textContent = 'Edit';
+      edit.className = 'note-icon-btn edit';
+      edit.setAttribute('aria-label', 'Edit note');
       edit.dataset.editNote = note.id;
+      edit.textContent = '✏️';
+
       const del = document.createElement('button');
-      del.className = 'btn-delete';
-      del.textContent = 'Delete';
+      del.className = 'note-icon-btn delete';
+      del.setAttribute('aria-label', 'Delete note');
       del.dataset.deleteNote = note.id;
-      actions.appendChild(edit);
-      actions.appendChild(del);
-      item.appendChild(actions);
+      del.textContent = '🗑️';
+
+      acts.appendChild(edit);
+      acts.appendChild(del);
+      footer.appendChild(acts);
+      item.appendChild(footer);
       notesListEl.appendChild(item);
     }
     } catch(e) { errlog('renderNotes', e); const el=$('notesList'); if(el){el.innerHTML='';const d=document.createElement('div');d.className='small';d.style.padding='14px';d.textContent='Display error — pull to refresh.';el.appendChild(d);} }
@@ -2102,15 +2117,8 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
           if (noteContent) noteContent.value = note.content || '';
           editingNoteId = note.id;
           if (noteSaveBtn) noteSaveBtn.textContent = 'Update Note';
-          // Scroll the input into view so the user sees the form is ready
-          const noteForm = noteTitle ? noteTitle.closest('.note-form') : null;
-          const scrollTarget = noteForm || noteTitle;
-          if (scrollTarget) {
-            setTimeout(() => {
-              scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              if (noteContent) noteContent.focus();
-            }, 50);
-          }
+          // Composer is fixed at the bottom — no scroll needed.
+          // Focus is handled by _openComposer() in the UI listener below.
           return;
         }
         const delBtn = e.target.closest('[data-delete-note]');
@@ -2209,6 +2217,108 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
         if (noteTitle) noteTitle.value = '';
         if (noteContent) noteContent.value = '';
         if (noteSaveBtn) noteSaveBtn.textContent = 'Save Note';
+        // Collapse composer back to trigger bar and clear edit highlight
+        _collapseComposer();
+        _clearEditHighlight();
+      });
+    }
+
+    // ── Composer expand / collapse ─────────────────────────────────────
+    // The trigger bar expands into the full form. Cancel collapses it back.
+    // These are purely UI — no data-path logic touched.
+    var _composerOpen = false;
+
+    function _openComposer() {
+      var wrap    = document.getElementById('qs-composer-wrap');
+      var trigger = document.getElementById('qs-composer-trigger');
+      var form    = document.getElementById('qs-composer-form');
+      if (!wrap) return;
+      _composerOpen = true;
+      wrap.classList.add('is-open');
+      if (trigger) trigger.setAttribute('aria-expanded', 'true');
+      if (form)    form.setAttribute('aria-hidden', 'false');
+      // Focus the textarea after the grid-row animation (280 ms)
+      setTimeout(function () {
+        var ta = $('noteContentInput');
+        if (ta) ta.focus();
+      }, 290);
+    }
+
+    function _collapseComposer() {
+      var wrap    = document.getElementById('qs-composer-wrap');
+      var trigger = document.getElementById('qs-composer-trigger');
+      var form    = document.getElementById('qs-composer-form');
+      if (!wrap) return;
+      _composerOpen = false;
+      wrap.classList.remove('is-open');
+      if (trigger) trigger.setAttribute('aria-expanded', 'false');
+      if (form)    form.setAttribute('aria-hidden', 'true');
+      // Reset char counter
+      var counter = $('qs-char-count');
+      if (counter) { counter.textContent = '0 / 500'; counter.className = 'qs-char-count'; }
+    }
+
+    // ── Edit highlight helpers ─────────────────────────────────────────
+    function _clearEditHighlight() {
+      document.querySelectorAll('.note-item.is-editing').forEach(function (el) {
+        el.classList.remove('is-editing');
+      });
+    }
+
+    // Wire trigger bar
+    var composerTrigger = document.getElementById('qs-composer-trigger');
+    if (composerTrigger) {
+      composerTrigger.addEventListener('click', _openComposer);
+      composerTrigger.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); _openComposer(); }
+      });
+    }
+
+    // After save, collapse composer and clear highlight — hook into the
+    // existing noteSaveBtn without replacing its listener (which is already
+    // added above). We use a second listener that fires after the first.
+    var _noteSaveBtnForComposer = $('noteSaveBtn');
+    if (_noteSaveBtnForComposer) {
+      _noteSaveBtnForComposer.addEventListener('click', function () {
+        // Only act after save completes (the existing listener runs first).
+        // A short delay lets the save listener finish before we collapse.
+        setTimeout(function () {
+          if (!editingNoteId) {   // save cleared editingNoteId → success
+            _collapseComposer();
+            _clearEditHighlight();
+          }
+        }, 80);
+      });
+    }
+
+    // When edit is triggered from a note card, open the composer
+    // and highlight the source card. We listen at the list level (already
+    // done above for data logic) — add a second delegated listener here
+    // for UI only.
+    var _notesListForComposer = $('notesList');
+    if (_notesListForComposer) {
+      _notesListForComposer.addEventListener('click', function (e) {
+        var editBtn = e.target.closest('[data-edit-note]');
+        if (editBtn) {
+          var id = editBtn.dataset.editNote;
+          _clearEditHighlight();
+          var card = _notesListForComposer.querySelector('[data-note-id="' + id + '"]');
+          if (card) card.classList.add('is-editing');
+          _openComposer();
+        }
+      });
+    }
+
+    // ── Live character counter ─────────────────────────────────────────
+    var _noteContentForCounter = $('noteContentInput');
+    if (_noteContentForCounter) {
+      _noteContentForCounter.addEventListener('input', function () {
+        var len     = this.value.length;
+        var counter = $('qs-char-count');
+        if (!counter) return;
+        counter.textContent = len + ' / 500';
+        counter.className   = 'qs-char-count' +
+          (len >= 480 ? ' danger' : len >= 400 ? ' warn' : '');
       });
     }
   }
@@ -2517,16 +2627,49 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       b.classList.toggle('active', isActive);
       b.setAttribute('aria-pressed', isActive ? 'true':'false');
     });
+    // ── Deactivate all panels ─────────────────────────────────────────
+    // Strip active + direction classes from every panel in one pass.
+    // The incoming panel is intentionally excluded here — it stays
+    // display:none until we're ready to animate it in below.
     document.querySelectorAll('.panel').forEach(p => {
-      p.classList.remove('active', 'from-right', 'from-left');
+      p.classList.remove('active', 'panel-enter', 'from-right', 'from-left');
     });
+
     const panel = $(view + 'Panel');
+
+    // ── Two-frame activation sequence ─────────────────────────────────
+    // The browser batches classList mutations into one style recalc when
+    // they happen synchronously. Splitting across two rAF calls forces the
+    // engine to commit each class before computing the next one, so the
+    // animation keyframe is in place before display:block fires.
+    //
+    //   Frame 1 — stamp the enter class (dir OR panel-enter) while the
+    //             panel is still display:none. Zero paint cost.
+    //   Frame 2 — add .active → display:block fires together with the
+    //             already-committed enter class, so the correct animation
+    //             plays from its very first painted frame. No flash.
+    //
+    // After the animation completes the enter class is removed. Because
+    // .panel.active carries NO animation of its own (see styless.css),
+    // that removal never triggers a repaint or re-animation. This is the
+    // root fix for the flicker that persisted after previous attempts.
     if (panel) {
-      if (dir) panel.classList.add(dir);
-      panel.classList.add('active');
-      // Remove direction class after animation so it doesn't persist
-      if (dir) setTimeout(() => { panel.classList.remove(dir); }, 320);
+      const enterClass = dir || 'panel-enter';
+      // Frame 1: stamp the enter class while still invisible
+      requestAnimationFrame(function() {
+        panel.classList.add(enterClass);
+
+        // Frame 2: make visible — animation starts with correct keyframe
+        requestAnimationFrame(function() {
+          panel.classList.add('active');
+          // Remove the enter class after the animation completes.
+          // Safe: .panel.active alone has no animation so this removal
+          // never triggers a re-render or flash.
+          setTimeout(function() { panel.classList.remove(enterClass); }, 320);
+        });
+      });
     }
+
     const isHome = view === 'home', isInv = view === 'inventory';
     if (headerSearch) {
       headerSearch.style.display = (isHome || isInv) ? 'block' : 'none';
@@ -2536,10 +2679,12 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     if (view === 'reports') {
       renderReports();
       // Chart.js measures the canvas while the panel is display:none and gets
-      // zero dimensions. Trigger a resize on the next frame, after the panel
-      // is visible, so the chart fills its container correctly.
+      // zero dimensions. Trigger a resize after both rAF frames have fired
+      // so the chart measures the now-visible container correctly.
       requestAnimationFrame(function() {
-        if (reportChart) reportChart.resize();
+        requestAnimationFrame(function() {
+          if (reportChart) reportChart.resize();
+        });
       });
     }
     if (view === 'settings') {
@@ -3843,15 +3988,16 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       /* ── Sticky profile header ───────────────────────────────────── */
       .qs-sticky-profile {
         position: sticky;
-        top: 0;
+        top: var(--topbar-h);
         z-index: 100;
         background: var(--bg-obsidian);
-        padding: 16px 20px 14px;
+        margin-left: -12px;
+        margin-right: -12px;
+        padding: 14px 20px 12px;
         border-bottom: 1px solid var(--border-subtle);
         display: flex;
         align-items: center;
         gap: 14px;
-        /* Subtle frosted glass on scroll */
         backdrop-filter: blur(16px);
         -webkit-backdrop-filter: blur(16px);
       }
@@ -3959,7 +4105,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
 
       /* ── Settings body (scrollable region below sticky) ──────────── */
       .qs-settings-body {
-        padding: 20px 16px 0;
+        padding: 16px 0 0;
         display: flex;
         flex-direction: column;
         gap: 10px;
@@ -3969,7 +4115,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       .qs-s-section {
         background: var(--card-glass);
         border: 1px solid var(--border-glass);
-        border-radius: 16px;
+        border-radius: var(--radius);
         overflow: hidden;
         box-shadow: var(--shadow-soft);
       }
@@ -4811,7 +4957,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       const ov = document.createElement('div');
       ov.id = 'qs-about-overlay';
       ov.style.cssText = 'position:fixed;inset:0;z-index:9999;' +
-        'background:var(--bg-primary,#09090b);' +
+        'background:var(--bg-obsidian);' +
         'transform:translateY(100%);' +
         'transition:transform .32s cubic-bezier(.16,1,.3,1);' +
         'display:flex;flex-direction:column;overflow:hidden;';
@@ -4823,7 +4969,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       backBtn.id = 'qs-about-back';
       backBtn.type = 'button';
       backBtn.textContent = '\u2190 Back';
-      backBtn.style.cssText = 'background:rgba(255,255,255,0.07);border:none;border-radius:10px;' +
+      backBtn.style.cssText = 'background:var(--settings-row-icon-bg);border:1px solid var(--border-glass);border-radius:10px;' +
         'color:var(--text-primary);font-size:13px;font-weight:600;cursor:pointer;padding:7px 14px;' +
         '-webkit-tap-highlight-color:transparent;';
       backBtn.addEventListener('click', function () { ov.style.transform = 'translateY(100%)'; });
@@ -5013,15 +5159,15 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
         function statCard(label, value, accent) {
           const c = document.createElement('div');
           c.style.cssText = [
-            'background:rgba(255,255,255,0.03);',
-            'border:1px solid rgba(255,255,255,0.07);',
+            'background:var(--card-glass);',
+            'border:1px solid var(--border-glass);',
             'border-radius:16px;padding:14px 16px;',
           ].join('');
           const v = document.createElement('div');
           v.style.cssText = 'font-size:22px;font-weight:800;color:' + accent + ';letter-spacing:-0.5px;margin-bottom:3px;';
           v.textContent = value;
           const l = document.createElement('div');
-          l.style.cssText = 'font-size:11px;font-weight:600;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.5px;';
+          l.style.cssText = 'font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;';
           l.textContent = label;
           c.appendChild(v);
           c.appendChild(l);
@@ -5036,7 +5182,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
         const progressWrap = document.createElement('div');
         progressWrap.style.cssText = 'margin-bottom:14px;';
         const progressLbl = document.createElement('div');
-        progressLbl.style.cssText = 'display:flex;justify-content:space-between;font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:6px;font-weight:600;';
+        progressLbl.style.cssText = 'display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-bottom:6px;font-weight:600;';
         const progressLeft = document.createElement('span');
         progressLeft.textContent = total >= MILESTONE
           ? '🎉 Milestone reached!'
@@ -5047,7 +5193,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
         progressLbl.appendChild(progressRight);
 
         const track = document.createElement('div');
-        track.style.cssText = 'height:6px;background:rgba(255,255,255,0.07);border-radius:99px;overflow:hidden;';
+        track.style.cssText = 'height:6px;background:var(--border-glass);border-radius:99px;overflow:hidden;';
         const fill = document.createElement('div');
         const fillPct = Math.min(100, Math.round((total / MILESTONE) * 100));
         fill.style.cssText = 'height:100%;width:' + fillPct + '%;border-radius:99px;background:linear-gradient(90deg,#7c3aed,#a78bfa);transition:width 0.4s ease;';
@@ -5065,7 +5211,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
           'margin-bottom:14px;',
         ].join('');
         const linkLabel = document.createElement('div');
-        linkLabel.style.cssText = 'font-size:11px;font-weight:700;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;';
+        linkLabel.style.cssText = 'font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;';
         linkLabel.textContent = 'Your Referral Link';
         const linkVal = document.createElement('div');
         linkVal.style.cssText = 'font-size:12px;color:#a78bfa;word-break:break-all;line-height:1.5;cursor:pointer;';
@@ -5094,7 +5240,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
           'transition:opacity 0.2s,transform 0.1s;',
           canRequest
             ? 'background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;box-shadow:0 6px 20px rgba(124,58,237,0.3);'
-            : 'background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.25);cursor:not-allowed;border:1px solid rgba(255,255,255,0.07);',
+            : 'background:var(--card-glass);color:var(--text-muted);cursor:not-allowed;border:1px solid var(--border-glass);',
         ].join('');
 
         if (hasPending) {
@@ -5131,10 +5277,10 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
             toast('Payout requested ✓ We\'ll process it shortly.', 'success');
             payBtn.textContent = '⏳ Payout Request Pending';
             payBtn.disabled = true;
-            payBtn.style.background = 'rgba(255,255,255,0.05)';
-            payBtn.style.color = 'rgba(255,255,255,0.25)';
+            payBtn.style.background = 'var(--card-glass)';
+            payBtn.style.color = 'var(--text-muted)';
             payBtn.style.boxShadow = 'none';
-            payBtn.style.border = '1px solid rgba(255,255,255,0.07)';
+            payBtn.style.border = '1px solid var(--border-glass)';
           } catch (e) {
             errlog('payout request failed', e);
             toast('Failed to submit request: ' + (e.message || 'unknown'), 'error');
@@ -5147,7 +5293,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
 
         // Sub-note
         const note = document.createElement('div');
-        note.style.cssText = 'font-size:11px;color:rgba(255,255,255,0.2);text-align:center;margin-top:8px;line-height:1.5;';
+        note.style.cssText = 'font-size:11px;color:var(--text-muted);text-align:center;margin-top:8px;line-height:1.5;';
         note.textContent = 'Share your referral link. Every vendor who signs up and gets activated earns you ₦500.';
         _body.appendChild(note);
 
@@ -5156,7 +5302,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
         if (_body) {
           _body.innerHTML = '';
           const errDiv = document.createElement('div');
-          errDiv.style.cssText = 'font-size:12px;color:rgba(255,255,255,0.3);padding:8px 0;';
+          errDiv.style.cssText = 'font-size:12px;color:var(--text-muted);padding:8px 0;';
           errDiv.textContent = 'Could not load referral data. Check your connection.';
           _body.appendChild(errDiv);
         }

@@ -972,18 +972,36 @@
 </div>
 
 <div id="notesPanel" class="panel">
-  <div style="font-weight:700; font-size:18px; color:var(--text-primary); margin-bottom:12px;">Notes</div>
-  <div class="notes-panel">
-    <div class="note-form">
-      <input id="noteTitleInput" type="text" placeholder="Title (optional)" />
-      <textarea id="noteContentInput" placeholder="Write a note..." rows="3" style="resize:vertical;"></textarea>
-      <div style="display:flex;gap:8px;">
-        <button id="noteSaveBtn" class="save-btn" style="flex:1;">Save Note</button>
-        <button id="noteCancelBtn" class="btn-undo">Cancel</button>
+
+  <!-- Note list — scrolls freely, composer floats above nav -->
+  <div id="notesList" class="qs-notes-list"></div>
+
+  <!-- Floating composer — collapsed trigger bar by default -->
+  <div class="qs-composer-wrap" id="qs-composer-wrap">
+    <!-- Collapsed: single tap-to-expand row -->
+    <div class="qs-composer-trigger" id="qs-composer-trigger" role="button"
+         tabindex="0" aria-label="Write a new note" aria-expanded="false">
+      <span class="qs-composer-trigger-icon">✏️</span>
+      <span class="qs-composer-trigger-text">Write a note…</span>
+    </div>
+    <!-- Expanded: full form (hidden until trigger tapped) -->
+    <div class="qs-composer-form" id="qs-composer-form" aria-hidden="true">
+      <div class="note-form">
+        <input id="noteTitleInput" type="text" placeholder="Title (optional)"
+               autocomplete="off" autocorrect="on" />
+        <div class="qs-textarea-wrap">
+          <textarea id="noteContentInput" placeholder="Write a note…"
+                    rows="4"></textarea>
+          <div class="qs-char-count" id="qs-char-count">0 / 500</div>
+        </div>
+        <div class="qs-composer-actions">
+          <button id="noteCancelBtn" class="btn-undo">Cancel</button>
+          <button id="noteSaveBtn" class="save-btn" style="flex:1;">Save Note</button>
+        </div>
       </div>
     </div>
-    <div id="notesList"></div>
   </div>
+
 </div>
 
 <div id="settingsPanel" class="panel">
