@@ -284,7 +284,11 @@
             saleInsertRows.push({
               id: s.id, user_id: userId, product_id: s.productId,
               qty: s.qty, price: s.price, cost: s.cost,
-              sale_date: new Date(s.ts).toISOString()
+              sale_date: new Date(s.ts).toISOString(),
+              product_name: s.productName || null,
+              barcode: s.barcode || null,
+              category: s.category || null,
+              payment_method: s.paymentMethod || null
             });
             saleInsertActIds.push(act.id);
             break;

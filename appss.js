@@ -917,7 +917,11 @@ function handleTouchEnd() {
       }));
       const cloudSales = (salesRes.data || []).map(s => ({
         id: s.id, productId: s.product_id, qty: s.qty, price: s.price, cost: s.cost,
-        ts: new Date(s.sale_date).getTime()
+        ts: new Date(s.sale_date).getTime(),
+        productName: s.product_name || null,
+        barcode: s.barcode || null,
+        category: s.category || null,
+        paymentMethod: s.payment_method || null
       }));
       const cloudNotes = (notesRes.data || []).map(n => ({
         id: n.id, title: n.title, content: n.content, ts: new Date(n.created_at).getTime()
@@ -1578,11 +1582,49 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
   function openModalFor(mode, productId) {
     const p = (state.products || []).find(x => x.id === productId);
     if (!p) { toast('Product not found', 'error'); return; }
-    modalContext = { mode, productId };
-    const titleEl = $('modalTitle'), itemEl = $('modalItem'), qtyEl = $('modalQty');
-    if (titleEl) titleEl.textContent = mode === 'sell' ? 'Sell items' : 'Add stock';
-    if (itemEl) itemEl.textContent = `${p.name} — ${typeof p.qty === 'number' ? p.qty + ' in stock' : 'stock unknown'}`;
+    modalContext = { mode, productId, paymentMethod: null };
+
+    const titleEl  = $('modalTitle');
+    const itemEl   = $('modalItem');
+    const metaEl   = $('modalMeta');
+    const totalEl  = $('modalTotal');
+    const qtyEl    = $('modalQty');
+    const payRow   = $('modalPayRow');
+    const payLabel = $('modalPayLabel');
+    const confirm  = $('modalConfirm');
+
+    if (titleEl) titleEl.textContent = mode === 'sell' ? 'Sell Items' : 'Add Stock';
+
+    if (itemEl) itemEl.textContent = p.name;
+
+    if (metaEl) {
+      metaEl.innerHTML = '';
+      const badge = document.createElement('span');
+      badge.className = 'modal-cat-badge';
+      badge.textContent = p.category || 'General';
+      const stock = document.createElement('span');
+      stock.className = 'modal-stock-text';
+      stock.textContent = typeof p.qty === 'number' ? p.qty + ' in stock' : 'stock unknown';
+      metaEl.appendChild(badge);
+      metaEl.appendChild(stock);
+    }
+
     if (qtyEl) qtyEl.value = 1;
+
+    if (totalEl) {
+      totalEl.textContent = 'Total \u2014 ' + fmt(window.n(p.price) * 1);
+    }
+
+    const isSell = mode === 'sell';
+    if (payRow)   payRow.style.display   = isSell ? 'flex'  : 'none';
+    if (payLabel) payLabel.style.display = isSell ? 'block' : 'none';
+
+    [$('modalPayCash'), $('modalPayTransfer')].forEach(function(btn) {
+      if (btn) btn.classList.remove('active');
+    });
+
+    if (confirm) confirm.disabled = isSell;
+
     showModal();
   }
 
@@ -1591,12 +1633,42 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
   function initModalHandlers() {
     const modalCancel = $('modalCancel');
     if (modalCancel) modalCancel.addEventListener('click', hideModal);
+
     const modalBackdropEl = $('modalBackdrop');
     if (modalBackdropEl) {
       modalBackdropEl.addEventListener('click', function (e) {
         if (e.target && e.target.id === 'modalBackdrop') hideModal();
       });
     }
+
+    // Live total update as qty changes
+    const modalQtyEl = $('modalQty');
+    if (modalQtyEl) {
+      modalQtyEl.addEventListener('input', function () {
+        if (!modalContext || modalContext.mode !== 'sell') return;
+        const p = state.products.find(x => x.id === modalContext.productId);
+        if (!p) return;
+        const q = Math.max(1, Math.floor(window.n(this.value)));
+        const totalEl = $('modalTotal');
+        if (totalEl) totalEl.textContent = 'Total \u2014 ' + fmt(window.n(p.price) * q);
+      });
+    }
+
+    // Payment method toggle buttons
+    [$('modalPayCash'), $('modalPayTransfer')].forEach(function (btn) {
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        if (!modalContext) return;
+        modalContext.paymentMethod = this.dataset.method;
+        [$('modalPayCash'), $('modalPayTransfer')].forEach(function (b) {
+          if (b) b.classList.remove('active');
+        });
+        this.classList.add('active');
+        const confirm = $('modalConfirm');
+        if (confirm) confirm.disabled = false;
+      });
+    });
+
     const modalConfirm = $('modalConfirm');
     if (modalConfirm) {
       modalConfirm.addEventListener('click', async function () {
@@ -1630,14 +1702,19 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
             }
             let errEl = $('modalError');
             if (errEl) errEl.textContent = '';
-            doSell(modalContext.productId, q);
+            doSell(modalContext.productId, q, modalContext.paymentMethod);
           } else {
             doAddStock(modalContext.productId, q);
           }
           hideModal();
         } finally {
           _modalConfirmLock = false;
-          modalConfirm.disabled = false;
+          // Re-disable for sell mode if no payment chosen (guards if modal stays open)
+          if (modalContext && modalContext.mode === 'sell' && !modalContext.paymentMethod) {
+            modalConfirm.disabled = true;
+          } else {
+            modalConfirm.disabled = false;
+          }
         }
       });
     }
@@ -1821,11 +1898,22 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     saveState().catch(e => errlog('restock sync', e));
   }
 
-  async function doSell(productId, qty) {
+  async function doSell(productId, qty, paymentMethod) {
     const p = state.products.find(x => x.id === productId);
     if (!p) return;
     p.qty = p.qty - qty;
-    const newSale = { productId, qty, price: window.n(p.price), cost: window.n(p.cost), ts: Date.now(), id: uid() };
+    const newSale = {
+      productId,
+      qty,
+      price: window.n(p.price),
+      cost: window.n(p.cost),
+      ts: Date.now(),
+      id: uid(),
+      productName: p.name || null,
+      barcode: p.barcode || null,
+      category: p.category || null,
+      paymentMethod: paymentMethod || null
+    };
     state.sales.push(newSale);
     state.changes.push({ type: 'sell', productId, qty, ts: newSale.ts });
     addActivityLog('Sale', `Sold ${qty} x ${p.name} (${fmt(newSale.price * qty)})`);
@@ -1993,18 +2081,29 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       return '<span style="font-size:10px;font-weight:700;color:' + (up ? 'var(--accent-emerald)' : 'var(--danger)') + ';margin-left:4px;">' + (up ? '▲' : '▼') + Math.abs(pct) + '%</span>';
     }
 
+    function animateDashVal(el, text, cardEl) {
+      if (!el) return;
+      el.innerHTML = '';
+      const span = document.createElement('span');
+      span.className = 'dash-val-animating';
+      span.textContent = text;
+      el.appendChild(span);
+      if (cardEl) {
+        cardEl.classList.remove('dash-card-flash');
+        void cardEl.offsetWidth; // reflow to restart animation
+        cardEl.classList.add('dash-card-flash');
+        setTimeout(function () { cardEl.classList.remove('dash-card-flash'); }, 600);
+      }
+    }
+
     if (dashRevenueEl) {
-      dashRevenueEl.innerHTML = '';
-      const val = document.createElement('span');
-      val.textContent = fmt(revenue);
-      dashRevenueEl.appendChild(val);
+      const cardEl = dashRevenueEl.closest('.dash-card');
+      animateDashVal(dashRevenueEl, fmt(revenue), cardEl);
       dashRevenueEl.insertAdjacentHTML('beforeend', trendBadge(revenue, revYest));
     }
     if (dashProfitEl) {
-      dashProfitEl.innerHTML = '';
-      const val = document.createElement('span');
-      val.textContent = fmt(profit);
-      dashProfitEl.appendChild(val);
+      const cardEl = dashProfitEl.closest('.dash-card');
+      animateDashVal(dashProfitEl, fmt(profit), cardEl);
       dashProfitEl.insertAdjacentHTML('beforeend', trendBadge(profit, profYest));
     }
 
@@ -3120,13 +3219,25 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     const exportReport = $('exportReport');
     if (exportReport) {
       exportReport.addEventListener('click', function () {
-        const rows = [['Timestamp','Product','Qty','UnitPrice','Total','Cost','Profit','Barcode','SaleID']];
-        (state.sales || []).forEach(s => {
-          const p = state.products.find(x=>x.id===s.productId);
-          const total = (window.n(s.price) * window.n(s.qty));
-          const profit = (window.n(s.price) - window.n(s.cost)) * window.n(s.qty);
-          rows.push([new Date(s.ts).toISOString(), p?.name || s.productId, s.qty, s.price, total, s.cost, profit, p?.barcode || '', s.id]);
+        const header = ['Date','Time','Product','Category','Qty','UnitPrice','Total','Cost','Profit','Payment','Barcode','SaleID'];
+        const rows = [header];
+        let grandTotal = 0, grandProfit = 0;
+        (state.sales || []).slice().sort((a,b) => a.ts - b.ts).forEach(s => {
+          const p = state.products.find(x => x.id === s.productId);
+          const name    = s.productName || p?.name || s.productId;
+          const barcode = s.barcode     || p?.barcode || '';
+          const cat     = s.category    || p?.category || '';
+          const pay     = s.paymentMethod || '';
+          const total   = window.n(s.price) * window.n(s.qty);
+          const profit  = (window.n(s.price) - window.n(s.cost)) * window.n(s.qty);
+          const dt      = new Date(s.ts);
+          const date    = dt.toLocaleDateString('en-GB');
+          const time    = dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+          grandTotal  += total;
+          grandProfit += profit;
+          rows.push([date, time, name, cat, s.qty, s.price, total, s.cost, profit, pay, barcode, s.id]);
         });
+        rows.push(['','','','','','TOTAL','₦'+grandTotal,'','₦'+grandProfit,'','','']);
         generateCsv(rows, 'sales_all');
       });
     }
@@ -3136,13 +3247,25 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
         const buckets = createBuckets(currentReportRange);
         const start = buckets[0].start, end = buckets[buckets.length - 1].end;
         const salesInRange = getSalesInRange(start, end);
-        const rows = [['Timestamp','Product','Qty','UnitPrice','Total','Cost','Profit','Barcode','SaleID']];
-        salesInRange.forEach(s => {
-          const p = state.products.find(x=>x.id===s.productId);
-          const total = (window.n(s.price) * window.n(s.qty));
-          const profit = (window.n(s.price) - window.n(s.cost)) * window.n(s.qty);
-          rows.push([new Date(s.ts).toISOString(), p?.name || s.productId, s.qty, s.price, total, s.cost, profit, p?.barcode || '', s.id]);
+        const header = ['Date','Time','Product','Category','Qty','UnitPrice','Total','Cost','Profit','Payment','Barcode','SaleID'];
+        const rows = [header];
+        let grandTotal = 0, grandProfit = 0;
+        salesInRange.slice().sort((a,b) => a.ts - b.ts).forEach(s => {
+          const p = state.products.find(x => x.id === s.productId);
+          const name    = s.productName || p?.name || s.productId;
+          const barcode = s.barcode     || p?.barcode || '';
+          const cat     = s.category    || p?.category || '';
+          const pay     = s.paymentMethod || '';
+          const total   = window.n(s.price) * window.n(s.qty);
+          const profit  = (window.n(s.price) - window.n(s.cost)) * window.n(s.qty);
+          const dt      = new Date(s.ts);
+          const date    = dt.toLocaleDateString('en-GB');
+          const time    = dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+          grandTotal  += total;
+          grandProfit += profit;
+          rows.push([date, time, name, cat, s.qty, s.price, total, s.cost, profit, pay, barcode, s.id]);
         });
+        rows.push(['','','','','','TOTAL','₦'+grandTotal,'','₦'+grandProfit,'','','']);
         generateCsv(rows, `sales_range_${currentReportRange}`);
       });
     }

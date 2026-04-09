@@ -1021,15 +1021,23 @@
     <div id="fullAuditLogList" class="full-log-list"></div>
   </div>  <div id="modalBackdrop" class="modal-backdrop" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-      <h3 id="modalTitle">Sell</h3>
-      <div class="small" id="modalItem">Item name</div>
-      <div class="row" style="margin-top:8px">
+      <h3 id="modalTitle">Sell Items</h3>
+      <div id="modalItem" class="modal-product-name">Item name</div>
+      <div id="modalMeta" class="modal-meta-row"></div>
+      <label class="modal-field-label" style="margin-top:14px;">
+        Quantity
         <input id="modalQty" type="number" value="1" min="1" />
-        <button id="modalConfirm" class="save-btn">OK</button>
+      </label>
+      <div id="modalTotal" class="modal-total-row">Total — ₦0</div>
+      <div id="modalPayLabel" class="modal-field-label" style="margin-top:14px;margin-bottom:7px;">Payment method</div>
+      <div id="modalPayRow" class="modal-pay-row">
+        <button type="button" id="modalPayCash" class="modal-pay-btn" data-method="cash">💵 Cash</button>
+        <button type="button" id="modalPayTransfer" class="modal-pay-btn" data-method="transfer">📲 Transfer</button>
       </div>
-      <div id="modalError" class="error-text" style="margin-top: 10px; min-height: 1em;"></div>
-      <div class="actions">
-        <button id="modalCancel" class="btn-undo" style="margin-top:10px">Cancel</button>
+      <div id="modalError" class="error-text" style="margin-top:10px;min-height:1em;"></div>
+      <div class="actions" style="margin-top:14px;">
+        <button id="modalCancel" class="btn-undo">Cancel</button>
+        <button id="modalConfirm" class="save-btn">Confirm Sale</button>
       </div>
     </div>
   </div>  <div id="barcodeScannerModal" class="modal-backdrop" style="display:none">
