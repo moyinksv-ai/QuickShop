@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- ── SEO defaults (updated dynamically per state) ── -->
+  <title>QuickShop — Find Products From Vendors Near You</title>
+  <meta name="description" content="Search perfumes, fashion, electronics and more from real vendors on QuickShop. Compare prices, see who has stock, order on WhatsApp.">
+  <meta name="robots" content="index, follow">
+
+  <!-- Open Graph -->
+  <meta property="og:type"        content="website">
+  <meta property="og:site_name"   content="QuickShop">
+  <meta property="og:title"       content="QuickShop — Find Products From Vendors Near You">
+  <meta property="og:description" content="Compare prices from real vendors. Order directly on WhatsApp.">
+  <meta property="og:url"         content="https://quickshopper.vercel.app/search.html">
+
+  <!-- Canonical -->
+  <link rel="canonical" href="https://quickshopper.vercel.app/search.html">
+
+  <!-- JSON-LD: SearchAction (for Google Sitelinks Searchbox) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "QuickShop",
+    "url": "https://quickshopper.vercel.app",
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": {
+        "@type": "EntryPoint",
+        "urlTemplate": "https://quickshopper.vercel.app/search.html?q={search_term_string}"
+      },
+      "query-input": "required name=search_term_string"
+    }
+  }
+  </script>
+
+  <style>
+    /* ── Reset + Tokens ──────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green:    #00c896;
+      --green-dim: rgba(0,200,150,0.12);
+      --bg:       #0d0d0d;
+      --surface:  #161616;
+      --surface2: #1e1e1e;
+      --border:   #242424;
+      --text:     #f0f0f0;
+      --muted:    #777;
+      --radius:   14px;
+    }
+
+    html { background: var(--bg); }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100dvh;
+      max-width: 480px;
+      margin: 0 auto;
+      padding-bottom: 48px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
+    .qs-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px 14px;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      background: rgba(13,13,13,0.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      z-index: 100;
+    }
+    .qs-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+    }
+    .qs-logo-mark {
+      width: 30px; height: 30px;
+      background: var(--green);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px;
+    }
+    .qs-logo-text {
+      font-size: 17px;
+      font-weight: 800;
+      color: var(--text);
+      letter-spacing: -0.3px;
+    }
+    .qs-header-cta {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--green);
+      text-decoration: none;
+      padding: 6px 12px;
+      border: 1px solid rgba(0,200,150,0.3);
+      border-radius: 99px;
+      transition: background 0.15s;
+    }
+    .qs-header-cta:hover { background: var(--green-dim); }
+
+    /* ── Search bar (always visible) ─────────────────────────────────────── */
+    .search-wrap {
+      padding: 20px 20px 0;
+    }
+    .search-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      padding: 0 14px;
+      transition: border-color 0.15s;
+    }
+    .search-box:focus-within {
+      border-color: var(--green);
+    }
+    .search-icon {
+      font-size: 16px;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+    #qs-search-input {
+      flex: 1;
+      background: none;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-size: 15px;
+      padding: 13px 0;
+      font-family: inherit;
+    }
+    #qs-search-input::placeholder { color: var(--muted); }
+    #qs-clear-btn {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 18px;
+      cursor: pointer;
+      padding: 4px;
+      line-height: 1;
+    }
+
+    /* ── States ──────────────────────────────────────────────────────────── */
+    [hidden] { display: none !important; }
+
+    /* ── LANDING ─────────────────────────────────────────────────────────── */
+    #state-landing { padding: 28px 20px 0; }
+
+    .landing-hero h1 {
+      font-size: 24px;
+      font-weight: 800;
+      line-height: 1.25;
+      letter-spacing: -0.4px;
+      margin-bottom: 8px;
+    }
+    .landing-hero h1 span { color: var(--green); }
+    .landing-hero p {
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    .cat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 32px;
+    }
+    .cat-tile {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      padding: 14px 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      text-decoration: none;
+    }
+    .cat-tile:hover, .cat-tile:active {
+      border-color: rgba(0,200,150,0.4);
+      background: var(--green-dim);
+    }
+    .cat-tile .cat-emoji { font-size: 22px; }
+    .cat-tile .cat-name {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text);
+      text-align: center;
+      line-height: 1.2;
+    }
+
+    /* Recent / featured section on landing */
+    .recent-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    /* ── LOADING ─────────────────────────────────────────────────────────── */
+    #state-loading {
+      padding: 48px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+    .qs-spinner {
+      width: 28px; height: 28px;
+      border: 3px solid var(--border);
+      border-top-color: var(--green);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-label {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    /* ── RESULTS ─────────────────────────────────────────────────────────── */
+    #state-results { padding: 20px 20px 0; }
+
+    .results-heading {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+    .results-heading strong { color: var(--text); }
+
+    .results-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .product-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      cursor: pointer;
+      transition: border-color 0.15s, transform 0.12s;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      text-decoration: none;
+    }
+    .product-card:hover, .product-card:active {
+      border-color: rgba(0,200,150,0.35);
+      transform: translateY(-1px);
+    }
+    .product-card .pc-category {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .product-card .pc-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.3;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .product-card .pc-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: auto;
+    }
+    .pc-stores {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--green);
+      background: var(--green-dim);
+      padding: 3px 8px;
+      border-radius: 99px;
+    }
+    .pc-sim {
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    /* ── PRODUCT DETAIL ──────────────────────────────────────────────────── */
+    #state-detail { padding: 0 20px; }
+
+    .detail-back {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 18px 0 16px;
+      background: none;
+      border: none;
+      width: 100%;
+      text-align: left;
+      transition: color 0.12s;
+    }
+    .detail-back:hover { color: var(--text); }
+
+    .detail-category {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .detail-name {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.4px;
+      line-height: 1.2;
+      margin-bottom: 6px;
+    }
+    .detail-meta {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+    .detail-meta span { color: var(--green); font-weight: 700; }
+
+    .detail-section-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .vendor-list { display: flex; flex-direction: column; gap: 10px; }
+
+    .vendor-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .vc-avatar {
+      width: 40px; height: 40px;
+      background: var(--surface2);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--green);
+      flex-shrink: 0;
+      text-transform: uppercase;
+    }
+    .vc-info { flex: 1; min-width: 0; }
+    .vc-store {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .vc-tagline {
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .vc-price {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--green);
+      flex-shrink: 0;
+      text-align: right;
+    }
+    .vc-view {
+      display: block;
+      margin-top: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text);
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 8px;
+      text-align: center;
+      text-decoration: none;
+      transition: background 0.12s, border-color 0.12s;
+    }
+    .vc-view:hover { background: rgba(255,255,255,0.1); border-color: #444; }
+
+    /* best price badge */
+    .vendor-card.best-price {
+      border-color: rgba(0,200,150,0.35);
+      background: rgba(0,200,150,0.04);
+    }
+    .vc-best-badge {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--green);
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    /* ── EMPTY STATE ─────────────────────────────────────────────────────── */
+    .empty-state {
+      padding: 48px 20px;
+      text-align: center;
+    }
+    .empty-state .es-icon { font-size: 40px; margin-bottom: 12px; }
+    .empty-state h3 { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+    .empty-state p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+    /* ── SKELETON ────────────────────────────────────────────────────────── */
+    .skel {
+      background: linear-gradient(90deg, var(--surface) 25%, var(--surface2) 50%, var(--surface) 75%);
+      background-size: 200% 100%;
+      animation: skel-shimmer 1.4s ease-in-out infinite;
+      border-radius: 8px;
+    }
+    @keyframes skel-shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    .skel-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+
+    /* ── Footer brand ────────────────────────────────────────────────────── */
+    .qs-footer {
+      margin-top: 48px;
+      padding: 24px 20px;
+      border-top: 1px solid var(--border);
+      text-align: center;
+    }
+    .qs-footer p { font-size: 12px; color: var(--muted); line-height: 1.8; }
+    .qs-footer a { color: var(--green); text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ───────────────────────────────────────────────────────────────── -->
+<header class="qs-header">
+  <a class="qs-logo" href="https://quickshopper.vercel.app">
+    <div class="qs-logo-mark">🛒</div>
+    <span class="qs-logo-text">QuickShop</span>
+  </a>
+  <a class="qs-header-cta" href="https://quickshopper.vercel.app">Open Your Store</a>
+</header>
+
+<!-- ── Search Bar (always visible) ─────────────────────────────────────────── -->
+<div class="search-wrap">
+  <div class="search-box">
+    <span class="search-icon">🔍</span>
+    <input
+      id="qs-search-input"
+      type="search"
+      autocomplete="off"
+      autocorrect="off"
+      spellcheck="false"
+      placeholder="Search products — perfume, bags, shoes…"
+      aria-label="Search products"
+    >
+    <button id="qs-clear-btn" aria-label="Clear search">✕</button>
+  </div>
+</div>
+
+<!-- ── LANDING STATE ─────────────────────────────────────────────────────────── -->
+<div id="state-landing">
+  <div class="landing-hero">
+    <h1>Find products from<br><span>real vendors.</span></h1>
+    <p>Search across all QuickShop stores. Compare prices.<br>Order directly on WhatsApp — no middleman.</p>
+  </div>
+
+  <div class="section-label">Browse by category</div>
+  <div class="cat-grid" id="cat-grid">
+    <!-- default tiles, replaced with live data if available -->
+    <a class="cat-tile" href="#" data-cat="Fragrance"><span class="cat-emoji">🌸</span><span class="cat-name">Fragrance</span></a>
+    <a class="cat-tile" href="#" data-cat="Fashion"><span class="cat-emoji">👗</span><span class="cat-name">Fashion</span></a>
+    <a class="cat-tile" href="#" data-cat="Shoes"><span class="cat-emoji">👟</span><span class="cat-name">Shoes</span></a>
+    <a class="cat-tile" href="#" data-cat="Bags"><span class="cat-emoji">👜</span><span class="cat-name">Bags</span></a>
+    <a class="cat-tile" href="#" data-cat="Beauty"><span class="cat-emoji">💄</span><span class="cat-name">Beauty</span></a>
+    <a class="cat-tile" href="#" data-cat="Electronics"><span class="cat-emoji">📱</span><span class="cat-name">Electronics</span></a>
+    <a class="cat-tile" href="#" data-cat="Food"><span class="cat-emoji">🍔</span><span class="cat-name">Food</span></a>
+    <a class="cat-tile" href="#" data-cat="Home"><span class="cat-emoji">🏠</span><span class="cat-name">Home</span></a>
+  </div>
+
+  <div class="section-label" id="recent-label" hidden>Recently added</div>
+  <div class="recent-grid" id="recent-grid"></div>
+</div>
+
+<!-- ── LOADING STATE ─────────────────────────────────────────────────────────── -->
+<div id="state-loading" hidden>
+  <div class="qs-spinner"></div>
+  <span class="loading-label" id="loading-label">Searching…</span>
+</div>
+
+<!-- ── RESULTS STATE ─────────────────────────────────────────────────────────── -->
+<div id="state-results" hidden>
+  <p class="results-heading" id="results-heading"></p>
+  <div class="results-grid" id="results-grid"></div>
+</div>
+
+<!-- ── PRODUCT DETAIL STATE ──────────────────────────────────────────────────── -->
+<div id="state-detail" hidden>
+  <button class="detail-back" id="detail-back">← Back to results</button>
+  <div class="detail-category" id="detail-category"></div>
+  <h1 class="detail-name" id="detail-name"></h1>
+  <p class="detail-meta" id="detail-meta"></p>
+  <div class="detail-section-label" id="detail-vendors-label"></div>
+  <div class="vendor-list" id="vendor-list"></div>
+</div>
+
+<!-- ── Footer ────────────────────────────────────────────────────────────────── -->
+<footer class="qs-footer">
+  <p>
+    Powered by <a href="https://quickshopper.vercel.app">QuickShop</a><br>
+    Are you a vendor? <a href="https://quickshopper.vercel.app">Open your free store →</a>
+  </p>
+</footer>
+
+<!-- ── Supabase ───────────────────────────────────────────────────────────────── -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── Supabase client ───────────────────────────────────────────────────────
+  // supabase-config.js exposes window.__QS_SUPABASE.client — not window.supabaseConfig.
+  // Reading it here rather than at call-site so every function gets the same ref.
+  var sb = (window.__QS_SUPABASE && window.__QS_SUPABASE.client)
+    ? window.__QS_SUPABASE.client
+    : null;
+
+  if (!sb) {
+    console.error('[QS Market] Supabase client not ready — check supabase-config.js loaded correctly.');
+  }
+
+  // ── DOM refs ─────────────────────────────────────────────────────────────
+  var input        = document.getElementById('qs-search-input');
+  var clearBtn     = document.getElementById('qs-clear-btn');
+  var stateLanding = document.getElementById('state-landing');
+  var stateLoading = document.getElementById('state-loading');
+  var stateResults = document.getElementById('state-results');
+  var stateDetail  = document.getElementById('state-detail');
+  var loadingLabel = document.getElementById('loading-label');
+  var resultsGrid  = document.getElementById('results-grid');
+  var resultsHead  = document.getElementById('results-heading');
+  var vendorList   = document.getElementById('vendor-list');
+  var detailBack   = document.getElementById('detail-back');
+  var detailCat    = document.getElementById('detail-category');
+  var detailName   = document.getElementById('detail-name');
+  var detailMeta   = document.getElementById('detail-meta');
+  var detailVLabel = document.getElementById('detail-vendors-label');
+  var catGrid      = document.getElementById('cat-grid');
+  var recentLabel  = document.getElementById('recent-label');
+  var recentGrid   = document.getElementById('recent-grid');
+
+  // ── App state ────────────────────────────────────────────────────────────
+  var _lastQuery       = '';
+  var _lastResults     = [];   // search results or category browse results
+  var _currentProduct  = null; // canonical product being viewed
+  var _debounceTimer   = null;
+
+  // ── State machine ─────────────────────────────────────────────────────────
+  function showState(name) {
+    stateLanding.hidden = name !== 'landing';
+    stateLoading.hidden = name !== 'loading';
+    stateResults.hidden = name !== 'results';
+    stateDetail.hidden  = name !== 'detail';
+  }
+
+  // ── URL management ────────────────────────────────────────────────────────
+  // We use pushState so the back button works naturally.
+  function getParams() {
+    return new URLSearchParams(window.location.search);
+  }
+
+  function navigate(params, replace) {
+    var url = params.toString()
+      ? window.location.pathname + '?' + params.toString()
+      : window.location.pathname;
+    if (replace) {
+      history.replaceState(null, '', url);
+    } else {
+      history.pushState(null, '', url);
+    }
+    updateSEO(params);
+  }
+
+  function updateSEO(params) {
+    var q       = params.get('q');
+    var product = params.get('product');
+    var cat     = params.get('cat');
+    var title, desc, canonical;
+
+    if (product && _currentProduct) {
+      title     = _currentProduct.display_name + ' — Buy From QuickShop Vendors';
+      desc      = 'Compare prices for ' + _currentProduct.display_name + ' across multiple vendors on QuickShop. Order directly on WhatsApp.';
+      canonical = 'https://quickshopper.vercel.app/search.html?product=' + product;
+    } else if (q) {
+      title     = '"' + q + '" — QuickShop Product Search';
+      desc      = 'Find vendors selling ' + q + ' on QuickShop. Compare prices and order on WhatsApp.';
+      canonical = 'https://quickshopper.vercel.app/search.html?q=' + encodeURIComponent(q);
+    } else if (cat) {
+      title     = cat + ' — QuickShop Vendors';
+      desc      = 'Browse ' + cat + ' products from QuickShop vendors. Compare prices, order on WhatsApp.';
+      canonical = 'https://quickshopper.vercel.app/search.html?cat=' + encodeURIComponent(cat);
+    } else {
+      title     = 'QuickShop — Find Products From Vendors Near You';
+      desc      = 'Search perfumes, fashion, electronics and more from real vendors on QuickShop.';
+      canonical = 'https://quickshopper.vercel.app/search.html';
+    }
+
+    document.title = title;
+    var metaDesc = document.querySelector('meta[name="description"]');
+    if (metaDesc) metaDesc.content = desc;
+    var linkCan = document.querySelector('link[rel="canonical"]');
+    if (linkCan) linkCan.href = canonical;
+  }
+
+  // ── Currency format ───────────────────────────────────────────────────────
+  function fmt(price) {
+    if (!price && price !== 0) return '';
+    return '₦' + Number(price).toLocaleString('en-NG');
+  }
+
+  // ── Skeleton helpers ──────────────────────────────────────────────────────
+  function renderSkeletonGrid(container, count) {
+    container.innerHTML = '';
+    for (var i = 0; i < count; i++) {
+      var card = document.createElement('div');
+      card.className = 'skel-card';
+      card.innerHTML =
+        '<div class="skel" style="height:12px;width:50%"></div>' +
+        '<div class="skel" style="height:16px;width:85%"></div>' +
+        '<div class="skel" style="height:12px;width:65%"></div>';
+      container.appendChild(card);
+    }
+  }
+
+  // ── Render product card ───────────────────────────────────────────────────
+  function renderProductCard(item) {
+    var card = document.createElement('div');
+    card.className = 'product-card';
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+
+    var cat  = item.category ? item.category.toUpperCase() : '';
+    var name = item.display_name || item.name || '';
+    var count = item.vendor_count || 0;
+    var slug  = item.slug || '';
+
+    card.innerHTML =
+      (cat ? '<div class="pc-category">' + escHtml(cat) + '</div>' : '') +
+      '<div class="pc-name">' + escHtml(name) + '</div>' +
+      '<div class="pc-footer">' +
+        '<span class="pc-stores">' +
+          (count === 1 ? '1 store' : count > 1 ? count + ' stores' : 'New') +
+        '</span>' +
+      '</div>';
+
+    function open() {
+      openProduct(item);
+    }
+    card.addEventListener('click', open);
+    card.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+    });
+
+    return card;
+  }
+
+  // ── Render vendor card ────────────────────────────────────────────────────
+  function renderVendorCard(listing, profile, isBest) {
+    var card = document.createElement('div');
+    card.className = 'vendor-card' + (isBest ? ' best-price' : '');
+
+    var storeName = (profile && (profile.business_name || profile.name)) || 'QuickShop Vendor';
+    var tagline   = (profile && profile.tagline) || '';
+    var initial   = storeName.charAt(0);
+    var storeUrl  = '/?store=' + encodeURIComponent(listing.vendor_store_id);
+
+    card.innerHTML =
+      '<div class="vc-avatar">' + escHtml(initial) + '</div>' +
+      '<div class="vc-info">' +
+        '<div class="vc-store">' + escHtml(storeName) + '</div>' +
+        (tagline ? '<div class="vc-tagline">' + escHtml(tagline) + '</div>' : '') +
+        (isBest ? '<div class="vc-best-badge">Best price</div>' : '') +
+      '</div>' +
+      '<div style="text-align:right;flex-shrink:0">' +
+        '<div class="vc-price">' + fmt(listing.price) + '</div>' +
+        '<a class="vc-view" href="' + storeUrl + '">View store →</a>' +
+      '</div>';
+
+    return card;
+  }
+
+  // ── Empty state ───────────────────────────────────────────────────────────
+  function renderEmpty(container, title, body) {
+    container.innerHTML =
+      '<div class="empty-state" style="grid-column:1/-1">' +
+        '<div class="es-icon">🔎</div>' +
+        '<h3>' + escHtml(title) + '</h3>' +
+        '<p>' + escHtml(body) + '</p>' +
+      '</div>';
+  }
+
+  // ── Escape HTML ───────────────────────────────────────────────────────────
+  function escHtml(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ── SEARCH ────────────────────────────────────────────────────────────────
+  async function runSearch(query) {
+    if (!sb) return;
+    _lastQuery = query;
+
+    var params = getParams();
+    params.set('q', query);
+    params.delete('product');
+    params.delete('cat');
+    navigate(params, false);
+
+    showState('loading');
+    loadingLabel.textContent = 'Searching for "' + query + '"…';
+
+    try {
+      var res = await sb.rpc('qs_find_canonical', {
+        p_name: query,
+        p_threshold: 0.25
+      });
+
+      var data = res.data || [];
+      _lastResults = data;
+
+      showState('results');
+
+      if (data.length === 0) {
+        resultsHead.innerHTML = 'No results for <strong>"' + escHtml(query) + '"</strong>';
+        renderEmpty(resultsGrid, 'Nothing found', 'Try a different spelling, or browse a category below.');
+        return;
+      }
+
+      resultsHead.innerHTML =
+        'Found <strong>' + data.length + ' product' + (data.length !== 1 ? 's' : '') + '</strong>' +
+        ' matching "' + escHtml(query) + '"';
+
+      resultsGrid.innerHTML = '';
+      data.forEach(function (item) {
+        resultsGrid.appendChild(renderProductCard(item));
+      });
+
+    } catch (e) {
+      console.error('[search] error', e);
+      showState('results');
+      resultsHead.textContent = 'Something went wrong. Please try again.';
+      resultsGrid.innerHTML = '';
+    }
+  }
+
+  // ── BROWSE BY CATEGORY ────────────────────────────────────────────────────
+  async function browseCategory(cat) {
+    if (!sb) return;
+    _lastQuery = '';
+
+    var params = getParams();
+    params.set('cat', cat);
+    params.delete('q');
+    params.delete('product');
+    navigate(params, false);
+
+    input.value = '';
+    clearBtn.style.display = 'none';
+
+    showState('loading');
+    loadingLabel.textContent = 'Loading ' + cat + '…';
+
+    try {
+      var res = await sb
+        .from('qs_canonical_products')
+        .select('id, display_name, slug, category')
+        .ilike('category', cat)
+        .order('created_at', { ascending: false })
+        .limit(40);
+
+      var data = res.data || [];
+      _lastResults = data;
+
+      showState('results');
+
+      if (data.length === 0) {
+        resultsHead.innerHTML = '<strong>' + escHtml(cat) + '</strong> — no products yet';
+        renderEmpty(resultsGrid, 'Empty category', 'Be the first vendor to add products in this category.');
+        return;
+      }
+
+      // Fetch vendor counts for these canonicals
+      var ids = data.map(function (d) { return d.id; });
+      var countRes = await sb
+        .from('qs_vendor_listings')
+        .select('canonical_id')
+        .in('canonical_id', ids);
+
+      var countMap = {};
+      if (countRes.data) {
+        countRes.data.forEach(function (row) {
+          countMap[row.canonical_id] = (countMap[row.canonical_id] || 0) + 1;
+        });
+      }
+
+      data.forEach(function (d) { d.vendor_count = countMap[d.id] || 0; });
+
+      resultsHead.innerHTML =
+        '<strong>' + escHtml(cat) + '</strong> — ' + data.length + ' product' + (data.length !== 1 ? 's' : '');
+
+      resultsGrid.innerHTML = '';
+      data.forEach(function (item) {
+        resultsGrid.appendChild(renderProductCard(item));
+      });
+
+    } catch (e) {
+      console.error('[browse] error', e);
+      showState('landing');
+    }
+  }
+
+  // ── OPEN PRODUCT DETAIL ───────────────────────────────────────────────────
+  async function openProduct(item) {
+    if (!sb) return;
+
+    // item may come from search results (has slug) or from URL load (needs slug lookup)
+    var canonical = item;
+
+    // If item came from search RPC, it has id + slug but may lack full canonical data.
+    // That's fine — we have what we need.
+
+    _currentProduct = canonical;
+
+    var params = getParams();
+    params.set('product', canonical.slug);
+    params.delete('q');
+    params.delete('cat');
+    navigate(params, false);
+
+    showState('loading');
+    loadingLabel.textContent = 'Loading product…';
+
+    try {
+      // 1. Fetch all vendor listings for this canonical
+      var listRes = await sb
+        .from('qs_vendor_listings')
+        .select('*')
+        .eq('canonical_id', canonical.id)
+        .order('price', { ascending: true });
+
+      var listings = listRes.data || [];
+
+      // 2. Batch-fetch store profiles
+      var vendorIds = listings.map(function (l) { return l.vendor_store_id; });
+      var profileMap = {};
+
+      if (vendorIds.length > 0) {
+        var profRes = await sb
+          .from('profiles')
+          .select('id, name, business_name, tagline')
+          .in('id', vendorIds);
+
+        if (profRes.data) {
+          profRes.data.forEach(function (p) { profileMap[p.id] = p; });
+        }
+      }
+
+      // 3. Render detail view
+      detailCat.textContent  = canonical.category || '';
+      detailName.textContent = canonical.display_name || canonical.name || '';
+
+      var storeCount = listings.length;
+      var minPrice   = listings.length ? listings[0].price : null;   // already sorted ASC
+      var maxPrice   = listings.length ? listings[listings.length - 1].price : null;
+
+      if (storeCount === 0) {
+        detailMeta.textContent = 'No vendors currently selling this product.';
+      } else if (minPrice === maxPrice) {
+        detailMeta.innerHTML = '<span>' + storeCount + ' store' + (storeCount !== 1 ? 's' : '') + '</span> · ' + fmt(minPrice);
+      } else {
+        detailMeta.innerHTML =
+          '<span>' + storeCount + ' store' + (storeCount !== 1 ? 's' : '') + '</span> · ' +
+          fmt(minPrice) + ' – ' + fmt(maxPrice);
+      }
+
+      detailVLabel.textContent = storeCount === 0 ? '' : 'Where to buy';
+
+      vendorList.innerHTML = '';
+      if (storeCount === 0) {
+        vendorList.innerHTML =
+          '<div class="empty-state"><div class="es-icon">📦</div>' +
+          '<h3>Not available yet</h3>' +
+          '<p>No vendor on QuickShop is selling this right now.</p></div>';
+      } else {
+        listings.forEach(function (listing, idx) {
+          var profile = profileMap[listing.vendor_store_id] || null;
+          var isBest  = idx === 0 && storeCount > 1; // lowest price
+          vendorList.appendChild(renderVendorCard(listing, profile, isBest));
+        });
+      }
+
+      // JSON-LD for product page (helps Google index price data)
+      injectProductSchema(canonical, listings, profileMap);
+
+      showState('detail');
+
+    } catch (e) {
+      console.error('[product detail] error', e);
+      showState('results');
+    }
+  }
+
+  // ── OPEN PRODUCT BY SLUG (direct URL load) ────────────────────────────────
+  async function loadProductBySlug(slug) {
+    if (!sb) return;
+    showState('loading');
+    loadingLabel.textContent = 'Loading…';
+
+    try {
+      var res = await sb
+        .from('qs_canonical_products')
+        .select('id, display_name, slug, category')
+        .eq('slug', slug)
+        .single();
+
+      if (res.error || !res.data) {
+        showState('landing');
+        return;
+      }
+
+      await openProduct(res.data);
+
+    } catch (e) {
+      console.error('[load by slug] error', e);
+      showState('landing');
+    }
+  }
+
+  // ── JSON-LD product schema injection ─────────────────────────────────────
+  function injectProductSchema(canonical, listings, profileMap) {
+    var old = document.getElementById('qs-product-ld');
+    if (old) old.remove();
+
+    if (!listings.length) return;
+
+    var offers = listings.map(function (l) {
+      var profile   = profileMap[l.vendor_store_id] || {};
+      var storeName = profile.business_name || profile.name || 'QuickShop Vendor';
+      return {
+        '@type': 'Offer',
+        'price': l.price,
+        'priceCurrency': 'NGN',
+        'availability': 'https://schema.org/InStock',
+        'seller': { '@type': 'Organization', 'name': storeName }
+      };
+    });
+
+    var ld = {
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      'name': canonical.display_name,
+      'offers': offers
+    };
+
+    var script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.id   = 'qs-product-ld';
+    script.textContent = JSON.stringify(ld);
+    document.head.appendChild(script);
+  }
+
+  // ── LOAD RECENT PRODUCTS (landing page) ───────────────────────────────────
+  async function loadRecent() {
+    if (!sb) return;
+    try {
+      var res = await sb
+        .from('qs_canonical_products')
+        .select('id, display_name, slug, category')
+        .order('created_at', { ascending: false })
+        .limit(6);
+
+      if (!res.data || res.data.length === 0) return;
+
+      // Fetch vendor counts
+      var ids = res.data.map(function (d) { return d.id; });
+      var countRes = await sb
+        .from('qs_vendor_listings')
+        .select('canonical_id')
+        .in('canonical_id', ids);
+
+      var countMap = {};
+      if (countRes.data) {
+        countRes.data.forEach(function (row) {
+          countMap[row.canonical_id] = (countMap[row.canonical_id] || 0) + 1;
+        });
+      }
+
+      res.data.forEach(function (d) { d.vendor_count = countMap[d.id] || 0; });
+
+      recentLabel.hidden = false;
+      recentGrid.innerHTML = '';
+      res.data.forEach(function (item) {
+        recentGrid.appendChild(renderProductCard(item));
+      });
+    } catch (e) {
+      // Silent — landing works fine without recent products
+    }
+  }
+
+  // ── BACK BUTTON ───────────────────────────────────────────────────────────
+  function goBack() {
+    _currentProduct = null;
+
+    // Remove product-specific JSON-LD
+    var old = document.getElementById('qs-product-ld');
+    if (old) old.remove();
+
+    if (_lastResults.length > 0) {
+      var params = getParams();
+      params.delete('product');
+      if (_lastQuery) params.set('q', _lastQuery);
+      navigate(params, false);
+      showState('results');
+    } else {
+      var params2 = new URLSearchParams();
+      navigate(params2, false);
+      showState('landing');
+      updateSEO(params2);
+    }
+  }
+
+  // ── BROWSER BACK/FORWARD ──────────────────────────────────────────────────
+  window.addEventListener('popstate', function () {
+    routeFromURL();
+  });
+
+  // ── ROUTER — read URL and show correct state ──────────────────────────────
+  function routeFromURL() {
+    var params  = getParams();
+    var q       = params.get('q');
+    var product = params.get('product');
+    var cat     = params.get('cat');
+
+    updateSEO(params);
+
+    if (product) {
+      loadProductBySlug(product);
+    } else if (q) {
+      input.value = q;
+      clearBtn.style.display = 'block';
+      runSearch(q);
+    } else if (cat) {
+      browseCategory(cat);
+    } else {
+      showState('landing');
+      loadRecent();
+    }
+  }
+
+  // ── SEARCH INPUT EVENTS ───────────────────────────────────────────────────
+  input.addEventListener('input', function () {
+    var val = input.value.trim();
+    clearBtn.style.display = val ? 'block' : 'none';
+    clearTimeout(_debounceTimer);
+
+    if (!val) {
+      var p = new URLSearchParams();
+      navigate(p, true);
+      showState('landing');
+      return;
+    }
+
+    if (val.length < 2) return;
+
+    _debounceTimer = setTimeout(function () {
+      runSearch(val);
+    }, 420);
+  });
+
+  clearBtn.addEventListener('click', function () {
+    input.value = '';
+    clearBtn.style.display = 'none';
+    input.focus();
+    var p = new URLSearchParams();
+    navigate(p, true);
+    _lastResults  = [];
+    _lastQuery    = '';
+    _currentProduct = null;
+    showState('landing');
+  });
+
+  // ── CATEGORY TILE EVENTS ──────────────────────────────────────────────────
+  catGrid.addEventListener('click', function (e) {
+    var tile = e.target.closest('.cat-tile');
+    if (!tile) return;
+    e.preventDefault();
+    var cat = tile.dataset.cat;
+    if (cat) browseCategory(cat);
+  });
+
+  // ── DETAIL BACK BUTTON ────────────────────────────────────────────────────
+  detailBack.addEventListener('click', goBack);
+
+  // ── INIT ──────────────────────────────────────────────────────────────────
+  routeFromURL();
+
+})();
+</script>
+</body>
+</html>

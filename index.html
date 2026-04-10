@@ -167,6 +167,20 @@
       border-color: rgba(99,102,241,0.5);
       color: #c7d2fe;
     }
+    #qs-landing .ql-nav-browse {
+      background: transparent;
+      border: 1px solid rgba(16,185,129,0.30);
+      color: var(--c-green-d, #34d399);
+      padding: 7px 14px; border-radius: 7px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: all .15s; font-family: inherit;
+      text-decoration: none; display: inline-flex; align-items: center; gap: 5px;
+    }
+    #qs-landing .ql-nav-browse:hover {
+      background: rgba(16,185,129,0.10);
+      border-color: rgba(16,185,129,0.55);
+      color: #6ee7b7;
+    }
 
     #qs-landing .ql-page {
       padding-top: var(--nav-h);
@@ -309,6 +323,8 @@
 
     #qs-landing .ql-hero-btns {
       display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
       margin-bottom: 14px;
     }
     #qs-landing .ql-btn-main {
@@ -327,6 +343,22 @@
     }
     #qs-landing .ql-btn-main:hover { background: #4f52e0; transform: translateY(-1px); }
     #qs-landing .ql-btn-main:active { transform: scale(.97); }
+    #qs-landing .ql-btn-ghost {
+      background: rgba(16,185,129,0.09);
+      border: 1px solid rgba(16,185,129,0.28);
+      color: var(--c-green-d, #34d399);
+      padding: 13px 22px; border-radius: 8px;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      letter-spacing: -0.1px; transition: all .15s; font-family: inherit;
+      text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+      white-space: nowrap;
+    }
+    #qs-landing .ql-btn-ghost:hover {
+      background: rgba(16,185,129,0.16);
+      border-color: rgba(16,185,129,0.50);
+      transform: translateY(-1px);
+    }
+    #qs-landing .ql-btn-ghost:active { transform: scale(.97); }
 
     #qs-landing .ql-signin-row {
       font-size: 13px;
@@ -535,6 +567,7 @@
         QuickShop
       </div>
       <div class="ql-nav-btns">
+        <a class="ql-nav-browse" href="search.html" aria-label="Browse marketplace">🛒 Browse Market</a>
         <button class="ql-nav-signin" id="qs-nav-in">Sign In</button>
         <button class="ql-nav-signup" id="qs-nav-up">Sign Up</button>
       </div>
@@ -545,7 +578,7 @@
     </div>
 
     <div class="ql-hero-left">
-      <div class="ql-hero-tag ql-anim-1">Inventory · Sales · Notes</div>
+      <div class="ql-hero-tag ql-anim-1">Inventory · Sales · Notes · <a href="search.html" style="color:var(--c-green-d,#34d399);text-decoration:none;font-weight:700;">Marketplace ↗</a></div>
 
       <h1 class="ql-h1 ql-anim-2">
         Your shop.<br>
@@ -560,6 +593,7 @@
 
       <div class="ql-hero-btns ql-anim-4">
         <button class="ql-btn-main" id="qs-hero-up">Start for free</button>
+        <a class="ql-btn-ghost" href="search.html">🛒 Browse products</a>
       </div>
 
       <div class="ql-signin-row ql-anim-5">

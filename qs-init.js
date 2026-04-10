@@ -172,6 +172,7 @@
     'indexeddb_sync.js',
     'share-catalog.js',
     'appss.js',
+    'canonical.js',
     'inventory.js'
   ];
 
@@ -215,6 +216,7 @@
     addScript('indexeddb_sync.js', true);
     addScript('share-catalog.js', true);
     addScript('appss.js',         true);
+    addScript('canonical.js',     true);
     addScript('inventory.js',     true);
   }
 

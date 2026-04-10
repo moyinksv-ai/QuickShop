@@ -1,5 +1,39 @@
 {
   "version": 2,
   "buildCommand": "bash build.sh",
-  "outputDirectory": "."
+  "outputDirectory": ".",
+  "rewrites": [
+    {
+      "source": "/market",
+      "destination": "/search.html"
+    },
+    {
+      "source": "/search",
+      "destination": "/search.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/search.html",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "index, follow"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)\\.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    }
+  ]
 }

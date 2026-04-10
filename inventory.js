@@ -40,6 +40,16 @@
 
   const $ = id => document.getElementById(id);
 
+  function syncToCanonical(product) {
+    try {
+      if (window.__QS_CANONICAL && window.__QS_CANONICAL.registerListing) {
+        window.__QS_CANONICAL.registerListing(product);
+      }
+    } catch (e) {
+      errlog('syncToCanonical error', e);
+    }
+  }
+
   // ── Scanner state ──────────────────────────────────────────────────────────
   let codeReader = null, videoStream = null, lastScannedBarcode = null;
   let scannerActive = false, currentScanMode = 'form', smartScanProduct = null;
@@ -504,6 +514,7 @@
             const updated = app().updateProduct(editingId, patch);
             if (!updated) { toast('Product not found', 'error'); return; }
             product = Object.assign({}, _existing, patch);
+            syncToCanonical(product);
             syncType = 'updateProduct';
             addActivityLog('Edit', 'Updated product: ' + name);
             toast('Product updated ✓');
@@ -516,6 +527,7 @@
               barcode: barcode || null, createdAt: Date.now(), updatedAt: Date.now()
             };
             app().addProduct(product);
+            syncToCanonical(product);
             syncType = 'addProduct';
             addActivityLog('Create', 'Created product: ' + name);
             toast('Product saved! Keep adding product orTap X to cancel.', 'success');
@@ -942,6 +954,7 @@
             image: null, image2: null, icon: null, createdAt: Date.now(), updatedAt: Date.now()
           };
           app().importProduct(product, row.category);
+          syncToCanonical(product);
           if (window.qsdb && window.qsdb.addPendingChange) {
             await window.qsdb.addPendingChange({ type: 'addProduct', item: product });
           }
