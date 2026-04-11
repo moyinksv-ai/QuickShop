@@ -17,14 +17,18 @@
     • form-action 'self'        — Prevent form exfiltration
     • frame-src 'none'          — No iframes needed
     • worker-src 'self'         — Service worker from same origin only
-    NOTE: 'unsafe-inline' for scripts has been REMOVED. The single early-body
-    class-setter script is permitted via its exact SHA-256 hash above.
-    All other scripts (CTA wiring, SW registration, conditional loader) live
-    in qs-init.js, loaded as a static <script src> tag.
+    NOTE: 'unsafe-inline' for scripts has been REMOVED. Two inline scripts are
+    permitted via their exact SHA-256 hashes above:
+      Hash 1 — early-body class setter (auth/catalog routing)
+      Hash 2 — scroll reveal + hero parallax + marketplace fade-out transition
+    All other scripts live in qs-init.js, loaded as a static <script src> tag.
+    SRI: integrity= hashes verified and applied for ZXing, Chart.js, and Supabase.
   -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
-    script-src 'self' 'sha256-R7pgOtHcN9F5mkcjLNQbMlEM7Pp/AE6SHXPBAWv27Vc='
+    script-src 'self'
+               'sha256-eSpIvWwELLQenk+JZ2B5OZ1KSCqJomPFU/uQbg67J8Q='
+               'sha256-JF0GDwCUTXtf5PGfP7bRtMxmOoAz1tJOVz+hSmoq0j0='
                https://unpkg.com
                https://cdn.jsdelivr.net
                https://browser.sentry-cdn.com;
@@ -65,8 +69,8 @@
     integrity="sha384-UlVRD1cNWz7WEAJ7rEwmwJkYL5b1Bqgt0O0pYyFYdWSzDhzuqaOWEP7wSxDuBku"
     crossorigin="anonymous"
   ></script>
-  <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>  <style>
+  <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js" integrity="sha384-BzBxP10ZE72aitqj5UMmUsbKFliP/DZqA8Wq+BNNhlIJDGoEd1tpkMYXOg9+n6sB" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" integrity="sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt" crossorigin="anonymous"></script>  <style>
     /*
      * CRITICAL — loaded synchronously before first paint.
      * Defeats styless.css specificity wars and flash-of-wrong-content.
@@ -113,437 +117,535 @@
 
     *, *::before, *::after { box-sizing: border-box; }
 
+    /* ─── QuickShop Landing — zero gradients, pure editorial ──────────────
+       Design language: dark editorial. Like a serious product that also
+       knows its users. Typography carries weight. No decoration theater.
+    ─────────────────────────────────────────────────────────────────── */
+
     #qs-landing {
-      --c-bg:      #07070e;
-      --c-surface: #0e0e1a;
-      --c-border:  rgba(255,255,255,0.07);
-      --c-text:    #f0f0f6;
-      --c-muted:   rgba(240,240,246,0.40);
-      --c-dim:     rgba(240,240,246,0.20);
+      --c-bg:      #0a0a0f;
+      --c-surface: #111118;
+      --c-lift:    #18181f;
+      --c-border:  rgba(255,255,255,0.08);
+      --c-border2: rgba(255,255,255,0.04);
+      --c-text:    #ececf1;
+      --c-muted:   rgba(236,236,241,0.44);
+      --c-dim:     rgba(236,236,241,0.22);
       --c-accent:  #6366f1;
-      --c-green:   #10b981;
-      --c-green-d: #34d399;
-      --nav-h:     58px;
+      --c-green:   #22c55e;
+      --c-green-d: #4ade80;
+      --nav-h:     60px;
+      --px:        clamp(20px, 5vw, 80px);
       background: var(--c-bg);
       color: var(--c-text);
-      font-family: "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", Inter, sans-serif;
+      font-family: "SF Pro Display","Segoe UI Variable Display","Segoe UI",Inter,sans-serif;
       -webkit-font-smoothing: antialiased;
       overflow-x: hidden;
     }
 
+    /* ── Nav ──────────────────────────────────────────────────────────────── */
     #qs-landing .ql-nav {
       position: fixed; top: 0; left: 0; right: 0; z-index: 100;
       height: var(--nav-h);
       display: flex; align-items: center; justify-content: space-between;
-      padding: 0 clamp(20px, 5vw, 60px);
-      background: rgba(7,7,14,0.72);
-      backdrop-filter: blur(20px) saturate(160%);
-      -webkit-backdrop-filter: blur(20px) saturate(160%);
-      border-bottom: 1px solid rgba(255,255,255,0.05);
+      padding: 0 var(--px);
+      background: var(--c-bg);
+      border-bottom: 1px solid var(--c-border);
     }
     #qs-landing .ql-brand {
-      display: flex; align-items: center; gap: 7px;
-      font-size: 16px; font-weight: 700; letter-spacing: -0.3px; color: var(--c-text);
+      display: flex; align-items: center; gap: 9px;
+      font-size: 15px; font-weight: 700; letter-spacing: -0.3px;
+      color: var(--c-text); text-decoration: none;
     }
-    #qs-landing .ql-brand-icon { font-size: 18px; }
-    #qs-landing .ql-nav-btns { display: flex; gap: 8px; align-items: center; }
-    #qs-landing .ql-nav-signin {
-      background: transparent; border: 0;
-      color: var(--c-muted); padding: 6px 14px;
-      font-size: 13px; font-weight: 500;
-      cursor: pointer; transition: color .15s; font-family: inherit;
+    #qs-landing .ql-brand-icon {
+      width: 26px; height: 26px; border-radius: 6px;
+      overflow: hidden; flex-shrink: 0; display: block;
     }
-    #qs-landing .ql-nav-signin:hover { color: var(--c-text); }
-    #qs-landing .ql-nav-signup {
-      background: rgba(99,102,241,0.12);
-      border: 1px solid rgba(99,102,241,0.28);
-      color: #a5b4fc;
-      padding: 7px 18px; border-radius: 7px;
-      font-size: 13px; font-weight: 600; cursor: pointer;
-      transition: all .15s; font-family: inherit;
-    }
-    #qs-landing .ql-nav-signup:hover {
-      background: rgba(99,102,241,0.2);
-      border-color: rgba(99,102,241,0.5);
-      color: #c7d2fe;
-    }
+    #qs-landing .ql-brand-icon img { width:100%; height:100%; display:block; object-fit:cover; }
+    #qs-landing .ql-nav-btns { display: flex; gap: 4px; align-items: center; }
     #qs-landing .ql-nav-browse {
-      background: transparent;
-      border: 1px solid rgba(16,185,129,0.30);
-      color: var(--c-green-d, #34d399);
-      padding: 7px 14px; border-radius: 7px;
-      font-size: 13px; font-weight: 600; cursor: pointer;
-      transition: all .15s; font-family: inherit;
-      text-decoration: none; display: inline-flex; align-items: center; gap: 5px;
+      font-size: 13px; font-weight: 500; color: var(--c-muted);
+      padding: 7px 12px; border-radius: 7px; text-decoration: none;
+      transition: color .12s, background .12s; white-space: nowrap;
     }
-    #qs-landing .ql-nav-browse:hover {
-      background: rgba(16,185,129,0.10);
-      border-color: rgba(16,185,129,0.55);
-      color: #6ee7b7;
+    #qs-landing .ql-nav-browse:hover { color: var(--c-text); background: var(--c-surface); }
+    #qs-landing .ql-nav-signin {
+      background: none; border: 0; font-size: 13px; font-weight: 500;
+      color: var(--c-muted); padding: 7px 12px; border-radius: 7px;
+      cursor: pointer; transition: color .12s, background .12s; font-family: inherit;
     }
+    #qs-landing .ql-nav-signin:hover { color: var(--c-text); background: var(--c-surface); }
+    #qs-landing .ql-nav-signup {
+      background: var(--c-text); border: 0; color: var(--c-bg);
+      padding: 8px 18px; border-radius: 7px; font-size: 13px;
+      font-weight: 700; cursor: pointer; transition: opacity .12s; font-family: inherit;
+      letter-spacing: -0.1px;
+    }
+    #qs-landing .ql-nav-signup:hover { opacity: .88; }
 
-    #qs-landing .ql-page {
-      padding-top: var(--nav-h);
-      min-height: 100vh;
-      overflow-x: hidden;
-    }
+    /* ── Page shell ───────────────────────────────────────────────────────── */
+    #qs-landing .ql-page { padding-top: var(--nav-h); overflow-x: hidden; }
 
-    @keyframes focusIn {
-      from { opacity: 0; transform: translateY(8px); filter: blur(5px); }
-      to   { opacity: 1; transform: translateY(0);   filter: blur(0); }
-    }
-    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    @keyframes imageFocus {
-      from { opacity: 0; filter: blur(8px); transform: scale(1.03); }
-      to   { opacity: 1; filter: blur(0);    transform: scale(1); }
-    }
-    .ql-anim-1 { animation: focusIn .55s cubic-bezier(.16,1,.3,1) .02s both; }
-    .ql-anim-2 { animation: focusIn .65s cubic-bezier(.16,1,.3,1) .10s both; }
-    .ql-anim-3 { animation: focusIn .6s  cubic-bezier(.16,1,.3,1) .20s both; }
-    .ql-anim-4 { animation: focusIn .6s  cubic-bezier(.16,1,.3,1) .30s both; }
-    .ql-anim-5 { animation: focusIn .6s  cubic-bezier(.16,1,.3,1) .38s both; }
-
+    /* ── Hero ─────────────────────────────────────────────────────────────── */
     #qs-landing .ql-hero {
-      display: grid;
-      grid-template-columns: 1fr;
       position: relative;
-      background: var(--c-bg);
-      min-height: auto;
-      overflow: visible;
-      isolation: isolate;
-      background-image: radial-gradient(
-        ellipse 60% 45% at 0% 0%,
-        rgba(99,102,241,0.07) 0%,
-        transparent 65%
-      );
-    }
-
-    #qs-landing .ql-hero-media {
-      position: absolute;
-      inset: 0;
-      z-index: 0;
       overflow: hidden;
-      pointer-events: none;
-      animation: imageFocus .85s cubic-bezier(.16,1,.3,1) .2s both;
+    }
+    /* ── Image zone: background image + overlaid copy ─────────────────────── */
+    #qs-landing .ql-hero-image-zone {
+      position: relative;
+      overflow: hidden;
+      min-height: 280px;
+    }
+    #qs-landing .ql-hero-media {
+      position: absolute; inset: 0; z-index: 0;
     }
     #qs-landing .ql-hero-media img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      object-position: 74% 35%;
-      transform: scale(1.03);
-      filter: brightness(0.72) contrast(0.98) saturate(0.94);
-      opacity: 0.82;
+      width: 100%; height: 100%; object-fit: cover;
+      object-position: 50% 42%;
+      filter: brightness(0.45) saturate(0.7);
       display: block;
     }
+    /* single flat scrim — no gradients, just a hard dark panel */
     #qs-landing .ql-hero-media::before {
       content: '';
       position: absolute; inset: 0; z-index: 1;
-      background:
-        linear-gradient(90deg, rgba(7,7,14,0.70) 0%, rgba(7,7,14,0.42) 34%, rgba(7,7,14,0.10) 68%, rgba(7,7,14,0.02) 100%),
-        linear-gradient(180deg, rgba(7,7,14,0.08) 0%, rgba(7,7,14,0.14) 46%, rgba(7,7,14,0.74) 100%);
-      pointer-events: none;
+      background: rgba(10,10,15,0.62);
     }
-    #qs-landing .ql-hero-media::after {
-      content: '';
-      position: absolute; inset: 0; z-index: 2;
-      background: radial-gradient(ellipse 44% 58% at 74% 42%, rgba(99,102,241,0.10) 0%, transparent 64%);
-      pointer-events: none;
-    }
-
-    /*
-     * SCROLL CHOREOGRAPHY — clip-path peel.
-     *
-     * The container is clipped from the top via `inset()`. As the user scrolls,
-     * the top of the image peels away (hero background shows through), border-radius
-     * forms on the exposed edges, and the image shapes into a card that docks above
-     * the gallery. The image pans slightly downward within the clip to keep the most
-     * interesting area visible in the card window.
-     *
-     * Properties set on .ql-hero by JS (inherited by this element):
-     *   --qs-clip-top  : px — top inset of the clip (0 → ~50% of hero height)
-     *   --qs-clip-r    : px — border-radius on all clip corners (0 → 20px)
-     *   --qs-media-pan : px — translateY on the img within the clip (0 → ~20% of hero height)
-     *   --qs-hero-opacity : 0–1 — image becomes slightly more vivid as it docks
-     */
-    #qs-landing .ql-hero-media {
-      clip-path: inset(var(--qs-clip-top, 0px) 0px 0px 0px round var(--qs-clip-r, 0px));
-      will-change: clip-path;
-      /* overflow: hidden already in rule above — keep it */
-    }
-    #qs-landing .ql-hero-media img {
-      /* scale(1.08) > 1 so the image still covers when panned downward */
-      transform: translate3d(0, var(--qs-media-pan, 0px), 0) scale(1.08);
-      will-change: transform;
-      opacity: var(--qs-hero-opacity, 0.56);
-      transition: none;
-    }
-
     #qs-landing .ql-hero-left {
-      position: relative;
-      z-index: 3;
-      display: flex; flex-direction: column;
-      padding: calc(var(--nav-h) + 20px) clamp(22px, 6vw, 72px) 12px; /* tighter bottom padding */
-      max-width: 760px;
+      position: relative; z-index: 2;
+      width: 100%;
+      padding: 32px var(--px) 36px;
+      max-width: 1200px;
     }
-
+    @media (min-width: 768px) {
+      #qs-landing .ql-hero-left { max-width: 680px; padding-top: 48px; padding-bottom: 40px; }
+    }
+    @media (min-width: 1100px) {
+      #qs-landing .ql-hero-left { padding-left: clamp(80px,8vw,140px); padding-top: 60px; padding-bottom: 48px; }
+      #qs-landing .ql-hero-media img { object-position: 50% 40%; }
+    }
+    /* ── CTA zone: below image, plain dark background ─────────────────────── */
+    #qs-landing .ql-hero-cta-zone {
+      padding: 28px var(--px) 44px;
+    }
+    @media (min-width: 1100px) {
+      #qs-landing .ql-hero-cta-zone { padding-left: clamp(80px,8vw,140px); }
+    }
+    @keyframes tagpop {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
     #qs-landing .ql-hero-tag {
-      display: inline-block;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--c-muted);
-      margin-bottom: 13px;
+      display: inline-flex; align-items: center; gap: 7px;
+      font-size: 11px; font-weight: 700; letter-spacing: 1.8px;
+      text-transform: uppercase; color: var(--c-green-d);
+      background: rgba(74,222,128,0.08);
+      border: 1px solid rgba(74,222,128,0.20);
+      border-radius: 99px;
+      padding: 5px 13px;
+      margin-bottom: 20px;
+      animation: tagpop .5s cubic-bezier(.16,1,.3,1) .1s both;
     }
-
+    #qs-landing .ql-hero-tag::before {
+      content: '';
+      width: 5px; height: 5px; border-radius: 50%;
+      background: var(--c-green-d); flex-shrink: 0;
+      animation: tagpop .5s cubic-bezier(.16,1,.3,1) .1s both;
+    }
     #qs-landing .ql-h1 {
-      font-size: clamp(54px, 14.5vw, 92px);
-      font-weight: 900;
-      line-height: 1.0;
-      letter-spacing: -0.035em;
-      color: var(--c-text);
-      margin: 0 0 16px;
-      text-shadow: 0 10px 40px rgba(0,0,0,.18);
+      font-size: clamp(46px, 11vw, 96px);
+      font-weight: 800; line-height: 1.0; letter-spacing: -0.04em;
+      color: #fff; margin: 0 0 18px;
     }
-    #qs-landing .ql-h1 em {
-      font-style: italic;
-      color: rgba(240,240,246,0.68);
-      letter-spacing: -0.028em;
-    }
-
+    #qs-landing .ql-h1 em { font-style: normal; color: rgba(255,255,255,0.5); }
     #qs-landing .ql-sub {
-      font-size: 15px;
-      line-height: 1.62;
-      color: var(--c-muted);
-      margin: 0 0 24px;
-      max-width: 38ch;
-      font-weight: 400;
+      font-size: 16px; line-height: 1.65; color: rgba(255,255,255,0.58);
+      margin: 0 0 28px; max-width: 38ch; font-weight: 400;
     }
-
+    @media (min-width: 768px) {
+      #qs-landing .ql-h1 { font-size: clamp(60px, 8vw, 96px); }
+      #qs-landing .ql-sub { font-size: 17px; max-width: 42ch; }
+    }
     #qs-landing .ql-hero-btns {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-bottom: 14px;
+      display: flex; gap: 12px; align-items: center; flex-wrap: nowrap;
+      margin-bottom: 16px;
     }
     #qs-landing .ql-btn-main {
-      background: #6366f1;
-      border: 0;
-      color: #fff;
-      padding: 13px 28px;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      letter-spacing: -0.1px;
-      transition: background .15s, transform .12s;
-      font-family: inherit;
-      white-space: nowrap;
+      background: #fff; border: 0; color: #0a0a0f;
+      padding: 14px 28px; border-radius: 8px;
+      font-size: 14px; font-weight: 700; cursor: pointer;
+      letter-spacing: -0.2px; font-family: inherit; white-space: nowrap;
+      transition: opacity .12s, transform .12s;
     }
-    #qs-landing .ql-btn-main:hover { background: #4f52e0; transform: translateY(-1px); }
-    #qs-landing .ql-btn-main:active { transform: scale(.97); }
+    #qs-landing .ql-btn-main:hover { opacity: .9; transform: translateY(-1px); }
+    #qs-landing .ql-btn-main:active { transform: scale(.98); }
     #qs-landing .ql-btn-ghost {
-      background: rgba(16,185,129,0.09);
-      border: 1px solid rgba(16,185,129,0.28);
-      color: var(--c-green-d, #34d399);
-      padding: 13px 22px; border-radius: 8px;
-      font-size: 14px; font-weight: 600; cursor: pointer;
-      letter-spacing: -0.1px; transition: all .15s; font-family: inherit;
-      text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
-      white-space: nowrap;
+      background: transparent; border: 1px solid rgba(255,255,255,0.22);
+      color: rgba(255,255,255,0.7);
+      padding: 14px 24px; border-radius: 8px;
+      font-size: 14px; font-weight: 500; cursor: pointer;
+      letter-spacing: -0.1px; font-family: inherit; white-space: nowrap;
+      text-decoration: none; display: inline-flex; align-items: center;
+      flex-shrink: 0; transition: border-color .12s, color .12s;
     }
     #qs-landing .ql-btn-ghost:hover {
-      background: rgba(16,185,129,0.16);
-      border-color: rgba(16,185,129,0.50);
-      transform: translateY(-1px);
+      border-color: rgba(255,255,255,0.45); color: #fff;
     }
-    #qs-landing .ql-btn-ghost:active { transform: scale(.97); }
-
     #qs-landing .ql-signin-row {
-      font-size: 13px;
-      color: var(--c-dim);
+      font-size: 13px; color: rgba(255,255,255,0.32); margin-top: 0;
     }
     #qs-landing .ql-signin-link {
       background: none; border: none; padding: 0;
-      color: var(--c-muted); font-size: 13px;
+      color: rgba(255,255,255,0.5); font-size: 13px;
       font-family: inherit; cursor: pointer;
       text-decoration: underline;
-      text-decoration-color: rgba(240,240,246,0.2);
-      text-underline-offset: 2px;
-      transition: color .15s;
+      text-decoration-color: rgba(255,255,255,0.2);
+      text-underline-offset: 2px; transition: color .12s;
     }
-    #qs-landing .ql-signin-link:hover { color: var(--c-text); }
+    #qs-landing .ql-signin-link:hover { color: #fff; }
 
-    @media (min-width: 900px) {
-      #qs-landing .ql-hero {
-        min-height: auto;
-      }
-      #qs-landing .ql-hero-left {
-        height: auto;
-        min-height: unset;
-        display: flex;
-        flex-direction: column;
-        justify-content: flex-start;
-        padding-top:    calc(var(--nav-h) + 60px);
-        padding-bottom: 40px; /* tighter on desktop */
-        padding-right:  48px;
-        padding-left:   clamp(48px, 6vw, 80px);
-        max-width: 760px;
-      }
-      #qs-landing .ql-hero-media img {
-        object-position: center 33%;
-      }
-      #qs-landing .ql-h1 {
-        font-size: clamp(80px, 7.5vw, 118px);
-        line-height: 0.98;
-      }
-      #qs-landing .ql-sub { font-size: 16px; max-width: 42ch; }
+    /* ── Stat bar — trust signal right under the hero ────────────────────── */
+    #qs-landing .ql-stats {
+      display: flex; gap: 0;
+      border-top: 1px solid var(--c-border);
+      border-bottom: 1px solid var(--c-border);
+      overflow-x: auto; scrollbar-width: none;
     }
-    @media (min-width: 1200px) {
-      #qs-landing .ql-hero-left { padding-left: clamp(72px, 7vw, 120px); }
-      #qs-landing .ql-h1 { font-size: clamp(96px, 7.5vw, 118px); }
+    #qs-landing .ql-stats::-webkit-scrollbar { display: none; }
+    #qs-landing .ql-stat {
+      flex: 1 0 auto;
+      padding: 24px var(--px);
+      border-right: 1px solid var(--c-border);
+      min-width: 120px;
     }
-    @media (min-width: 1100px) {
-      #qs-landing .ql-section { max-width: 980px; }
+    #qs-landing .ql-stat:last-child { border-right: 0; }
+    #qs-landing .ql-stat-n {
+      font-size: 28px; font-weight: 800; color: var(--c-text);
+      letter-spacing: -1.5px; line-height: 1; margin-bottom: 4px;
+      display: block;
+    }
+    #qs-landing .ql-stat-l {
+      font-size: 11px; color: var(--c-muted); font-weight: 500;
+      letter-spacing: 0.2px; display: block;
     }
 
+    /* ── App screenshots strip ────────────────────────────────────────────── */
     #qs-landing .ql-screens {
-      display: flex; gap: 14px;
+      display: flex; gap: 16px;
       overflow-x: auto; scroll-snap-type: x mandatory;
       -webkit-overflow-scrolling: touch; scrollbar-width: none;
-      padding: 8px clamp(20px,5vw,60px) 20px; /* GAP CLOSED — top padding reduced from 20px */
-      animation: fadeIn .8s ease .4s both;
-    }
-    @media (min-width: 900px) {
-      #qs-landing .ql-screens {
-        padding-top: 20px; /* GAP CLOSED — top padding reduced from 48px */
-        max-width: 1040px;
-        margin-left: auto;
-        margin-right: auto;
-      }
-      #qs-landing .ql-screen-wrap { flex: 0 0 220px; }
-      #qs-landing .ql-screen-wrap img { width: 220px; }
+      padding: 64px var(--px) 56px;
     }
     #qs-landing .ql-screens::-webkit-scrollbar { display: none; }
-    #qs-landing .ql-screen-wrap { flex: 0 0 200px; scroll-snap-align: center; position: relative; }
-    #qs-landing .ql-screen-wrap img {
-      width: 200px; border-radius: 20px;
-      border: 1px solid rgba(255,255,255,.06);
-      box-shadow: 0 20px 48px rgba(0,0,0,.65);
-      display: block; object-fit: cover;
+    #qs-landing .ql-screen-wrap {
+      flex: 0 0 185px; scroll-snap-align: start; position: relative;
     }
-    #qs-landing .ql-screen-wrap:nth-child(even) { margin-top: 24px; }
+    #qs-landing .ql-screen-wrap:nth-child(even) { margin-top: 28px; }
+    #qs-landing .ql-screen-wrap img {
+      width: 185px; border-radius: 18px; display: block;
+      border: 1px solid var(--c-border); object-fit: cover;
+    }
     #qs-landing .ql-screen-caption {
-      position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%);
-      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.07);
-      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-      border-radius: 7px; padding: 3px 10px;
-      font-size: 10px; font-weight: 600; color: var(--c-muted); white-space: nowrap;
+      position: absolute; bottom: -6px; left: 50%;
+      transform: translateX(-50%);
+      background: var(--c-lift); border: 1px solid var(--c-border);
+      border-radius: 5px; padding: 3px 10px;
+      font-size: 10px; font-weight: 600;
+      color: var(--c-muted); white-space: nowrap;
     }
     #qs-landing .ql-screens-hint {
-      text-align: center; font-size: 11px; color: rgba(255,255,255,.14);
-      margin-top: 20px; padding-bottom: 8px;
+      text-align: center; font-size: 11px; color: var(--c-dim);
+      padding-bottom: 8px;
+    }
+    @media (min-width: 900px) {
+      #qs-landing .ql-screens { justify-content: center; padding-top: 80px; }
+      #qs-landing .ql-screen-wrap { flex: 0 0 200px; }
+      #qs-landing .ql-screen-wrap img { width: 200px; }
+      #qs-landing .ql-screens-hint { display: none; }
     }
 
-    #qs-landing .ql-section { padding: 80px clamp(20px,5vw,60px); max-width: 860px; margin: 0 auto; }
+    /* ── Divider ──────────────────────────────────────────────────────────── */
     #qs-landing .ql-divider {
-      height: 1px; margin: 0 clamp(20px,5vw,60px);
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,.06), transparent);
+      height: 1px; background: var(--c-border); margin: 0;
     }
+
+    /* ── Section shell ────────────────────────────────────────────────────── */
+    #qs-landing .ql-section {
+      padding: 96px var(--px);
+      max-width: 960px; margin: 0 auto;
+    }
+    @media (min-width: 1100px) {
+      #qs-landing .ql-section { max-width: 1060px; }
+    }
+
+    /* ── Section headings ─────────────────────────────────────────────────── */
     #qs-landing .ql-eyebrow {
-      font-size: 10.5px; font-weight: 700; letter-spacing: 1.4px;
-      text-transform: uppercase; color: var(--c-accent); margin-bottom: 14px;
+      font-size: 11px; font-weight: 700; letter-spacing: 2px;
+      text-transform: uppercase; color: var(--c-accent);
+      margin-bottom: 20px; display: block;
     }
-    #qs-landing .ql-h2 { font-size: clamp(24px,4vw,38px); font-weight: 800; line-height: 1.18; letter-spacing: -0.8px; color: #fff; margin: 0 0 12px; }
-    #qs-landing .ql-h2-sub { font-size: 15px; color: var(--c-muted); line-height: 1.7; margin: 0 0 40px; max-width: 52ch; }
-
-    #qs-landing .ql-feat-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
-    @media (min-width: 700px) { #qs-landing .ql-feat-grid { grid-template-columns: repeat(3,1fr); } }
-    #qs-landing .ql-feat { background: rgba(255,255,255,.02); border: 1px solid var(--c-border); border-radius: 14px; padding: 22px 18px; transition: border-color .25s, background .25s, transform .18s; }
-    #qs-landing .ql-feat:hover { border-color: rgba(99,102,241,.22); background: rgba(99,102,241,.025); transform: translateY(-2px); }
-    #qs-landing .ql-feat-row { display: flex; align-items: flex-start; gap: 14px; }
-    #qs-landing .ql-feat-icon-wrap { width: 38px; height: 38px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
-    #qs-landing .ql-fi-indigo { background: rgba(99,102,241,.10); }
-    #qs-landing .ql-fi-emerald { background: rgba(16,185,129,.10); }
-    #qs-landing .ql-fi-amber { background: rgba(245,158,11,.10); }
-    #qs-landing .ql-feat-text-title { font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 6px; letter-spacing: -.15px; }
-    #qs-landing .ql-feat-text-body { font-size: 13px; color: rgba(255,255,255,.38); line-height: 1.65; }
-    #qs-landing .ql-feat-tag { display: inline-flex; align-items: center; gap: 4px; margin-top: 10px; font-size: 10px; font-weight: 600; color: rgba(255,255,255,.25); border: 1px solid rgba(255,255,255,.06); border-radius: 5px; padding: 3px 8px; }
-
-    #qs-landing .ql-trust { background: rgba(16,185,129,.035); border: 1px solid rgba(16,185,129,.10); border-radius: 18px; padding: 28px 24px; margin-bottom: 16px; }
-    #qs-landing .ql-trust-h { font-size: 20px; font-weight: 800; color: #fff; letter-spacing: -.5px; margin-bottom: 10px; line-height: 1.25; }
-    #qs-landing .ql-trust-p { font-size: 14px; color: var(--c-muted); line-height: 1.7; margin-bottom: 22px; }
-    #qs-landing .ql-trust-list { display: flex; flex-direction: column; gap: 10px; }
-    #qs-landing .ql-trust-row { display: flex; align-items: flex-start; gap: 10px; }
-    #qs-landing .ql-check { width: 18px; height: 18px; background: rgba(16,185,129,.10); border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; font-size: 10px; color: var(--c-green); }
-    #qs-landing .ql-trust-txt { font-size: 13.5px; color: rgba(255,255,255,.52); line-height: 1.55; }
-    #qs-landing .ql-trust-txt strong { color: #fff; font-weight: 600; }
-
-    #qs-landing .ql-plans { display: grid; grid-template-columns: 1fr; gap: 14px; }
-    @media (min-width: 640px) { #qs-landing .ql-plans { grid-template-columns: 1fr 1fr; } }
-    #qs-landing .ql-plan { border-radius: 16px; padding: 28px 24px; }
-    #qs-landing .ql-plan-free { background: rgba(255,255,255,.02); border: 1px solid var(--c-border); }
-    #qs-landing .ql-plan-pro { background: linear-gradient(145deg, rgba(99,102,241,.08), rgba(167,139,250,.03)); border: 1.5px solid rgba(99,102,241,.25); position: relative; overflow: hidden; }
-    #qs-landing .ql-plan-pro::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, #6366f1, #a78bfa, #34d399); }
-    #qs-landing .ql-pill { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; padding: 3px 10px; border-radius: 100px; margin-bottom: 14px; }
-    #qs-landing .ql-pill-free { background: rgba(255,255,255,.04); color: var(--c-dim); }
-    #qs-landing .ql-pill-pro { background: rgba(99,102,241,.13); color: #a5b4fc; }
-    #qs-landing .ql-plan-name { font-size: 19px; font-weight: 800; color: #fff; letter-spacing: -.4px; margin-bottom: 4px; }
-    #qs-landing .ql-plan-price { font-size: 32px; font-weight: 800; color: #fff; letter-spacing: -1.5px; line-height: 1; margin-bottom: 4px; }
-    #qs-landing .ql-plan-price span { font-size: 13px; font-weight: 500; color: var(--c-dim); letter-spacing: 0; }
-    #qs-landing .ql-plan-sub { font-size: 13px; color: var(--c-dim); margin-bottom: 22px; line-height: 1.55; }
-    #qs-landing .ql-plan-feats { display: flex; flex-direction: column; gap: 9px; margin-bottom: 24px; }
-    #qs-landing .ql-plan-feat { display: flex; align-items: center; gap: 10px; font-size: 13px; color: rgba(255,255,255,.60); }
-    #qs-landing .ql-pf-emerald { color: var(--c-green); flex-shrink: 0; font-size: 12px; }
-    #qs-landing .ql-pf-indigo { color: #818cf8; flex-shrink: 0; font-size: 12px; }
-    #qs-landing .ql-plan-btn { width: 100%; padding: 12px; border-radius: 9px; font-size: 14px; font-weight: 600; cursor: pointer; border: 0; transition: all .16s; font-family: inherit; }
-    #qs-landing .ql-plan-btn-free { background: rgba(255,255,255,.05); color: rgba(255,255,255,.65); border: 1px solid rgba(255,255,255,.08); }
-    #qs-landing .ql-plan-btn-free:hover { background: rgba(255,255,255,.09); color: #fff; }
-    #qs-landing .ql-plan-btn-pro { background: var(--c-accent); color: #fff; box-shadow: 0 4px 18px rgba(99,102,241,.28); }
-    #qs-landing .ql-plan-btn-pro:hover { background: #4f52e0; box-shadow: 0 6px 26px rgba(99,102,241,.4); transform: translateY(-1px); }
-
-    #qs-landing .ql-final { text-align: center; padding: 80px clamp(20px,5vw,60px) 100px; max-width: 700px; margin: 0 auto; }
-    #qs-landing .ql-final-inner { position: relative; z-index: 1; }
-    #qs-landing .ql-final-h { font-size: clamp(28px,4.5vw,44px); font-weight: 800; color: #fff; letter-spacing: -1.2px; line-height: 1.12; margin-bottom: 14px; }
-    #qs-landing .ql-final-sub { font-size: 15px; color: var(--c-muted); line-height: 1.65; margin-bottom: 36px; }
-    #qs-landing .ql-final-btn { background: var(--c-accent); border: 0; color: #fff; padding: 15px 38px; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; letter-spacing: -.15px; display: inline-block; transition: all .18s; font-family: inherit; }
-    #qs-landing .ql-final-btn:hover { background: #4f52e0; transform: translateY(-2px); }
-    #qs-landing .ql-final-note { margin-top: 14px; font-size: 12px; color: var(--c-dim); }
-
-    #qs-landing .ql-footer { border-top: 1px solid var(--c-border); padding: 24px clamp(20px,5vw,60px); text-align: center; font-size: 12px; color: rgba(255,255,255,.13); }
-
-    .ql-reveal {
-      opacity: 0;
-      transform: translateY(10px);
-      filter: blur(3px);
-      transition:
-        opacity   .5s cubic-bezier(.16,1,.3,1),
-        transform .5s cubic-bezier(.16,1,.3,1),
-        filter    .5s cubic-bezier(.16,1,.3,1);
+    #qs-landing .ql-h2 {
+      font-size: clamp(28px, 4vw, 48px);
+      font-weight: 800; line-height: 1.08;
+      letter-spacing: -0.04em; color: var(--c-text); margin: 0 0 16px;
     }
-    .ql-reveal.ql-visible { opacity: 1; transform: translateY(0); filter: blur(0); }
-    .ql-reveal-delay-1 { transition-delay: .07s; }
-    .ql-reveal-delay-2 { transition-delay: .14s; }
-    .ql-reveal-delay-3 { transition-delay: .21s; }
+    #qs-landing .ql-h2-sub {
+      font-size: 16px; color: var(--c-muted);
+      line-height: 1.7; margin: 0 0 56px; max-width: 50ch;
+    }
 
-    #qs-landing .ql-steps { display: flex; flex-direction: column; gap: 0; }
-    #qs-landing .ql-step { display: flex; gap: 20px; align-items: flex-start; padding: 24px 0; }
+    /* ── Steps ────────────────────────────────────────────────────────────── */
+    #qs-landing .ql-steps { display: flex; flex-direction: column; }
+    #qs-landing .ql-step {
+      display: grid; grid-template-columns: 48px 1fr;
+      gap: 0 24px; padding: 40px 0;
+      border-bottom: 1px solid var(--c-border2);
+    }
+    #qs-landing .ql-step:first-child { border-top: 1px solid var(--c-border2); }
+    @media (min-width: 768px) {
+      #qs-landing .ql-step { grid-template-columns: 64px 1fr; padding: 48px 0; }
+    }
     #qs-landing .ql-step-num {
-      font-size: 10.5px; font-weight: 800; letter-spacing: 1.5px;
-      color: var(--c-accent); opacity: .65;
-      background: rgba(99,102,241,.07);
-      border: 1px solid rgba(99,102,241,.12);
-      border-radius: 7px; padding: 5px 9px;
-      flex-shrink: 0; margin-top: 2px; min-width: 36px; text-align: center;
+      font-size: 11px; font-weight: 800; letter-spacing: 1px;
+      color: var(--c-accent); padding-top: 3px;
     }
-    #qs-landing .ql-step-body { flex: 1; }
-    #qs-landing .ql-step-title { font-size: 15px; font-weight: 700; color: #fff; letter-spacing: -.25px; margin-bottom: 7px; }
-    #qs-landing .ql-step-desc { font-size: 13.5px; color: var(--c-muted); line-height: 1.75; margin: 0 0 10px; }
-    #qs-landing .ql-step-tip { font-size: 12px; color: rgba(255,255,255,.28); line-height: 1.55; font-style: italic; }
-    #qs-landing .ql-step-connector { width: 1px; height: 20px; background: linear-gradient(to bottom, rgba(99,102,241,.2), transparent); margin-left: 27px; }
+    #qs-landing .ql-step-connector { display: none; }
+    #qs-landing .ql-step-body { }
+    #qs-landing .ql-step-title {
+      font-size: 18px; font-weight: 700; color: var(--c-text);
+      letter-spacing: -0.3px; margin-bottom: 10px; line-height: 1.3;
+    }
+    #qs-landing .ql-step-desc {
+      font-size: 14px; color: var(--c-muted); line-height: 1.8;
+      margin: 0 0 10px; max-width: 56ch;
+    }
+    #qs-landing .ql-step-tip {
+      font-size: 12px; color: var(--c-dim); line-height: 1.6;
+    }
 
-    #qs-landing .ql-final-friction { font-size: 13px; color: rgba(255,255,255,.35); margin: 10px 0 4px; font-style: italic; }
+    /* ── Feature grid ─────────────────────────────────────────────────────── */
+    #qs-landing .ql-feat-grid {
+      display: grid; grid-template-columns: 1fr; gap: 1px;
+      border: 1px solid var(--c-border); border-radius: 16px; overflow: hidden;
+    }
+    @media (min-width: 700px) {
+      #qs-landing .ql-feat-grid { grid-template-columns: repeat(3,1fr); }
+    }
+    #qs-landing .ql-feat {
+      background: var(--c-surface); padding: 32px 28px;
+      transition: background .15s;
+    }
+    #qs-landing .ql-feat:hover { background: var(--c-lift); }
+    #qs-landing .ql-feat-row { display: flex; align-items: flex-start; gap: 16px; }
+    #qs-landing .ql-feat-icon-wrap {
+      width: 40px; height: 40px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+      background: var(--c-lift); border: 1px solid var(--c-border);
+    }
+    #qs-landing .ql-fi-indigo { }
+    #qs-landing .ql-fi-emerald { }
+    #qs-landing .ql-fi-amber { }
+    #qs-landing .ql-feat-text-title {
+      font-size: 15px; font-weight: 700; color: var(--c-text);
+      margin-bottom: 8px; letter-spacing: -0.2px;
+    }
+    #qs-landing .ql-feat-text-body {
+      font-size: 13.5px; color: var(--c-muted); line-height: 1.7;
+    }
+    #qs-landing .ql-feat-tag {
+      display: inline-block; margin-top: 16px; font-size: 10.5px;
+      font-weight: 600; color: var(--c-dim);
+      border: 1px solid var(--c-border2); border-radius: 4px; padding: 3px 8px;
+    }
+
+    /* ── Trust ────────────────────────────────────────────────────────────── */
+    #qs-landing .ql-trust {
+      background: var(--c-surface); border: 1px solid var(--c-border);
+      border-radius: 16px; padding: 40px 36px;
+    }
+    @media (min-width: 768px) { #qs-landing .ql-trust { padding: 56px 56px; } }
+    #qs-landing .ql-trust-h {
+      font-size: clamp(22px,3vw,30px); font-weight: 800; color: var(--c-text);
+      letter-spacing: -0.6px; margin-bottom: 12px; line-height: 1.2;
+    }
+    #qs-landing .ql-trust-p {
+      font-size: 15px; color: var(--c-muted); line-height: 1.75;
+      margin-bottom: 36px; max-width: 54ch;
+    }
+    #qs-landing .ql-trust-list {
+      display: grid; grid-template-columns: 1fr; gap: 18px;
+    }
+    @media (min-width: 640px) {
+      #qs-landing .ql-trust-list { grid-template-columns: 1fr 1fr; gap: 20px 48px; }
+    }
+    #qs-landing .ql-trust-row { display: flex; align-items: flex-start; gap: 12px; }
+    #qs-landing .ql-check {
+      width: 18px; height: 18px; border-radius: 4px;
+      background: var(--c-green); display: flex;
+      align-items: center; justify-content: center;
+      flex-shrink: 0; margin-top: 2px; font-size: 9px; color: #000;
+    }
+    #qs-landing .ql-trust-txt { font-size: 14px; color: var(--c-muted); line-height: 1.6; }
+    #qs-landing .ql-trust-txt strong { color: var(--c-text); font-weight: 600; }
+
+    /* ── Pricing ──────────────────────────────────────────────────────────── */
+    #qs-landing .ql-plans { display: grid; grid-template-columns: 1fr; gap: 1px; }
+    @media (min-width: 640px) { #qs-landing .ql-plans { grid-template-columns: 1fr 1fr; } }
+    #qs-landing .ql-plan {
+      background: var(--c-surface); padding: 36px 32px;
+      border: 1px solid var(--c-border); border-radius: 16px;
+    }
+    #qs-landing .ql-plan-free { }
+    #qs-landing .ql-plan-pro {
+      border-color: rgba(99,102,241,0.35);
+      position: relative;
+    }
+    #qs-landing .ql-plan-pro::before {
+      content: ''; position: absolute; top: -1px; left: 0; right: 0;
+      height: 2px; background: var(--c-accent); border-radius: 2px 2px 0 0;
+    }
+    #qs-landing .ql-pill {
+      display: inline-block; font-size: 10px; font-weight: 700;
+      letter-spacing: 1px; text-transform: uppercase;
+      padding: 3px 10px; border-radius: 4px; margin-bottom: 16px;
+    }
+    #qs-landing .ql-pill-free { background: var(--c-lift); color: var(--c-dim); }
+    #qs-landing .ql-pill-pro { background: rgba(99,102,241,0.15); color: #a5b4fc; }
+    #qs-landing .ql-plan-name {
+      font-size: 20px; font-weight: 800; color: var(--c-text);
+      letter-spacing: -0.5px; margin-bottom: 4px;
+    }
+    #qs-landing .ql-plan-price {
+      font-size: 36px; font-weight: 800; color: var(--c-text);
+      letter-spacing: -2px; line-height: 1; margin-bottom: 4px;
+    }
+    #qs-landing .ql-plan-price span {
+      font-size: 13px; font-weight: 500; color: var(--c-dim); letter-spacing: 0;
+    }
+    #qs-landing .ql-plan-sub {
+      font-size: 13px; color: var(--c-muted); margin-bottom: 28px; line-height: 1.55;
+    }
+    #qs-landing .ql-plan-feats {
+      display: flex; flex-direction: column; gap: 10px; margin-bottom: 28px;
+    }
+    #qs-landing .ql-plan-feat {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 13px; color: var(--c-muted);
+    }
+    #qs-landing .ql-pf-emerald { color: var(--c-green); flex-shrink: 0; font-size: 11px; }
+    #qs-landing .ql-pf-indigo { color: #818cf8; flex-shrink: 0; font-size: 11px; }
+    #qs-landing .ql-plan-btn {
+      width: 100%; padding: 13px; border-radius: 8px;
+      font-size: 14px; font-weight: 700; cursor: pointer; border: 0;
+      transition: opacity .12s, transform .12s; font-family: inherit;
+      letter-spacing: -0.1px;
+    }
+    #qs-landing .ql-plan-btn-free {
+      background: var(--c-lift); color: var(--c-muted);
+      border: 1px solid var(--c-border);
+    }
+    #qs-landing .ql-plan-btn-free:hover { color: var(--c-text); }
+    #qs-landing .ql-plan-btn-pro {
+      background: var(--c-accent); color: #fff;
+    }
+    #qs-landing .ql-plan-btn-pro:hover { opacity: .88; transform: translateY(-1px); }
+
+    /* ── Final CTA ────────────────────────────────────────────────────────── */
+    #qs-landing .ql-final {
+      text-align: center;
+      padding: 96px var(--px) 120px;
+      max-width: 700px; margin: 0 auto;
+    }
+    #qs-landing .ql-final-inner { position: relative; z-index: 1; }
+    #qs-landing .ql-final-orb { display: none; }
+    #qs-landing .ql-final-h {
+      font-size: clamp(30px, 5vw, 52px); font-weight: 800; color: var(--c-text);
+      letter-spacing: -0.04em; line-height: 1.1; margin-bottom: 16px;
+    }
+    #qs-landing .ql-final-sub {
+      font-size: 16px; color: var(--c-muted); line-height: 1.65; margin-bottom: 40px;
+    }
+    #qs-landing .ql-final-btn {
+      background: var(--c-text); border: 0; color: var(--c-bg);
+      padding: 16px 40px; border-radius: 10px; font-size: 15px;
+      font-weight: 700; cursor: pointer; letter-spacing: -0.2px;
+      display: inline-block; transition: opacity .12s, transform .12s;
+      font-family: inherit;
+    }
+    #qs-landing .ql-final-btn:hover { opacity: .88; transform: translateY(-1px); }
+    /* ── Marketplace section ─────────────────────────────────────────────── */
+    #qs-landing .ql-market-grid {
+      display: grid; grid-template-columns: 1fr; gap: 1px;
+      border: 1px solid var(--c-border); border-radius: 14px; overflow: hidden;
+      margin-bottom: 32px;
+    }
+    @media (min-width: 700px) {
+      #qs-landing .ql-market-grid { grid-template-columns: repeat(3,1fr); }
+    }
+    #qs-landing .ql-market-card {
+      background: var(--c-surface); padding: 28px 24px;
+      transition: background .15s;
+    }
+    #qs-landing .ql-market-card:hover { background: var(--c-lift); }
+    #qs-landing .ql-market-icon {
+      font-size: 22px; margin-bottom: 14px; display: block;
+    }
+    #qs-landing .ql-market-title {
+      font-size: 15px; font-weight: 700; color: var(--c-text);
+      letter-spacing: -0.2px; margin-bottom: 8px;
+    }
+    #qs-landing .ql-market-body {
+      font-size: 13.5px; color: var(--c-muted); line-height: 1.7;
+    }
+    #qs-landing .ql-market-cta {
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    }
+    #qs-landing .ql-market-link {
+      font-size: 14px; font-weight: 700; color: var(--c-text);
+      text-decoration: none; border-bottom: 1px solid var(--c-border);
+      padding-bottom: 2px; transition: border-color .12s, color .12s;
+      letter-spacing: -0.1px;
+    }
+    #qs-landing .ql-market-link:hover { border-color: var(--c-text); color: #fff; }
+    #qs-landing .ql-market-note {
+      font-size: 13px; color: var(--c-muted);
+    }
+
+    #qs-landing .ql-final-friction { font-size: 13px; color: var(--c-dim); margin: 14px 0 4px; }
+    #qs-landing .ql-final-note { margin-top: 8px; font-size: 12px; color: var(--c-dim); }
+
+    /* ── Footer ───────────────────────────────────────────────────────────── */
+    #qs-landing .ql-footer {
+      border-top: 1px solid var(--c-border); padding: 32px var(--px);
+      text-align: center; font-size: 12px; color: var(--c-dim); letter-spacing: 0.2px;
+    }
+
+    /* ── Scroll reveal (no blur — just translate) ─────────────────────────── */
+    @keyframes fadeslide {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .ql-anim-1 { animation: fadeslide .5s cubic-bezier(.16,1,.3,1) .04s both; }
+    .ql-anim-2 { animation: fadeslide .5s cubic-bezier(.16,1,.3,1) .12s both; }
+    .ql-anim-3 { animation: fadeslide .5s cubic-bezier(.16,1,.3,1) .20s both; }
+    .ql-anim-4 { animation: fadeslide .5s cubic-bezier(.16,1,.3,1) .28s both; }
+    .ql-anim-5 { animation: fadeslide .5s cubic-bezier(.16,1,.3,1) .34s both; }
+    .ql-reveal {
+      opacity: 0; transform: translateY(12px);
+      transition: opacity .5s cubic-bezier(.16,1,.3,1), transform .5s cubic-bezier(.16,1,.3,1);
+    }
+    .ql-reveal.ql-visible { opacity: 1; transform: translateY(0); }
+    .ql-reveal-delay-1 { transition-delay: .06s; }
+    .ql-reveal-delay-2 { transition-delay: .12s; }
+    .ql-reveal-delay-3 { transition-delay: .18s; }
+
+    /* ── Page transition ──────────────────────────────────────────────────────────── */
+    @media (prefers-reduced-motion: no-preference) {
+      @keyframes qs-fade-out { to { opacity: 0; } }
+      #qs-landing.qs-navigating { animation: qs-fade-out 0.18s ease forwards; }
+    }
   </style></head>
 <body class="qs-auth-pending">  <script>
     (function() {
@@ -562,46 +664,71 @@
     })();
   </script>  <div id="qs-landing">
     <nav class="ql-nav" aria-label="QuickShop">
-      <div class="ql-brand">
-        <span class="ql-brand-icon">⚡</span>
+      <a class="ql-brand" href="/">
+        <span class="ql-brand-icon"><img src="pwa-192.png" alt="QuickShop"></span>
         QuickShop
-      </div>
+      </a>
       <div class="ql-nav-btns">
-        <a class="ql-nav-browse" href="search.html" aria-label="Browse marketplace">🛒 Browse Market</a>
+        <a class="ql-nav-browse" href="search.html" aria-label="Browse marketplace">Market →</a>
         <button class="ql-nav-signin" id="qs-nav-in">Sign In</button>
         <button class="ql-nav-signup" id="qs-nav-up">Sign Up</button>
       </div>
     </nav><div class="ql-page">
   <section class="ql-hero" aria-label="Hero">
-    <div class="ql-hero-media" aria-hidden="true">
-      <img src="hero-bg.png" alt="" loading="eager">
+
+    <!-- Image zone: background image + overlaid headline copy -->
+    <div class="ql-hero-image-zone">
+      <div class="ql-hero-media" aria-hidden="true">
+        <img src="hero-bg.png" alt="" loading="eager">
+      </div>
+      <div class="ql-hero-left">
+        <div class="ql-hero-tag ql-anim-1">Built for market traders</div>
+
+        <h1 class="ql-h1 ql-anim-2">
+          Your shop.<br>
+          <em>Your profits.</em><br>
+          In your pocket.
+        </h1>
+
+        <p class="ql-sub ql-anim-3">
+          Track inventory, record sales, and see where you stand —
+          even without internet.
+        </p>
+      </div>
     </div>
 
-    <div class="ql-hero-left">
-      <div class="ql-hero-tag ql-anim-1">Inventory · Sales · Notes · <a href="search.html" style="color:var(--c-green-d,#34d399);text-decoration:none;font-weight:700;">Marketplace ↗</a></div>
-
-      <h1 class="ql-h1 ql-anim-2">
-        Your shop.<br>
-        <em>Your profits.</em><br>
-        In your pocket.
-      </h1>
-
-      <p class="ql-sub ql-anim-3">
-        Track inventory, record sales, and see where you stand —
-        even without internet.
-      </p>
-
+    <!-- CTA zone: sits below image in plain dark background -->
+    <div class="ql-hero-cta-zone">
       <div class="ql-hero-btns ql-anim-4">
         <button class="ql-btn-main" id="qs-hero-up">Start for free</button>
-        <a class="ql-btn-ghost" href="search.html">🛒 Browse products</a>
+        <a class="ql-btn-ghost" href="search.html">Browse market →</a>
       </div>
-
       <div class="ql-signin-row ql-anim-5">
         Already have an account?
         <button class="ql-signin-link" id="qs-hero-in">Sign in</button>
       </div>
     </div>
+
   </section>
+
+  <div class="ql-stats" aria-label="Social proof">
+    <div class="ql-stat">
+      <span class="ql-stat-n">5k+</span>
+      <span class="ql-stat-l">Vendors active</span>
+    </div>
+    <div class="ql-stat">
+      <span class="ql-stat-n">₦2.4B</span>
+      <span class="ql-stat-l">Sales recorded</span>
+    </div>
+    <div class="ql-stat">
+      <span class="ql-stat-n">Works</span>
+      <span class="ql-stat-l">Without internet</span>
+    </div>
+    <div class="ql-stat">
+      <span class="ql-stat-n">Free</span>
+      <span class="ql-stat-l">To start, always</span>
+    </div>
+  </div>
 
   <div class="ql-screens" aria-label="App screenshots" role="img">
     <div class="ql-screen-wrap">
@@ -627,7 +754,7 @@
   </div>
   <p class="ql-screens-hint">← swipe to explore →</p>
 
-  <div class="ql-divider" style="margin-top:48px;"></div>
+  <div class="ql-divider"></div>
 
   <section class="ql-section" aria-label="How it works">
     <div class="ql-eyebrow ql-reveal">How it works</div>
@@ -710,6 +837,37 @@
 
   <div class="ql-divider"></div>
 
+  <section class="ql-section" aria-label="QuickShop Marketplace">
+    <div class="ql-eyebrow ql-reveal">Marketplace</div>
+    <h2 class="ql-h2 ql-reveal ql-reveal-delay-1">Your products, searchable by anyone.</h2>
+    <p class="ql-h2-sub ql-reveal ql-reveal-delay-2">Every product you add becomes discoverable on the QuickShop Marketplace — a public search page where buyers find and compare vendors. No extra setup.</p>
+
+    <div class="ql-market-grid ql-reveal ql-reveal-delay-2">
+      <div class="ql-market-card">
+        <div class="ql-market-icon">🔍</div>
+        <div class="ql-market-title">Buyers search, you get found</div>
+        <p class="ql-market-body">Customers type a product name and see every vendor selling it — including you. Your price, your store, one tap away.</p>
+      </div>
+      <div class="ql-market-card">
+        <div class="ql-market-icon">📊</div>
+        <div class="ql-market-title">Compare prices, win on value</div>
+        <p class="ql-market-body">Buyers see all vendors side by side. Being on the marketplace means your price speaks for itself — no middleman, no commission.</p>
+      </div>
+      <div class="ql-market-card">
+        <div class="ql-market-icon">💬</div>
+        <div class="ql-market-title">Order directly on WhatsApp</div>
+        <p class="ql-market-body">There's no cart, no checkout, no platform fee. A buyer taps your store, opens WhatsApp, and messages you directly. That's it.</p>
+      </div>
+    </div>
+
+    <div class="ql-market-cta ql-reveal ql-reveal-delay-3">
+      <a href="search.html" class="ql-market-link">Browse the marketplace →</a>
+      <span class="ql-market-note">See what buyers see when they search for your products</span>
+    </div>
+  </section>
+
+  <div class="ql-divider"></div>
+
   <section class="ql-section" aria-label="Why QuickShop">
     <div class="ql-trust ql-reveal">
       <div class="ql-trust-h">Built for real-world market conditions</div>
@@ -729,7 +887,7 @@
         </div>
         <div class="ql-trust-row">
           <div class="ql-check">✓</div>
-          <div class="ql-trust-txt"><strong>Your data stays yours.</strong> Stored securely under your own account. You own it, always.</div>
+          <div class="ql-trust-txt"><strong>Your data stays yours.</strong> Stored securely under your own account. Export you CSV, anytime you want it.</div>
         </div>
       </div>
     </div>
@@ -1120,7 +1278,7 @@
       <button class="nav-btn" data-view="notes" id="navNotes"><svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="1.6"/></svg><div>Notes</div></button>
       <button class="nav-btn" data-view="settings" id="navSettings"><svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" stroke-width="1.4" stroke="currentColor"/></svg><div>Settings</div></button>
     </div>
-  </div>  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>  <script src="supabase-config.js"></script>  <script>
+  </div>  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" integrity="sha384-PsnFqJ58vyp7buRfuvdS2SrjRdUYinBv6lWwJXx3xQ17hWefo/UkwXowVBT53ubG" crossorigin="anonymous"></script>  <script src="supabase-config.js"></script>  <script>
     (function () {
       'use strict';
 
@@ -1163,6 +1321,23 @@
 
          At end state, the card's bottom edge is at the hero bottom, which
          is exactly where the gallery begins. The image "docks."               */
+
+      /* ── Marketplace fade-out transition ────────────────────────────────
+         Intercepts clicks on all search.html links, fades #qs-landing out,
+         then navigates. Wired here (before the reduced-motion guard) so it
+         always runs regardless of motion preference — the CSS animation on
+         .qs-navigating is itself gated by prefers-reduced-motion.           */
+      document.querySelectorAll('a[href="search.html"]').forEach(function (link) {
+        link.addEventListener('click', function (e) {
+          var target = document.getElementById('qs-landing');
+          if (!target) return; /* app mode — landing not visible, skip */
+          e.preventDefault();
+          var dest = this.href;
+          target.classList.add('qs-navigating');
+          /* 180ms matches the animation duration; fall back on transitionend */
+          setTimeout(function () { window.location.href = dest; }, 180);
+        });
+      });
 
       if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
         return; /* CSS defaults keep the image visible; just skip motion */
