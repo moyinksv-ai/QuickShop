@@ -296,19 +296,37 @@
     nameInput.addEventListener('input', function () {
       const val = nameInput.value.trim();
 
-      // Reset selection when vendor types (they're reconsidering)
+      // Reset selection immediately — vendor is reconsidering
       _selectedId = null;
+
+      // Hide strip on every keystroke. Stale results must never persist
+      // while the vendor is still typing. The debounce will re-show it
+      // only when a fresh RPC result arrives.
+      hideStrip();
 
       clearTimeout(_debounceTimer);
 
       if (val.length < 3) {
-        hideStrip();
         return;
       }
 
       _debounceTimer = setTimeout(function () {
         search(val);
       }, 550); // 550ms: fast enough to feel live, not so fast it hammers the DB
+    });
+
+    // Outside-click handler — dismiss strip when vendor taps outside the form.
+    // Uses capture:false so it runs after any inner click handlers.
+    // Stored on the function so it can be referenced but never needs removal
+    // (the strip is hidden by reset() when the form closes anyway).
+    document.addEventListener('click', function onOutsideClick(e) {
+      const strip = document.getElementById('qs-canon-strip');
+      if (!strip || strip.style.display === 'none') return;
+      const addForm = document.getElementById('addForm');
+      // If the click was inside the add form (which contains both the input
+      // and the strip), leave the strip alone. Otherwise dismiss it.
+      if (addForm && addForm.contains(e.target)) return;
+      hideStrip();
     });
 
     _attached = true;

@@ -63,6 +63,9 @@
       if (videoStream) { try { videoStream.getTracks().forEach(t => t.stop()); } catch (e) {} videoStream = null; }
     } catch (e) { console.warn('stopScanner err', e); }
     scannerActive = false;
+    // Remove torch button if it was injected (avoids duplicates on re-open)
+    const torchBtn = document.getElementById('qs-torch-btn');
+    if (torchBtn) torchBtn.remove();
     const barcodeScanLine     = $('barcodeScanLine');
     const barcodeScannerModal = $('barcodeScannerModal');
     const barcodeResult       = $('barcodeResult');
@@ -145,6 +148,11 @@
       if (barcodeUseBtn)   barcodeUseBtn.style.display   = 'none';
       if (barcodeScanLine) barcodeScanLine.style.display  = 'block';
       scannerActive = true;
+
+      // ── ZXing hints ──────────────────────────────────────────────────────────
+      // POSSIBLE_FORMATS: restrict to 1D retail formats — no QR/Aztec overhead.
+      // TRY_HARDER: enables rotation, multi-crop, lower contrast tolerance.
+      //   Without this, the barcode must be near-perfectly aligned and well-lit.
       const hints   = new Map();
       const formats = [
         ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
@@ -152,10 +160,71 @@
         ZXing.BarcodeFormat.UPC_A,   ZXing.BarcodeFormat.UPC_E,
       ];
       hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
-      codeReader  = new ZXing.BrowserMultiFormatReader(hints);
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+
+      // 200ms between decode attempts (default is 500ms = only 2/sec).
+      // 200ms gives 5 attempts/sec — catches the barcode during repositioning.
+      codeReader = new ZXing.BrowserMultiFormatReader(hints, 200);
+
+      // ── Camera constraints ───────────────────────────────────────────────────
+      // Request 720p ideally. ZXing decodes from raw pixels — more pixels means
+      // a small barcode occupies enough area to decode reliably.
+      // ideal (not exact) so the browser falls back gracefully on older devices.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode:  { ideal: 'environment' },
+          width:       { ideal: 1280 },
+          height:      { ideal: 720 },
+          frameRate:   { ideal: 30 },
+        }
+      });
       videoStream = stream;
       if (barcodeVideo) { barcodeVideo.srcObject = stream; barcodeVideo.play().catch(() => {}); }
+
+      // ── Continuous autofocus ─────────────────────────────────────────────────
+      // Android may lock focus at the distance measured on stream-open.
+      // applyConstraints with focusMode:'continuous' forces the camera to keep
+      // hunting focus, so the barcode sharpens as the vendor holds still.
+      // Silent fallback — not all devices expose this constraint.
+      try {
+        const videoTrack = stream.getVideoTracks()[0];
+        if (videoTrack) {
+          const caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
+          if (caps.focusMode && caps.focusMode.includes('continuous')) {
+            await videoTrack.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+          }
+        }
+      } catch (_) { /* unsupported on this device — safe to ignore */ }
+
+      // ── Torch button ─────────────────────────────────────────────────────────
+      // Inject a torch toggle into the modal only if the device supports it.
+      // Removed by stopScanner via id so it doesn't accumulate on re-opens.
+      try {
+        const videoTrack = stream.getVideoTracks()[0];
+        const caps = videoTrack && videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
+        if (caps.torch) {
+          let torchOn = false;
+          const existing = document.getElementById('qs-torch-btn');
+          if (existing) existing.remove();
+          const torchBtn = document.createElement('button');
+          torchBtn.id        = 'qs-torch-btn';
+          torchBtn.className = 'btn-undo';
+          torchBtn.textContent = '🔦 Torch';
+          torchBtn.style.cssText = 'margin-right:auto;';
+          torchBtn.addEventListener('click', async function () {
+            torchOn = !torchOn;
+            try {
+              await videoTrack.applyConstraints({ advanced: [{ torch: torchOn }] });
+              torchBtn.textContent = torchOn ? '🔦 Torch ON' : '🔦 Torch';
+              torchBtn.style.opacity = torchOn ? '1' : '0.6';
+            } catch (_) { torchBtn.remove(); }
+          });
+          const actionsRow = document.querySelector('#barcodeScannerModal .actions');
+          if (actionsRow) actionsRow.insertBefore(torchBtn, actionsRow.firstChild);
+        }
+      } catch (_) { /* torch not supported — no button shown */ }
+
+      // ── Decode loop ──────────────────────────────────────────────────────────
       if (codeReader.decodeFromVideoDevice) {
         try { codeReader.decodeFromVideoDevice(null, barcodeVideo, (res) => { if (res) handleScanResult(res); }); }
         catch (e) { if (codeReader.decodeContinuously) codeReader.decodeContinuously(barcodeVideo, (res) => { if (res) handleScanResult(res); }); else throw e; }
