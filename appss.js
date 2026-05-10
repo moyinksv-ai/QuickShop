@@ -3403,6 +3403,129 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     parent.appendChild(d);
   }
 
+  function _safeStr(value, fallback) {
+    const txt = value == null ? '' : String(value).trim();
+    return txt || (fallback || '');
+  }
+
+  function _normKey(value) {
+    return _safeStr(value).toLowerCase();
+  }
+
+  function _completenessScore(product) {
+    let score = 0;
+    if (product && (product.image || product.image2)) score += 35;
+    if (_safeStr(product && product.description).length >= 24) score += 25;
+    if (_safeStr(product && product.category)) score += 15;
+    if (_safeStr(product && product.barcode)) score += 10;
+    if (product && Number(product.price) > 0) score += 10;
+    if (product && Number(product.qty) > 0) score += 5;
+    return score;
+  }
+
+  function _contentHookForProduct(product) {
+    const blob = [
+      _safeStr(product && product.name),
+      _safeStr(product && product.category),
+      _safeStr(product && product.description),
+    ].join(' ').toLowerCase();
+
+    if (/shoe|sneaker|sandal|slipper|bag|dress|shirt|top|jean|wear|fashion|cap|jacket/.test(blob)) {
+      return 'Try-on clip, outfit pairing, and a close-up of the material or fit.';
+    }
+    if (/beauty|skin|hair|cream|soap|perfume|lotion|makeup|beard|body|oil/.test(blob)) {
+      return 'Show texture, before/after, and the problem it solves in 5 seconds.';
+    }
+    if (/food|snack|drink|beverage|rice|spice|oil|chocolate|cereal|tea|coffee|bread/.test(blob)) {
+      return 'Show the pack open, the portion size, and a bundle or daily-use angle.';
+    }
+    if (/phone|charger|cable|battery|earbud|headphone|power|electronic|tech|speaker/.test(blob)) {
+      return 'Show a demo, the key feature, and compatibility in one fast clip.';
+    }
+    if (/home|kitchen|clean|house|storage|utility|school|baby|office/.test(blob)) {
+      return 'Show the item in use, the before state, and the result in one shot.';
+    }
+    return 'Lead with the problem it solves, then show the product in use.';
+  }
+
+  function _buildGrowthBrief(sig) {
+    const s = sig.s || { products: [], sales: [] };
+    const products = Array.isArray(s.products) ? s.products : [];
+    const inStock = products.filter(function(p) { return Number(p.qty) > 0; });
+    const total = Math.max(products.length, 1);
+
+    const counts = {
+      image: products.filter(function(p) { return !!(p.image || p.image2); }).length,
+      description: products.filter(function(p) { return _safeStr(p.description).length >= 24; }).length,
+      category: products.filter(function(p) { return !!_safeStr(p.category); }).length,
+      barcode: products.filter(function(p) { return !!_safeStr(p.barcode); }).length,
+      price: products.filter(function(p) { return Number(p.price) > 0; }).length,
+      stock: inStock.length,
+    };
+
+    const visibilityScore = Math.max(0, Math.min(100, Math.round(
+      (counts.image / total) * 30 +
+      (counts.description / total) * 25 +
+      (counts.category / total) * 15 +
+      (counts.barcode / total) * 10 +
+      (counts.price / total) * 10 +
+      (counts.stock / total) * 10
+    )));
+
+    const ranked = products.map(function(p) {
+      const missing = [];
+      if (!(p.image || p.image2)) missing.push('image');
+      if (_safeStr(p.description).length < 24) missing.push('description');
+      if (!_safeStr(p.category)) missing.push('category');
+      if (!_safeStr(p.barcode)) missing.push('barcode');
+      if (!(Number(p.price) > 0)) missing.push('price');
+      return { product: p, score: _completenessScore(p), missing: missing };
+    }).sort(function(a, b) {
+      if (a.score !== b.score) return a.score - b.score;
+      return _safeStr(a.product && a.product.name).localeCompare(_safeStr(b.product && b.product.name));
+    });
+
+    const bestSeller = (sig.topByProfit && sig.topByProfit[0] && sig.topByProfit[0].product) || inStock[0] || products[0] || null;
+    const promote = [];
+    (sig.topByProfit || []).forEach(function(item) {
+      if (item && item.product && Number(item.product.qty) > 0 && promote.indexOf(item.product) === -1) {
+        promote.push(item.product);
+      }
+    });
+    inStock.sort(function(a, b) {
+      return _completenessScore(b) - _completenessScore(a);
+    }).forEach(function(p) {
+      if (promote.length < 3 && promote.indexOf(p) === -1) promote.push(p);
+    });
+
+    const fixNow = ranked.filter(function(item) {
+      return item.missing.length > 0 || item.score < 70;
+    }).slice(0, 4);
+
+    const lowStockHero = (sig.restockAlerts || []).filter(function(item) {
+      return item && item.product && Number(item.product.qty) > 0;
+    }).sort(function(a, b) {
+      return a.daysLeft - b.daysLeft;
+    }).slice(0, 3);
+
+    const weakMarginFastMover = (sig.priceOpps || []).slice(0, 3);
+    const deadStock = (sig.cashTraps || []).slice(0, 3);
+
+    return {
+      total: products.length,
+      visibilityScore: visibilityScore,
+      counts: counts,
+      bestSeller: bestSeller,
+      promote: promote.slice(0, 3),
+      fixNow: fixNow,
+      lowStockHero: lowStockHero,
+      weakMarginFastMover: weakMarginFastMover,
+      deadStock: deadStock,
+      contentHookForProduct: _contentHookForProduct,
+      completenessScore: _completenessScore,
+    };
+  }
+
   // ── SIGNAL COMPUTATION ────────────────────────────────────────────────────
   function _computeSignals() {
     // Use the safe frozen copy — never access raw closure state directly.
@@ -3545,47 +3668,156 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
 
   // ── BUILD LOCAL INSIGHT DOM (Layer 1) ─────────────────────────────────────
   function _buildInsightDom(sig, includeAskAiBtn) {
-    const { rev7, revPrev7, prof7, txCount7, trendPct, bestDayEntry,
+    const growth = _buildGrowthBrief(sig);
+    const { s, rev7, revPrev7, prof7, txCount7, trendPct, bestDayEntry,
             restockAlerts, profitLeaks, topByProfit,
             cashTraps, totalTrapped, priceOpps } = sig;
 
     const wrap = document.createElement('div');
     wrap.style.cssText = 'display:flex;flex-direction:column;gap:10px;padding:4px 0 16px;';
 
-    // ── CARD: WEEKLY SNAPSHOT (only if there's data) ──────────────────
-    if (rev7 > 0 || txCount7 > 0) {
-      const tc = _insCard('rgba(99,102,241,0.35)', 'rgba(99,102,241,0.08)');
-      _insCardHead(tc, '📈', 'This Week', null);
-      const grid = document.createElement('div');
-      grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px 12px 14px;';
-      [
-        { label: 'Revenue',   val: fmt(rev7),  color: '#10b981' },
-        { label: 'Profit',    val: fmt(prof7), color: '#a78bfa' },
-        { label: trendPct !== null ? 'vs Last Week' : 'Transactions',
-          val:   trendPct !== null
-            ? (trendPct >= 0 ? '↑' : '↓') + Math.abs(trendPct).toFixed(0) + '%'
-            : txCount7 + ' sales',
-          color: trendPct !== null ? (trendPct >= 0 ? '#10b981' : '#ef4444') : '#fff' }
-      ].forEach(function(cell) {
-        const box = document.createElement('div');
-        box.style.cssText = 'background:rgba(0,0,0,0.25);border-radius:10px;padding:10px 6px;text-align:center;';
-        const lbl = document.createElement('div');
-        lbl.style.cssText = 'font-size:10px;color:rgba(255,255,255,0.45);margin-bottom:5px;letter-spacing:0.3px;';
-        lbl.textContent = cell.label;
-        const vl = document.createElement('div');
-        vl.style.cssText = 'font-size:15px;font-weight:800;color:' + cell.color + ';letter-spacing:-0.3px;';
-        vl.textContent = cell.val;
-        box.appendChild(lbl); box.appendChild(vl);
-        grid.appendChild(box);
+    // ── CARD: GROWTH SNAPSHOT ──────────────────────────────────────────────
+    const hero = _insCard('rgba(59,130,246,0.35)', 'rgba(59,130,246,0.08)');
+    _insCardHead(hero, '🧭', 'Growth Snapshot', 'What to fix, feature, and push next');
+    const heroBody = document.createElement('div');
+    heroBody.style.cssText = 'padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px;';
+
+    const scoreRow = document.createElement('div');
+    scoreRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(0,0,0,0.24);border-radius:12px;padding:12px 14px;';
+    const scoreLeft = document.createElement('div');
+    const scoreLabel = document.createElement('div');
+    scoreLabel.style.cssText = 'font-size:11px;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;';
+    scoreLabel.textContent = 'Storefront visibility';
+    const scoreVal = document.createElement('div');
+    scoreVal.style.cssText = 'font-size:28px;font-weight:900;line-height:1;color:#fff;';
+    scoreVal.textContent = growth.visibilityScore + '/100';
+    const scoreSub = document.createElement('div');
+    scoreSub.style.cssText = 'font-size:12px;color:rgba(255,255,255,0.55);margin-top:4px;line-height:1.5;';
+    scoreSub.textContent = growth.visibilityScore >= 80
+      ? 'Strong presentation. Now push more social proof and fresh content.'
+      : growth.visibilityScore >= 55
+        ? 'Good base. A few listing fixes will lift clicks and marketplace reach.'
+        : 'Weak discovery. Fix presentation first so the numbers have room to grow.';
+    scoreLeft.appendChild(scoreLabel);
+    scoreLeft.appendChild(scoreVal);
+    scoreLeft.appendChild(scoreSub);
+    const scoreBadge = document.createElement('div');
+    scoreBadge.style.cssText = 'padding:8px 10px;border-radius:999px;font-size:12px;font-weight:800;background:rgba(255,255,255,0.08);color:#fff;white-space:nowrap;';
+    scoreBadge.textContent = growth.bestSeller ? 'Hero: ' + _safeStr(growth.bestSeller.name, 'pick one') : 'Hero: choose a product';
+    scoreRow.appendChild(scoreLeft);
+    scoreRow.appendChild(scoreBadge);
+    heroBody.appendChild(scoreRow);
+
+    const insightGrid = document.createElement('div');
+    insightGrid.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:8px;';
+    [
+      { label: 'Images ready', val: growth.counts.image + '/' + growth.total },
+      { label: 'Descriptions ready', val: growth.counts.description + '/' + growth.total },
+      { label: 'Marketplace-ready', val: growth.counts.category + '/' + growth.total },
+    ].forEach(function(cell) {
+      const box = document.createElement('div');
+      box.style.cssText = 'background:rgba(0,0,0,0.22);border-radius:12px;padding:10px 8px;text-align:center;';
+      const lbl = document.createElement('div');
+      lbl.style.cssText = 'font-size:10px;color:rgba(255,255,255,0.45);margin-bottom:6px;letter-spacing:0.3px;text-transform:uppercase;';
+      lbl.textContent = cell.label;
+      const vl = document.createElement('div');
+      vl.style.cssText = 'font-size:14px;font-weight:800;color:#fff;';
+      vl.textContent = cell.val;
+      box.appendChild(lbl);
+      box.appendChild(vl);
+      insightGrid.appendChild(box);
+    });
+    heroBody.appendChild(insightGrid);
+
+    const nextMove = document.createElement('div');
+    nextMove.style.cssText = 'background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:12px;padding:12px 14px;';
+    const nextTitle = document.createElement('div');
+    nextTitle.style.cssText = 'font-size:12px;font-weight:800;color:#86efac;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:5px;';
+    nextTitle.textContent = 'Today’s move';
+    const nextText = document.createElement('div');
+    nextText.style.cssText = 'font-size:13px;color:rgba(240,240,246,0.9);line-height:1.55;';
+    nextText.textContent = growth.promote.length
+      ? 'Feature ' + _safeStr(growth.promote[0].name, 'your best item') + ' at the top of the storefront, then turn it into a post and a Reel this week.'
+      : 'Pick one item with stock, images, and a clean description, then make it the storefront hero.';
+    nextMove.appendChild(nextTitle);
+    nextMove.appendChild(nextText);
+    heroBody.appendChild(nextMove);
+    hero.appendChild(heroBody);
+    wrap.appendChild(hero);
+
+    // ── CARD: VISIBILITY & LISTING QUALITY ────────────────────────────────
+    const vis = _insCard('rgba(168,85,247,0.28)', 'rgba(168,85,247,0.06)');
+    _insCardHead(vis, '✨', 'Visibility & Listing Quality', 'What shoppers and the marketplace see first');
+    const visBody = document.createElement('div');
+    visBody.style.cssText = 'padding:12px 14px 14px;display:flex;flex-direction:column;gap:8px;';
+    const visText = document.createElement('div');
+    visText.style.cssText = 'font-size:13px;color:rgba(255,255,255,0.82);line-height:1.6;';
+    visText.textContent = 'Strong listings have a clear image, a readable description, a category, and a simple name. Products missing those signals are harder to find and harder to trust.';
+    visBody.appendChild(visText);
+    const gapLines = [
+      growth.counts.image < growth.total ? 'Add a real product image to ' + (growth.total - growth.counts.image) + ' product' + ((growth.total - growth.counts.image) === 1 ? '' : 's') + '.' : 'All products already have images.',
+      growth.counts.description < growth.total ? 'Tighten descriptions on ' + (growth.total - growth.counts.description) + ' product' + ((growth.total - growth.counts.description) === 1 ? '' : 's') + ' so shoppers can decide faster.' : 'Descriptions are in good shape.',
+      growth.counts.category < growth.total ? 'Set categories on ' + (growth.total - growth.counts.category) + ' product' + ((growth.total - growth.counts.category) === 1 ? '' : 's') + ' so marketplace browsing works better.' : 'Categories are already populated.',
+    ];
+    gapLines.forEach(function(line) {
+      const d = document.createElement('div');
+      d.style.cssText = 'font-size:12.5px;color:rgba(255,255,255,0.62);line-height:1.5;padding:8px 10px;background:rgba(255,255,255,0.04);border-radius:10px;';
+      d.textContent = line;
+      visBody.appendChild(d);
+    });
+    vis.appendChild(visBody);
+    wrap.appendChild(vis);
+
+    // ── CARD: PROMOTE THESE NOW ───────────────────────────────────────────
+    if (growth.promote.length > 0) {
+      const pc = _insCard('rgba(16,185,129,0.28)', 'rgba(16,185,129,0.06)');
+      _insCardHead(pc, '📣', 'Promote These Now', 'Best candidates for the storefront cover, posts, and Reels');
+      growth.promote.forEach(function(p, idx) {
+        _insRow(pc, p.name,
+          'Hook: ' + growth.contentHookForProduct(p) + ' · stock ' + p.qty + ' · ' + (p.category || 'no category'),
+          idx === 0 ? 'Edit hero' : 'Edit listing',
+          idx === 0 ? '#10b981' : '#0f766e',
+          { action: 'edit', productId: p.id, price: String(p.price || '') });
       });
-      tc.appendChild(grid);
-      if (bestDayEntry) {
-        _insFootnote(tc, 'Best day: ' + bestDayEntry[0] + ' — ' + fmt(bestDayEntry[1]) + '  ·  ' + txCount7 + ' total sales');
-      }
-      wrap.appendChild(tc);
+      _insFootnote(pc, 'Use the first item as the hero tile, then post the others as supporting content this week.');
+      wrap.appendChild(pc);
     }
 
-    // ── CARD: RESTOCK NOW ─────────────────────────────────────────────
+    // ── CARD: LISTINGS TO FIX FIRST ───────────────────────────────────────
+    if (growth.fixNow.length > 0) {
+      const fc = _insCard('rgba(245,158,11,0.28)', 'rgba(245,158,11,0.06)');
+      _insCardHead(fc, '🛠️', 'Fix These Listings First', 'Missing details reduce click-through and trust');
+      growth.fixNow.forEach(function(item) {
+        const p = item.product;
+        const missing = item.missing.length ? item.missing.join(', ') : 'low completeness';
+        _insRow(fc, p.name || 'Untitled product',
+          'Missing: ' + missing + ' · score ' + item.score + '/100',
+          'Edit now', '#f59e0b',
+          { action: 'edit', productId: p.id, price: String(p.price || '') });
+      });
+      _insFootnote(fc, 'A stronger image and description usually improve both search and conversion before any ad spend does.');
+      wrap.appendChild(fc);
+    }
+
+    // ── CARD: CONTENT ANGLES ──────────────────────────────────────────────
+    const cc = _insCard('rgba(59,130,246,0.28)', 'rgba(59,130,246,0.06)');
+    _insCardHead(cc, '🎥', 'Content Angles', 'Ready-to-post ideas for social and ads');
+    const contentTargets = growth.promote.length ? growth.promote : (s.products || []).slice(0, 3);
+    if (contentTargets.length) {
+      contentTargets.slice(0, 3).forEach(function(p) {
+        _insRow(cc, p.name || 'Untitled product',
+          growth.contentHookForProduct(p),
+          'Edit listing', '#3b82f6',
+          { action: 'edit', productId: p.id, price: String(p.price || '') });
+      });
+      const maker = document.createElement('div');
+      maker.style.cssText = 'padding:2px 16px 12px;font-size:12px;color:rgba(255,255,255,0.42);line-height:1.55;';
+      maker.textContent = 'Turn one product into a post, a story, and a short demo. The goal is repeatable visibility, not random posting.';
+      cc.appendChild(maker);
+    }
+    wrap.appendChild(cc);
+
+    // ── EXISTING OPERATIONAL SIGNALS ──────────────────────────────────────
     if (restockAlerts.length > 0) {
       const rc = _insCard('rgba(239,68,68,0.35)', 'rgba(239,68,68,0.07)');
       _insCardHead(rc, '📦', 'Restock Now',
@@ -3594,7 +3826,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       const soon   = restockAlerts.filter(function(x){ return x.daysLeft > 0;  });
       if (outNow.length) {
         const lbl = document.createElement('div');
-        lbl.style.cssText = 'padding:8px 14px 4px;font-size:11px;font-weight:700;color:rgba(239,68,68,0.9);letter-spacing:0.5px;text-transform:uppercase;';
+        lbl.style.cssText = 'padding:8px 14px 4px;font-size:11px;font-weight:700;color:rgba(239,68,68,0.9);letter-spacing:0.5px;text-transform:uppercase';
         lbl.textContent = 'Out now';
         rc.appendChild(lbl);
         outNow.slice(0, 3).forEach(function(a) {
@@ -3620,7 +3852,6 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       wrap.appendChild(rc);
     }
 
-    // ── CARD: PROFIT LEAK ─────────────────────────────────────────────
     if (profitLeaks.length > 0) {
       const pc = _insCard('rgba(239,68,68,0.25)', 'rgba(239,68,68,0.05)');
       _insCardHead(pc, '💸', 'Profit Leak', 'High sales, low margin — cost is eating your money');
@@ -3635,65 +3866,30 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       wrap.appendChild(pc);
     }
 
-    // ── CARD: BEST SELLERS ────────────────────────────────────────────
-    if (topByProfit.length > 0) {
-      const bc = _insCard('rgba(16,185,129,0.3)', 'rgba(16,185,129,0.07)');
-      _insCardHead(bc, '🏆', 'Best Sellers', 'Most profitable this week');
-      const medals = ['🥇','🥈','🥉'];
-      topByProfit.forEach(function(x, i) {
-        const row = document.createElement('div');
-        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:9px 14px;margin:0 8px 6px;border-radius:10px;';
-        const left = document.createElement('div');
-        left.style.cssText = 'display:flex;align-items:center;gap:10px;min-width:0;';
-        const med = document.createElement('span');
-        med.style.fontSize = '16px';
-        med.textContent = medals[i];
-        const info = document.createElement('div');
-        info.style.minWidth = '0';
-        const nm = document.createElement('div');
-        nm.style.cssText = 'font-weight:600;font-size:13.5px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-        nm.textContent = x.product.name;
-        const sub = document.createElement('div');
-        sub.style.cssText = 'font-size:11.5px;color:rgba(255,255,255,0.45);';
-        sub.textContent = x.qty + ' sold · ' + fmt(x.revenue) + ' rev';
-        info.appendChild(nm); info.appendChild(sub);
-        left.appendChild(med); left.appendChild(info);
-        const profit = document.createElement('span');
-        profit.style.cssText = 'font-weight:700;font-size:14px;color:#10b981;flex-shrink:0;margin-left:8px;';
-        profit.textContent = fmt(x.profit);
-        row.appendChild(left); row.appendChild(profit);
-        bc.appendChild(row);
+    if (cashTraps.length > 0) {
+      const cc2 = _insCard('rgba(244,114,182,0.22)', 'rgba(244,114,182,0.05)');
+      _insCardHead(cc2, '🧊', 'Frozen Cash', 'Inventory sitting too long');
+      cashTraps.slice(0, 3).forEach(function(c) {
+        _insRow(cc2, c.product.name,
+          c.daysIdle + ' days idle · ' + fmt(c.trappedValue) + ' tied up',
+          'Review', '#ec4899',
+          { action: 'edit', productId: c.product.id, price: String(c.product.price || '') });
       });
-      _insFootnote(bc, topByProfit[0].product.name + ' is your best earner. Never let it run out.');
-      wrap.appendChild(bc);
+      _insFootnote(cc2, 'These items are tying up cash that could be used in faster movers.');
+      wrap.appendChild(cc2);
     }
 
-    // ── CARD: PRICE OPPORTUNITY ───────────────────────────────────────
     if (priceOpps.length > 0) {
-      const oc = _insCard('rgba(99,102,241,0.3)', 'rgba(99,102,241,0.06)');
-      _insCardHead(oc, '💡', 'Price Opportunity', 'These sell fast — a small nudge earns more with zero extra work');
+      const oc = _insCard('rgba(59,130,246,0.24)', 'rgba(59,130,246,0.05)');
+      _insCardHead(oc, '📊', 'Pricing Opportunities', 'Fast movers that can likely carry a better margin');
       priceOpps.slice(0, 3).forEach(function(o) {
         _insRow(oc, o.product.name,
-          'Selling fast (' + o.qty7 + '× this week) · only ' + o.margin.toFixed(0) + '% margin',
-          'Try ' + fmt(o.nudgePrice), '#6366f1',
-          { action: 'edit', productId: o.product.id, price: String(o.nudgePrice) });
+          o.qty7 + ' sold in 7d · ' + o.currentMargin.toFixed(0) + '% margin',
+          'Test price', '#3b82f6',
+          { action: 'edit', productId: o.product.id, price: String(o.suggestedPrice) });
       });
-      _insFootnote(oc, 'An 8% nudge on fast movers could add ~' + fmt(priceOpps[0].extraProfit) + '/month passively');
+      _insFootnote(oc, 'A small price test here can increase profit without slowing demand.');
       wrap.appendChild(oc);
-    }
-
-    // ── CARD: CASH TRAP ───────────────────────────────────────────────
-    if (cashTraps.length > 0) {
-      const cc = _insCard('rgba(245,158,11,0.3)', 'rgba(245,158,11,0.06)');
-      _insCardHead(cc, '💤', 'Cash Trap', "Hasn't sold in 60+ days — your money is stuck in stock");
-      cashTraps.slice(0, 3).forEach(function(t) {
-        _insRow(cc, t.product.name,
-          t.qty + ' units · ' + fmt(t.trapped) + ' idle',
-          'Sell at ' + fmt(t.clearPrice), '#f59e0b',
-          { action: 'edit', productId: t.product.id, price: String(t.clearPrice) });
-      });
-      _insFootnote(cc, fmt(totalTrapped) + ' total cash locked in unsold stock. A discount frees it.');
-      wrap.appendChild(cc);
     }
 
     // ── ALL CLEAR (only when truly nothing to show AND no sales at all) ──
@@ -3705,15 +3901,13 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       inner.style.cssText = 'padding:24px 16px;text-align:center;';
       const ico = document.createElement('div'); ico.style.fontSize = '32px'; ico.style.marginBottom = '8px'; ico.textContent = '✅';
       const ttl = document.createElement('div'); ttl.style.cssText = 'font-weight:700;font-size:15px;color:#fff;margin-bottom:6px;'; ttl.textContent = 'All good for now';
-      const msg = document.createElement('div'); msg.style.cssText = 'font-size:13px;color:rgba(255,255,255,0.5);line-height:1.6;'; msg.textContent = 'No urgent issues. Record more sales and insights will get sharper.';
+      const msg = document.createElement('div'); msg.style.cssText = 'font-size:13px;color:rgba(255,255,255,0.5);line-height:1.6;'; msg.textContent = 'No urgent issues. Keep listing products with strong images, descriptions, and categories.';
       inner.appendChild(ico); inner.appendChild(ttl); inner.appendChild(msg);
       cl.appendChild(inner);
       wrap.appendChild(cl);
     }
 
     // ── ASK AI BUTTON — always rendered, state depends on key presence ──
-    // FIXED: previously hidden when key absent — vendor never knew it existed.
-    // Now always visible: "Ask AI" when key is set, "Enable AI" when not.
     const aiRow = document.createElement('div');
     aiRow.style.cssText = 'padding:4px 0 2px;';
     const aiBtn = document.createElement('button');
@@ -3737,26 +3931,22 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     spark.textContent = hasKey ? '✨' : '🔑';
     const lbl = document.createElement('span');
     lbl.textContent = hasKey
-      ? 'Ask AI — Analyse My Business'
-      : 'Enable AI Insights — tap to learn how';
+      ? 'Open Growth Copilot Chat'
+      : 'Enable Growth Copilot Chat';
     aiBtn.appendChild(spark);
     aiBtn.appendChild(lbl);
     aiRow.appendChild(aiBtn);
     wrap.appendChild(aiRow);
 
-    // ── AI NARRATIVE ZONE (populated by Gemini response) ─────────────
     const narrativeZone = document.createElement('div');
     narrativeZone.id = 'qs-ai-narrative';
     narrativeZone.style.cssText = 'display:none;';
     wrap.appendChild(narrativeZone);
 
-    // ── ACTION DELEGATION — safe, no innerHTML with user data ─────────
     wrap.addEventListener('click', function(e) {
-      // Ask AI button
       if (e.target.closest('#qs-ask-ai-btn')) {
         e.preventDefault();
         if (!window.__QS_GEMINI_KEY) {
-          // No key — show setup instructions in the narrative zone
           narrativeZone.style.display = 'block';
           narrativeZone.innerHTML = '';
           const setupCard = document.createElement('div');
@@ -3765,16 +3955,14 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
             'border-radius:16px;padding:18px;',
           ].join('');
           const steps = [
-            { icon: '1️⃣', text: 'Go to aistudio.google.com/app/apikey' },
-            { icon: '2️⃣', text: 'Sign in with any Google account — it\'s free' },
-            { icon: '3️⃣', text: 'Click "Create API Key" and copy it' },
-            { icon: '4️⃣', text: 'Vercel Dashboard → your project → Settings → Environment Variables' },
-            { icon: '5️⃣', text: 'Add variable: name = GEMINI_API_KEY, value = your key' },
-            { icon: '6️⃣', text: 'Redeploy. The "Ask AI" button will activate.' },
+            { icon: '1️⃣', text: 'Create a Gemini API key in Google AI Studio.' },
+            { icon: '2️⃣', text: 'Add it as GEMINI_API_KEY in your hosting environment.' },
+            { icon: '3️⃣', text: 'Redeploy and refresh the app.' },
+            { icon: '4️⃣', text: 'Growth Copilot will start turning your data into storefront guidance.' },
           ];
           const hdr = document.createElement('div');
           hdr.style.cssText = 'font-size:14px;font-weight:700;color:#a78bfa;margin-bottom:12px;';
-          hdr.textContent = '🔑 Enable Free AI Insights (2 minutes)';
+          hdr.textContent = '🔑 Enable Growth Copilot Chat';
           setupCard.appendChild(hdr);
           steps.forEach(function(step) {
             const row = document.createElement('div');
@@ -3788,15 +3976,14 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
           });
           const note = document.createElement('div');
           note.style.cssText = 'font-size:11.5px;color:rgba(255,255,255,0.3);margin-top:10px;line-height:1.5;';
-          note.textContent = 'Free tier: 15 requests/min, 1M tokens/day. No credit card required.';
+          note.textContent = 'The local growth cards still work even without AI.';
           setupCard.appendChild(note);
           narrativeZone.appendChild(setupCard);
           return;
         }
-        _runGeminiInsight(sig, narrativeZone);
+        _runGeminiInsight(sig, narrativeZone, growth);
         return;
       }
-      // Action buttons on signal cards
       const btn = e.target.closest('.ai-action-btn');
       if (!btn) return;
       e.preventDefault();
@@ -3828,23 +4015,330 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     return wrap;
   }
 
+
+  
+  function _copilotDailyQuestionKey() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return 'qs_copilot_question_' + y + '-' + m + '-' + day;
+  }
+
+  function _copilotHasUsedQuestionToday() {
+    try {
+      return localStorage.getItem(_copilotDailyQuestionKey()) === '1';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function _copilotMarkQuestionUsed() {
+    try {
+      localStorage.setItem(_copilotDailyQuestionKey(), '1');
+    } catch (_) {}
+  }
+
+  function _copilotExtractQuestion(rawText) {
+    const text = _safeStr(rawText);
+    const m = text.match(/(?:^|\n)\s*QUESTION\s*[:：\-–—]\s*([^\n]+)/i);
+    if (m && m[1]) return m[1].trim();
+    const lines = text.split(/\n+/).map(function(line) { return line.trim(); }).filter(Boolean);
+    if (!lines.length) return '';
+    return lines[lines.length - 1].replace(/^[#>*\-•\s]+/, '').trim();
+  }
+
+  function _buildCopilotSnapshot(sig, growth) {
+    const safeSig = sig || {};
+    const s = safeSig.s || {};
+    const restockAlerts = Array.isArray(safeSig.restockAlerts) ? safeSig.restockAlerts : [];
+    const profitLeaks = Array.isArray(safeSig.profitLeaks) ? safeSig.profitLeaks : [];
+    const cashTraps = Array.isArray(safeSig.cashTraps) ? safeSig.cashTraps : [];
+    const priceOpps = Array.isArray(safeSig.priceOpps) ? safeSig.priceOpps : [];
+    const trendPct = safeSig.trendPct;
+
+    const products = Array.isArray(s.products) ? s.products : [];
+    const promoted = (growth && Array.isArray(growth.promote)) ? growth.promote : [];
+    const fixes = (growth && Array.isArray(growth.fixNow)) ? growth.fixNow : [];
+
+    const topProducts = (promoted.length ? promoted : products.slice(0, 3)).map(function(p, idx) {
+      return (idx + 1) + '. ' + _safeStr(p.name, 'Untitled product') +
+        ' | stock:' + (Number(p.qty) || 0) +
+        ' | category:' + _safeStr(p.category, 'none') +
+        ' | image:' + ((p.image || p.image2) ? 'yes' : 'no') +
+        ' | desc:' + (_safeStr(p.description).length >= 24 ? 'yes' : 'no') +
+        ' | hook:' + (growth && growth.contentHookForProduct ? growth.contentHookForProduct(p) : 'n/a');
+    }).join('\n');
+
+    const fixLines = (fixes.length ? fixes : products.map(function(p) { return { product: p, score: 0, missing: ['listing'] }; }).slice(0, 3)).map(function(item, idx) {
+      const p = item.product || {};
+      return (idx + 1) + '. ' + _safeStr(p.name, 'Untitled product') +
+        ' | missing:' + (Array.isArray(item.missing) ? item.missing.join(', ') : 'listing') +
+        ' | score:' + (typeof item.score === 'number' ? item.score : 0) + '/100';
+    }).join('\n');
+
+    const alerts = [
+      restockAlerts.length ? restockAlerts.length + ' products are low or out of stock' : '',
+      profitLeaks.length ? profitLeaks.length + ' products are selling with weak margin' : '',
+      cashTraps.length ? cashTraps.length + ' products are tying up cash' : '',
+      priceOpps.length ? priceOpps.length + ' fast movers can likely take a higher price test' : '',
+    ].filter(Boolean).join('\n');
+
+    const snapshot = [
+      'QuickShop merchant in Nigeria. Currency: NGN.',
+      'Goal: improve visibility, conversion, trust, and social reach; do not repeat raw metrics.',
+      'Sales trend: ' + (trendPct !== null ? (trendPct >= 0 ? '+' : '') + Number(trendPct).toFixed(0) + '%' : 'n/a') + ' vs previous 7 days.',
+      'Operational context: ' + (restockAlerts.length ? restockAlerts.length + ' low-stock issue(s).' : 'No urgent stockouts.') + ' ' + (profitLeaks.length ? profitLeaks.length + ' margin issue(s).' : 'No serious margin leak.') +
+        ' ' + (fixes.length ? fixes.length + ' listing issue(s) need attention.' : 'Listings are reasonably complete.'),
+      'Best candidate to feature: ' + (_safeStr((promoted[0] || growth.bestSeller || {}).name, 'Choose a hero product')) + '.',
+      'Products to feature:\n' + topProducts,
+      'Products to fix:\n' + fixLines,
+      alerts ? ('Alerts:\n' + alerts) : 'Alerts: none.',
+    ].join('\n');
+
+    return {
+      snapshot: snapshot,
+      products: products,
+      promoted: promoted,
+      fixes: fixes,
+      topProducts: topProducts,
+      fixLines: fixLines,
+      alerts: alerts,
+      restockAlerts: restockAlerts,
+      profitLeaks: profitLeaks,
+      cashTraps: cashTraps,
+      priceOpps: priceOpps,
+      trendPct: trendPct,
+      heroName: _safeStr((promoted[0] || growth.bestSeller || {}).name, 'Choose a hero product'),
+    };
+  }
+
+  function _renderGrowthCopilotNarrative(narrativeZone, rawText, growth, sig) {
+    narrativeZone.innerHTML = '';
+    narrativeZone.style.cssText = 'display:block;';
+
+    const text = _safeStr(rawText);
+
+    // ── Inject dot-bounce animation once ────────────────────────────────────
+    if (!document.getElementById('qs-chat-anim')) {
+      const st = document.createElement('style');
+      st.id = 'qs-chat-anim';
+      st.textContent = [
+        '@keyframes qsDotBounce{',
+        '0%,80%,100%{transform:translateY(0);opacity:0.35}',
+        '40%{transform:translateY(-5px);opacity:1}',
+        '}',
+      ].join('');
+      document.head.appendChild(st);
+    }
+
+    // ── Thread container ─────────────────────────────────────────────────────
+    const thread = document.createElement('div');
+    thread.id = 'qs-copilot-thread';
+    thread.style.cssText = 'display:flex;flex-direction:column;gap:10px;padding-bottom:2px;';
+    narrativeZone.appendChild(thread);
+    narrativeZone.__qsCopilotThread = thread;
+
+    // ── Avatar factory ───────────────────────────────────────────────────────
+    function _aiAvatar() {
+      const av = document.createElement('div');
+      av.style.cssText = [
+        'width:30px;height:30px;border-radius:50%;flex-shrink:0;margin-top:2px;',
+        'background:linear-gradient(135deg,#7c3aed,#4f46e5);',
+        'display:flex;align-items:center;justify-content:center;font-size:15px;',
+        'box-shadow:0 2px 8px rgba(124,58,237,0.35);',
+      ].join('');
+      av.textContent = '\u2728';
+      return av;
+    }
+
+    // ── Append AI prose bubble ───────────────────────────────────────────────
+    function _appendAiBubble(content) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:flex-start;gap:10px;';
+      row.appendChild(_aiAvatar());
+      const bubble = document.createElement('div');
+      bubble.style.cssText = [
+        'flex:1;min-width:0;',
+        'background:rgba(124,58,237,0.09);border:1px solid rgba(124,58,237,0.22);',
+        'border-radius:4px 18px 18px 18px;padding:14px 16px;',
+        'font-size:14px;color:rgba(240,240,246,0.93);line-height:1.78;',
+      ].join('');
+      const paras = String(content).split(/\n+/).map(function(p){ return p.trim(); }).filter(Boolean);
+      paras.forEach(function(para, i) {
+        const p = document.createElement('p');
+        p.style.margin = i < paras.length - 1 ? '0 0 11px' : '0';
+        p.textContent = para;
+        bubble.appendChild(p);
+      });
+      row.appendChild(bubble);
+      thread.appendChild(row);
+      return row;
+    }
+
+    // ── Append user reply bubble ─────────────────────────────────────────────
+    function _appendUserBubble(content) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;justify-content:flex-end;';
+      const bubble = document.createElement('div');
+      bubble.style.cssText = [
+        'max-width:82%;',
+        'background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);',
+        'border-radius:18px 4px 18px 18px;padding:12px 15px;',
+        'font-size:14px;color:rgba(240,240,246,0.88);line-height:1.7;',
+      ].join('');
+      bubble.textContent = content;
+      row.appendChild(bubble);
+      thread.appendChild(row);
+      return row;
+    }
+
+    // ── Append thinking dots bubble ──────────────────────────────────────────
+    function _appendThinkingBubble() {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:flex-start;gap:10px;';
+      row.appendChild(_aiAvatar());
+      const bubble = document.createElement('div');
+      bubble.style.cssText = [
+        'background:rgba(124,58,237,0.09);border:1px solid rgba(124,58,237,0.22);',
+        'border-radius:4px 18px 18px 18px;padding:14px 18px;',
+        'display:flex;align-items:center;gap:5px;',
+      ].join('');
+      [0, 0.18, 0.36].forEach(function(delay) {
+        const dot = document.createElement('span');
+        dot.style.cssText = [
+          'display:inline-block;width:7px;height:7px;border-radius:50%;',
+          'background:#a78bfa;',
+          'animation:qsDotBounce 1.1s ease-in-out infinite;',
+          'animation-delay:' + delay + 's;',
+        ].join('');
+        bubble.appendChild(dot);
+      });
+      row.appendChild(bubble);
+      thread.appendChild(row);
+      return row;
+    }
+
+    // Store helpers on narrativeZone so _runGeminiFollowup can access them
+    narrativeZone.__qsAppendAiBubble       = _appendAiBubble;
+    narrativeZone.__qsAppendUserBubble     = _appendUserBubble;
+    narrativeZone.__qsAppendThinkingBubble = _appendThinkingBubble;
+
+    // ── Render initial AI message ────────────────────────────────────────────
+    // Strip any leaked section labels (VERDICT:, WHY IT MATTERS:, etc.)
+    const cleanText = text
+      .replace(/^\s*(VERDICT|WHY IT MATTERS|WHAT TO DO TODAY|WHAT TO POST|QUESTION)\s*[:：\-–—]\s*/gim, '')
+      .replace(/^\s*#+\s*/gm, '')
+      .trim();
+
+    _appendAiBubble(cleanText);
+
+    // Extract the question text for follow-up prompt context
+    const questionText = _copilotExtractQuestion(text) || 'What should this store become known for?';
+    narrativeZone.__qsCopilotQuestion = questionText;
+
+    // ── Composer ─────────────────────────────────────────────────────────────
+    const locked = _copilotHasUsedQuestionToday();
+    const composer = document.createElement('div');
+    composer.style.cssText = 'margin-top:12px;border-top:1px solid rgba(255,255,255,0.07);padding-top:12px;';
+
+    if (locked) {
+      const lockRow = document.createElement('div');
+      lockRow.style.cssText = [
+        'text-align:center;font-size:12px;color:rgba(255,255,255,0.3);',
+        'padding:8px 0 2px;letter-spacing:0.1px;',
+      ].join('');
+      lockRow.textContent = '\u2713  You replied today. Come back tomorrow for the next question.';
+      composer.appendChild(lockRow);
+    } else {
+      const inputRow = document.createElement('div');
+      inputRow.style.cssText = 'display:flex;align-items:flex-end;gap:9px;';
+
+      const reply = document.createElement('textarea');
+      reply.rows = 1;
+      reply.maxLength = 220;
+      reply.placeholder = 'Reply with one sentence\u2026';
+      reply.style.cssText = [
+        'flex:1;resize:none;box-sizing:border-box;overflow:hidden;',
+        'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);',
+        'border-radius:14px;padding:11px 14px;color:#fff;font-size:14px;line-height:1.55;',
+        'outline:none;min-height:44px;max-height:108px;',
+        'transition:border-color 0.15s;caret-color:#a78bfa;',
+      ].join('');
+
+      reply.addEventListener('input', function() {
+        reply.style.height = 'auto';
+        reply.style.height = Math.min(reply.scrollHeight, 108) + 'px';
+      });
+      reply.addEventListener('focus', function() {
+        reply.style.borderColor = 'rgba(124,58,237,0.45)';
+      });
+      reply.addEventListener('blur', function() {
+        reply.style.borderColor = 'rgba(255,255,255,0.12)';
+      });
+
+      const sendBtn = document.createElement('button');
+      sendBtn.type = 'button';
+      sendBtn.style.cssText = [
+        'width:42px;height:42px;border-radius:13px;border:0;flex-shrink:0;',
+        'background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;',
+        'cursor:pointer;display:flex;align-items:center;justify-content:center;',
+        'box-shadow:0 4px 14px rgba(124,58,237,0.3);',
+        'transition:opacity 0.15s;',
+      ].join('');
+      sendBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>';
+
+      const _send = function() {
+        if (_copilotHasUsedQuestionToday()) {
+          toast('Come back tomorrow for a fresh question.', 'info');
+          return;
+        }
+        const answer = _safeStr(reply.value).trim();
+        if (!answer) { toast('Reply with one short sentence.', 'info'); reply.focus(); return; }
+        reply.disabled = true;
+        sendBtn.disabled = true;
+        sendBtn.style.opacity = '0.45';
+        _runGeminiFollowup(sig, narrativeZone, growth, answer, questionText, composer, reply, sendBtn, null);
+      };
+
+      sendBtn.addEventListener('click', _send);
+      reply.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); _send(); }
+      });
+
+      const hint = document.createElement('div');
+      hint.style.cssText = [
+        'font-size:11px;color:rgba(255,255,255,0.25);',
+        'margin-top:7px;text-align:center;letter-spacing:0.1px;',
+      ].join('');
+      hint.textContent = 'One reply \u00b7 resets tomorrow';
+
+      inputRow.appendChild(reply);
+      inputRow.appendChild(sendBtn);
+      composer.appendChild(inputRow);
+      composer.appendChild(hint);
+    }
+
+    narrativeZone.appendChild(composer);
+    narrativeZone.__qsCopilotComposer = composer;
+  }
+
   // ── GEMINI LAYER (Layer 2) ────────────────────────────────────────────────
   // Builds a ~400-token business snapshot and calls Gemini 2.0 Flash.
   // Free tier: 15 req/min, 1M tokens/day. More than enough for this use case.
-  async function _runGeminiInsight(sig, narrativeZone) {
+  async function _runGeminiInsight(sig, narrativeZone, growth) {
     const key = window.__QS_GEMINI_KEY;
     if (!key || key === 'YOUR_GEMINI_API_KEY') {
-      toast('Gemini key not configured. Add it to supabase-config.js.', 'error');
+      toast('Growth Copilot key not configured. Add GEMINI_API_KEY to your hosting env.', 'error');
       return;
     }
 
-    // Disable button, show skeleton
     const aiBtn = document.getElementById('qs-ask-ai-btn');
     if (aiBtn) {
       aiBtn.disabled = true;
       aiBtn.style.opacity = '0.6';
       const lbl = aiBtn.querySelector('span:last-child');
-      if (lbl) lbl.textContent = 'Analysing your business…';
+      if (lbl) lbl.textContent = 'Thinking like a growth coach…';
     }
 
     narrativeZone.style.display = 'block';
@@ -3856,52 +4350,52 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     ].join('');
     const skelLbl = document.createElement('div');
     skelLbl.style.cssText = 'font-size:11px;font-weight:700;color:rgba(167,139,250,0.7);letter-spacing:0.5px;text-transform:uppercase;margin-bottom:12px;';
-    skelLbl.textContent = '✨ AI is reading your data…';
-    const skelLines = [90, 75, 85, 60, 78].map(function(w) {
+    skelLbl.textContent = '✨ Growth Copilot is thinking…';
+    [92, 78, 88, 66, 82].forEach(function(w) {
       const l = document.createElement('div');
       l.style.cssText = 'height:12px;border-radius:6px;background:rgba(255,255,255,0.07);margin-bottom:8px;width:' + w + '%;';
-      return l;
+      skel.appendChild(l);
     });
     skel.appendChild(skelLbl);
-    skelLines.forEach(function(l){ skel.appendChild(l); });
     narrativeZone.appendChild(skel);
 
-    // Build compressed snapshot — structured to minimise tokens
-    const { s, rev7, revPrev7, prof7, txCount7, trendPct,
-            restockAlerts, profitLeaks, topByProfit, cashTraps, priceOpps } = sig;
-
-    const top5products = s.products.slice(0, 20).map(function(p) {
-      const sales30 = s.sales.filter(function(x){ return x.productId === p.id && x.ts >= (Date.now() - 30*86400000); });
-      const qty30   = sales30.reduce(function(a,x){ return a+x.qty; }, 0);
-      const rev30   = sales30.reduce(function(a,x){ return a+x.price*x.qty; }, 0);
-      const margin  = p.price > 0 && p.cost > 0 ? Math.round(((p.price-p.cost)/p.price)*100) : null;
-      return p.name + ' [stock:' + p.qty + ', price:' + p.price + ', margin:' + (margin !== null ? margin + '%' : 'unknown') + ', sold30d:' + qty30 + ', rev30d:' + rev30 + ']';
-    }).join('\n');
-
-    const alerts = [
-      restockAlerts.length ? restockAlerts.length + ' products critically low/out of stock' : '',
-      profitLeaks.length   ? profitLeaks.length   + ' products with <10% margin selling actively' : '',
-      cashTraps.length     ? cashTraps.length      + ' products unsold 60+ days (trapped capital: ₦' + Math.round(sig.totalTrapped) + ')' : '',
-      priceOpps.length     ? priceOpps.length      + ' fast-selling products with <20% margin' : '',
-    ].filter(Boolean).join('\n');
-
-    const snapshot = [
-      'Business: small retail vendor in Nigeria. Currency: NGN.',
-      'Period: last 7 days.',
-      'Revenue: ₦' + Math.round(rev7) + ' (prev 7d: ₦' + Math.round(revPrev7) + ', trend: ' + (trendPct !== null ? (trendPct >= 0 ? '+' : '') + trendPct.toFixed(0) + '%' : 'n/a') + ')',
-      'Profit this week: ₦' + Math.round(prof7) + '. Transactions: ' + txCount7 + '.',
-      'Products (' + s.products.length + ' total, top 20 shown):',
-      top5products,
-      alerts ? ('Alerts:\n' + alerts) : 'No critical alerts.',
-    ].join('\n');
+    const ctx = _buildCopilotSnapshot(sig, growth);
+    const snapshot = ctx.snapshot;
 
     const prompt = [
-      'You are a sharp business advisor for a small Nigerian retail vendor using QuickShop.',
-      'Analyse the snapshot below and write 3–5 short, direct, actionable paragraphs.',
-      'Be specific: name products, name amounts in ₦, give concrete next steps.',
-      'Write like a trusted market-savvy friend — warm but no fluff.',
-      'Never repeat the raw numbers back — interpret them.',
-      'End with one "This week, focus on:" sentence.',
+      'You are QuickShop Growth Copilot.',
+      'You are NOT an analytics narrator.',
+      'The merchant already saw the metrics and operational engine.',
+      'Your job is to explain what the numbers MEAN and what deserves attention.',
+      'Sound like a sharp storefront strategist helping a real merchant grow.',
+      '',
+      'IMPORTANT RULES:',
+      '- Never repeat metrics already implied by the engine.',
+      '- Never summarize revenue, stock, profit, or transaction totals unless absolutely necessary.',
+      '- Never sound like a dashboard report.',
+      '- Focus on hidden patterns, positioning, visibility, conversion, trust, and product presentation.',
+      '- Give a real business judgment, not a recap.',
+      '- Call out one hidden opportunity or risk the engine did not say out loud.',
+      '- Include one concrete viral or storefront move when relevant.',
+      '- Be concise and polished, but not too lean.',
+      '- Sound confident, observant, practical, and slightly surprising.',
+      '- Do not give generic marketing advice.',
+      '- No markdown bullets, tables, numbering, or code fences.',
+      '- Mention product names only when strategically useful.',
+      '- End with exactly one question the merchant should answer today.',
+      '',
+      'RESPONSE FORMAT — natural prose only, no section headers or labels:',
+      'Open with one sharp sentence: your verdict on what is actually happening in this store right now.',
+      'Follow with one sentence: the hidden pattern or risk the merchant has not noticed.',
+      'Follow with one sentence: the single highest-leverage move — name it specifically.',
+      'If genuinely relevant, one sentence on a storefront or social angle.',
+      'End with exactly one focused question on its own line. No preamble before it.',
+      'Total response: 4-5 sentences maximum. Do not add greetings or sign-offs.',
+      '',
+      'GOOD EXAMPLES:',
+      '"Your store is getting sales but not enough identity. One product is carrying attention while the rest feel disconnected. I would turn the strongest item into the storefront hero and make the supporting products reinforce it. What should this store become known for?"',
+      '',
+      '"Your products are sellable, but not yet memorable. The issue is not inventory depth; it is presentation and positioning. I would stop treating every item equally and build the storefront around the product most likely to be shared. Which product deserves to become the face of the store?"',
       '',
       'SNAPSHOT:',
       snapshot,
@@ -3915,7 +4409,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.7, maxOutputTokens: 600 }
+            generationConfig: { temperature: 0.55, maxOutputTokens: 900 }
           })
         }
       );
@@ -3932,43 +4426,13 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
                     data.candidates[0].content.parts[0].text) || '';
       if (!text) throw new Error('Empty response from Gemini');
 
-      // Render narrative — text only, no innerHTML with API response
-      narrativeZone.innerHTML = '';
-      const card = document.createElement('div');
-      card.style.cssText = [
-        'background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.2);',
-        'border-radius:16px;padding:18px;',
-      ].join('');
-      const hdr = document.createElement('div');
-      hdr.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:14px;';
-      const gem = document.createElement('span'); gem.textContent = '✨';
-      const hdrtxt = document.createElement('span');
-      hdrtxt.style.cssText = 'font-size:13px;font-weight:700;color:#a78bfa;letter-spacing:0.3px;text-transform:uppercase;';
-      hdrtxt.textContent = 'Gemini AI Analysis';
-      hdr.appendChild(gem); hdr.appendChild(hdrtxt);
-      card.appendChild(hdr);
-
-      // Split into paragraphs and render each as a <p> — never innerHTML
-      text.split(/\n{1,}/).forEach(function(para) {
-        para = para.trim();
-        if (!para) return;
-        const p = document.createElement('p');
-        p.style.cssText = 'font-size:14px;color:rgba(240,240,246,0.85);line-height:1.7;margin:0 0 10px;';
-        p.textContent = para;
-        card.appendChild(p);
-      });
-
-      const ts = document.createElement('div');
-      ts.style.cssText = 'font-size:11px;color:rgba(255,255,255,0.25);margin-top:4px;';
-      ts.textContent = 'Generated ' + new Date().toLocaleTimeString('en-NG', { hour:'2-digit', minute:'2-digit' });
-      card.appendChild(ts);
-      narrativeZone.appendChild(card);
+      _renderGrowthCopilotNarrative(narrativeZone, text, growth, sig);
 
       if (aiBtn) {
         aiBtn.disabled = false;
         aiBtn.style.opacity = '1';
         const lbl = aiBtn.querySelector('span:last-child');
-        if (lbl) lbl.textContent = 'Refresh AI Analysis';
+        if (lbl) lbl.textContent = 'Refresh Chat';
       }
     } catch (e) {
       errlog('Gemini insight failed', e);
@@ -3977,8 +4441,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       errCard.style.cssText = 'background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);border-radius:14px;padding:16px;';
       const errTxt = document.createElement('div');
       errTxt.style.cssText = 'font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:8px;';
-      errTxt.textContent = 'AI analysis failed. Your data cards above are still accurate.';
-      // Show the real error so it can be diagnosed — not just a generic message
+      errTxt.textContent = 'AI analysis failed. The local growth cards above are still accurate.';
       const errDetail = document.createElement('div');
       errDetail.style.cssText = 'font-size:11px;color:rgba(239,68,68,0.7);font-family:monospace;word-break:break-all;line-height:1.5;';
       errDetail.textContent = 'Error: ' + (e && e.message ? e.message : String(e));
@@ -3995,7 +4458,131 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     }
   }
 
-  // ── PUBLIC ENTRY POINT ────────────────────────────────────────────────────
+  async function _runGeminiFollowup(sig, narrativeZone, growth, userReply, questionText, composer, replyEl, sendBtn, statusEl) {
+    const key = window.__QS_GEMINI_KEY;
+    if (!key || key === 'YOUR_GEMINI_API_KEY') {
+      toast('Growth Copilot key not configured. Add GEMINI_API_KEY to your hosting env.', 'error');
+      if (replyEl) replyEl.disabled = false;
+      if (sendBtn) { sendBtn.disabled = false; sendBtn.style.opacity = '1'; }
+      return;
+    }
+
+    // Retrieve thread helpers stored by _renderGrowthCopilotNarrative
+    const thread        = narrativeZone.__qsCopilotThread;
+    const appendUser    = narrativeZone.__qsAppendUserBubble;
+    const appendAi      = narrativeZone.__qsAppendAiBubble;
+    const appendThinking = narrativeZone.__qsAppendThinkingBubble;
+
+    if (!thread || !appendUser || !appendAi || !appendThinking) {
+      toast('Follow-up failed — please refresh.', 'error');
+      if (replyEl) replyEl.disabled = false;
+      if (sendBtn) { sendBtn.disabled = false; sendBtn.style.opacity = '1'; }
+      return;
+    }
+
+    // Render the user’s reply as a chat bubble immediately
+    appendUser(userReply);
+
+    // Show thinking dots while Gemini works
+    const thinkingRow = appendThinking();
+    try { thinkingRow.scrollIntoView({ behavior: 'smooth', block: 'end' }); } catch (_) {}
+
+    const ctx = _buildCopilotSnapshot(sig, growth);
+    const snapshot = ctx.snapshot;
+
+    const prompt = [
+      'You are QuickShop Growth Copilot.',
+      'You already gave the initial diagnosis and the merchant replied to the daily question.',
+      'Do not repeat the snapshot, raw numbers, or the earlier insight.',
+      'Use the reply to sharpen the one best next action for visibility, conversion, trust, or virality.',
+      'Write 2-3 short sentences maximum. No headers, bullets, or code fences.',
+      'Be specific, human, and practical. Do not ask another question.',
+      '',
+      'THE QUESTION THEY ANSWERED:',
+      questionText,
+      '',
+      'MERCHANT REPLY:',
+      userReply,
+      '',
+      'CONTEXT SNAPSHOT:',
+      snapshot,
+    ].join('\n');
+
+    try {
+      const res = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=' + key,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.45, maxOutputTokens: 220 }
+          })
+        }
+      );
+      if (!res.ok) {
+        const errBody = await res.text().catch(function(){ return ''; });
+        throw new Error('Gemini HTTP ' + res.status + ': ' + errBody.slice(0, 120));
+      }
+      const data = await res.json();
+      const text = (data.candidates &&
+                    data.candidates[0] &&
+                    data.candidates[0].content &&
+                    data.candidates[0].content.parts &&
+                    data.candidates[0].content.parts[0] &&
+                    data.candidates[0].content.parts[0].text) || '';
+      if (!text) throw new Error('Empty response from Gemini');
+
+      if (thinkingRow.parentNode) thinkingRow.remove();
+
+      appendAi(text.trim());
+      try { thread.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'end' }); } catch (_) {}
+
+      _copilotMarkQuestionUsed();
+
+      // Lock the composer — replace its contents with a done message
+      if (composer) {
+        composer.innerHTML = '';
+        const lockRow = document.createElement('div');
+        lockRow.style.cssText = [
+          'text-align:center;font-size:12px;color:rgba(255,255,255,0.3);',
+          'padding:10px 0 2px;letter-spacing:0.1px;',
+        ].join('');
+        lockRow.textContent = '\u2713  Done for today. Come back tomorrow for the next question.';
+        composer.appendChild(lockRow);
+      }
+
+      const aiBtn = document.getElementById('qs-ask-ai-btn');
+      if (aiBtn) {
+        const lbl = aiBtn.querySelector('span:last-child');
+        if (lbl) lbl.textContent = 'Refresh Chat';
+      }
+
+    } catch (e) {
+      if (thinkingRow.parentNode) thinkingRow.remove();
+      errlog('Gemini follow-up failed', e);
+
+      // Show error inline as a neutral message bubble
+      const errRow = document.createElement('div');
+      errRow.style.cssText = 'display:flex;align-items:flex-start;gap:10px;';
+      const errBubble = document.createElement('div');
+      errBubble.style.cssText = [
+        'flex:1;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);',
+        'border-radius:4px 18px 18px 18px;padding:12px 15px;',
+        'font-size:13px;color:rgba(255,255,255,0.55);line-height:1.55;',
+      ].join('');
+      errBubble.textContent = 'Follow-up failed. Check your connection and try again.';
+      errRow.appendChild(errBubble);
+      thread.appendChild(errRow);
+
+      // Re-enable input so they can retry
+      if (replyEl) replyEl.disabled = false;
+      if (sendBtn) { sendBtn.disabled = false; sendBtn.style.opacity = '1'; }
+
+      toast('Follow-up failed — check your connection or Gemini key.', 'error');
+    }
+  }
+// ── PUBLIC ENTRY POINT ────────────────────────────────────────────────────
   function generateAdvancedInsights(returnHtml) {
     try {
       const sig = _computeSignals();
