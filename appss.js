@@ -652,57 +652,22 @@ function handleTouchEnd() {
   const content = $('inventoryInsightsContent');
   if (!view || !content) return;
 
-  // 1. Safely replace content using DOM node — never innerHTML with a string
+  // Replace content safely via DOM
   while (content.firstChild) content.removeChild(content.firstChild);
   if (node instanceof Node) {
     content.appendChild(node);
   } else {
-    // Safety fallback: node arrived as unexpected type, show plain text only
     const fallback = document.createElement('div');
-    fallback.style.cssText = 'padding:16px;color:rgba(255,255,255,0.5);font-size:13px;';
+    fallback.style.cssText = 'padding:24px;text-align:center;color:var(--text-muted);font-size:13px;';
     fallback.textContent = 'Insights could not be displayed.';
     content.appendChild(fallback);
   }
 
-  // 2. Make the background SOLID Obsidian (No transparency)
-  view.style.cssText = `
-    display: block;
-    position: fixed;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background-color: #0d0d12 !important; 
-    z-index: 200000; 
-    overflow-y: auto;
-    padding: 20px;
-    padding-top: 80px;
-    padding-bottom: 120px;
-  `;
+  // Show as full-screen (same pattern as audit log)
+  view.style.display = 'flex';
+  view.classList.remove('closing');
 
-  // 3. Ensure the Close Buttons are visible and work
-  // We look for the X button that's already in your HTML or create one if missing
-  let topBtn = view.querySelector('.modal-close-x');
-  if (topBtn) {
-    topBtn.style.cssText = `
-      position: fixed; top: 20px; right: 20px; z-index: 200001;
-      display: flex; background: #ef4444; color: white; border-radius: 50%;
-      width: 44px; height: 44px; align-items: center; justify-content: center;
-      font-size: 28px; border: none; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-    `;
-    topBtn.onclick = closeInventoryInsight;
-  }
-
-  // 4. Add/Update the bottom button
-  let bottomBtn = $('aiBottomClose');
-  if (!bottomBtn) {
-    bottomBtn = document.createElement('button');
-    bottomBtn.id = 'aiBottomClose';
-    content.appendChild(bottomBtn);
-  }
-  bottomBtn.textContent = 'Close Insights';
-  bottomBtn.className = 'save-btn';
-  bottomBtn.style.cssText = 'width:100%; margin-top:40px; background:#1f1f27; color:white; border:1px solid rgba(255,255,255,0.1); padding:16px; border-radius:12px; font-weight:bold;';
-  bottomBtn.onclick = closeInventoryInsight;
-
-  // 5. App Logic: Prevent background scrolling
+  // Lock background scroll
   document.body.classList.add('modal-open');
   const scrollY = window.scrollY;
   document.body.style.position = 'fixed';
@@ -714,24 +679,17 @@ function handleTouchEnd() {
   function closeInventoryInsight() {
     const view = $('inventoryInsightView');
     if (!view || view.style.display === 'none') return;
-    // Drive animation inline — view uses cssText so no CSS class available.
-    // Snap transition onto the properties we're changing, then clean up.
-    view.style.transition = 'opacity 0.18s ease, transform 0.18s ease';
-    view.style.opacity    = '0';
-    view.style.transform  = 'translateY(16px)';
+    view.classList.add('closing');
     setTimeout(() => {
-      view.style.display    = 'none';
-      view.style.transition = '';
-      view.style.opacity    = '';
-      view.style.transform  = '';
-      view.removeAttribute('aria-modal');
+      view.style.display = 'none';
+      view.classList.remove('closing');
       document.body.classList.remove('modal-open');
       const scrollY = view.dataset.scrollY;
       document.body.style.position = '';
       document.body.style.top      = '';
       document.body.style.width    = '';
       if (scrollY) window.scrollTo(0, parseInt(scrollY));
-    }, 190);
+    }, 230);
   }
 
   async function setUserProfile(uid, profile) {
@@ -4039,6 +3997,35 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     } catch (_) {}
   }
 
+  // ── Session persistence helpers (store today's full conversation) ─────────
+  function _copilotSessionKey() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return 'qs_copilot_session_' + y + '-' + m + '-' + day;
+  }
+
+  // Returns {v,insight,userReply,followup} or null if nothing stored today.
+  function _copilotGetSession() {
+    try {
+      const raw = localStorage.getItem(_copilotSessionKey());
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (data && data.v === 1 && typeof data.insight === 'string' && data.insight) return data;
+      return null;
+    } catch (_) { return null; }
+  }
+
+  // Merge patch into today's stored session (creates it if absent).
+  function _copilotSaveSession(patch) {
+    try {
+      const existing = _copilotGetSession() || { v: 1, insight: null, userReply: null, followup: null };
+      const merged = Object.assign({}, existing, patch);
+      localStorage.setItem(_copilotSessionKey(), JSON.stringify(merged));
+    } catch (_) {}
+  }
+
   function _copilotExtractQuestion(rawText) {
     const text = _safeStr(rawText);
     const m = text.match(/(?:^|\n)\s*QUESTION\s*[:：\-–—]\s*([^\n]+)/i);
@@ -4113,7 +4100,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     };
   }
 
-  function _renderGrowthCopilotNarrative(narrativeZone, rawText, growth, sig) {
+  function _renderGrowthCopilotNarrative(narrativeZone, rawText, growth, sig, session) {
     narrativeZone.innerHTML = '';
     narrativeZone.style.cssText = 'display:block;';
 
@@ -4135,7 +4122,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     // ── Thread container ─────────────────────────────────────────────────────
     const thread = document.createElement('div');
     thread.id = 'qs-copilot-thread';
-    thread.style.cssText = 'display:flex;flex-direction:column;gap:10px;padding-bottom:2px;';
+    thread.style.cssText = 'display:flex;flex-direction:column;gap:12px;padding-bottom:4px;';
     narrativeZone.appendChild(thread);
     narrativeZone.__qsCopilotThread = thread;
 
@@ -4143,12 +4130,44 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     function _aiAvatar() {
       const av = document.createElement('div');
       av.style.cssText = [
-        'width:30px;height:30px;border-radius:50%;flex-shrink:0;margin-top:2px;',
-        'background:linear-gradient(135deg,#7c3aed,#4f46e5);',
-        'display:flex;align-items:center;justify-content:center;font-size:15px;',
-        'box-shadow:0 2px 8px rgba(124,58,237,0.35);',
+        'width:30px;height:30px;min-width:30px;border-radius:8px;flex-shrink:0;margin-top:2px;',
+        'background:linear-gradient(135deg,var(--accent-primary),var(--accent-primary-hover));',
+        'display:flex;align-items:center;justify-content:center;',
+        'box-shadow:0 2px 8px rgba(99,102,241,0.3);',
       ].join('');
-      av.textContent = '\u2728';
+      const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+      svg.setAttribute('width','15'); svg.setAttribute('height','15');
+      svg.setAttribute('viewBox','0 0 24 24'); svg.setAttribute('fill','none');
+      svg.setAttribute('stroke','#fff'); svg.setAttribute('stroke-width','2');
+      svg.setAttribute('stroke-linecap','round'); svg.setAttribute('stroke-linejoin','round');
+      svg.innerHTML = '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/><line x1="12" y1="11" x2="12" y2="15"/><line x1="10" y1="13" x2="14" y2="13"/>';
+      av.appendChild(svg);
+      return av;
+    }
+
+    function _userAvatar() {
+      const av = document.createElement('div');
+      av.style.cssText = 'width:28px;height:28px;border-radius:50%;flex-shrink:0;overflow:hidden;margin-top:2px;';
+      const avatarUrl = state && state._avatarUrl;
+      if (avatarUrl) {
+        const img = document.createElement('img');
+        img.src = escapeHtml(avatarUrl);
+        img.alt = 'You';
+        img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+        img.onerror = function() {
+          av.removeChild(img);
+          av.style.cssText += 'background:linear-gradient(135deg,rgba(99,102,241,0.4),rgba(79,70,229,0.6));display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;font-weight:700;';
+          av.textContent = 'Y';
+        };
+        av.appendChild(img);
+      } else {
+        av.style.cssText += 'background:rgba(99,102,241,0.25);border:1px solid rgba(99,102,241,0.3);display:flex;align-items:center;justify-content:center;';
+        const icon = document.createElement('svg');
+        icon.setAttribute('width','14'); icon.setAttribute('height','14'); icon.setAttribute('viewBox','0 0 24 24');
+        icon.setAttribute('fill','none'); icon.setAttribute('stroke','rgba(167,139,250,0.9)'); icon.setAttribute('stroke-width','2');
+        icon.innerHTML = '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>';
+        av.appendChild(icon);
+      }
       return av;
     }
 
@@ -4160,9 +4179,10 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       const bubble = document.createElement('div');
       bubble.style.cssText = [
         'flex:1;min-width:0;',
-        'background:rgba(124,58,237,0.09);border:1px solid rgba(124,58,237,0.22);',
+        'background:var(--card-glass);border:1px solid var(--border-glass);',
         'border-radius:4px 18px 18px 18px;padding:14px 16px;',
-        'font-size:14px;color:rgba(240,240,246,0.93);line-height:1.78;',
+        'font-size:14px;color:var(--text-primary);line-height:1.78;',
+        'box-shadow:var(--shadow-soft);',
       ].join('');
       const paras = String(content).split(/\n+/).map(function(p){ return p.trim(); }).filter(Boolean);
       paras.forEach(function(para, i) {
@@ -4179,16 +4199,18 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     // ── Append user reply bubble ─────────────────────────────────────────────
     function _appendUserBubble(content) {
       const row = document.createElement('div');
-      row.style.cssText = 'display:flex;justify-content:flex-end;';
+      row.style.cssText = 'display:flex;justify-content:flex-end;align-items:flex-end;gap:8px;';
       const bubble = document.createElement('div');
       bubble.style.cssText = [
         'max-width:82%;',
-        'background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);',
+        'background:var(--accent-primary);',
         'border-radius:18px 4px 18px 18px;padding:12px 15px;',
-        'font-size:14px;color:rgba(240,240,246,0.88);line-height:1.7;',
+        'font-size:14px;color:#fff;line-height:1.7;',
+        'box-shadow:0 2px 8px rgba(99,102,241,0.25);',
       ].join('');
       bubble.textContent = content;
       row.appendChild(bubble);
+      row.appendChild(_userAvatar());
       thread.appendChild(row);
       return row;
     }
@@ -4200,7 +4222,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       row.appendChild(_aiAvatar());
       const bubble = document.createElement('div');
       bubble.style.cssText = [
-        'background:rgba(124,58,237,0.09);border:1px solid rgba(124,58,237,0.22);',
+        'background:var(--card-glass);border:1px solid var(--border-glass);',
         'border-radius:4px 18px 18px 18px;padding:14px 18px;',
         'display:flex;align-items:center;gap:5px;',
       ].join('');
@@ -4208,7 +4230,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
         const dot = document.createElement('span');
         dot.style.cssText = [
           'display:inline-block;width:7px;height:7px;border-radius:50%;',
-          'background:#a78bfa;',
+          'background:var(--accent-primary);',
           'animation:qsDotBounce 1.1s ease-in-out infinite;',
           'animation-delay:' + delay + 's;',
         ].join('');
@@ -4233,19 +4255,31 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
 
     _appendAiBubble(cleanText);
 
+    // Store insight text so the follow-up prompt has full context
+    narrativeZone.__qsCopilotInsight = cleanText;
+
+    // Restore stored thread (user reply + AI follow-up) if page was refreshed
+    if (session && session.userReply) {
+      _appendUserBubble(session.userReply);
+      if (session.followup) {
+        _appendAiBubble(session.followup);
+      }
+    }
+
     // Extract the question text for follow-up prompt context
     const questionText = _copilotExtractQuestion(text) || 'What should this store become known for?';
     narrativeZone.__qsCopilotQuestion = questionText;
 
     // ── Composer ─────────────────────────────────────────────────────────────
-    const locked = _copilotHasUsedQuestionToday();
+    // Locked if the daily gate is set OR if the stored session already has a reply
+    const locked = _copilotHasUsedQuestionToday() || !!(session && session.userReply);
     const composer = document.createElement('div');
-    composer.style.cssText = 'margin-top:12px;border-top:1px solid rgba(255,255,255,0.07);padding-top:12px;';
+    composer.style.cssText = 'margin-top:16px;border-top:1px solid var(--border-glass);padding-top:14px;';
 
     if (locked) {
       const lockRow = document.createElement('div');
       lockRow.style.cssText = [
-        'text-align:center;font-size:12px;color:rgba(255,255,255,0.3);',
+        'text-align:center;font-size:12px;color:var(--text-muted);',
         'padding:8px 0 2px;letter-spacing:0.1px;',
       ].join('');
       lockRow.textContent = '\u2713  You replied today. Come back tomorrow for the next question.';
@@ -4260,10 +4294,10 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       reply.placeholder = 'Reply with one sentence\u2026';
       reply.style.cssText = [
         'flex:1;resize:none;box-sizing:border-box;overflow:hidden;',
-        'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);',
-        'border-radius:14px;padding:11px 14px;color:#fff;font-size:14px;line-height:1.55;',
+        'background:var(--card-glass);border:1px solid var(--border-glass);',
+        'border-radius:14px;padding:11px 14px;color:var(--text-primary);font-size:14px;line-height:1.55;',
         'outline:none;min-height:44px;max-height:108px;',
-        'transition:border-color 0.15s;caret-color:#a78bfa;',
+        'transition:border-color 0.15s;caret-color:var(--accent-primary);',
       ].join('');
 
       reply.addEventListener('input', function() {
@@ -4271,10 +4305,10 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
         reply.style.height = Math.min(reply.scrollHeight, 108) + 'px';
       });
       reply.addEventListener('focus', function() {
-        reply.style.borderColor = 'rgba(124,58,237,0.45)';
+        reply.style.borderColor = 'var(--accent-primary)';
       });
       reply.addEventListener('blur', function() {
-        reply.style.borderColor = 'rgba(255,255,255,0.12)';
+        reply.style.borderColor = 'var(--border-glass)';
       });
 
       const sendBtn = document.createElement('button');
@@ -4308,7 +4342,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
 
       const hint = document.createElement('div');
       hint.style.cssText = [
-        'font-size:11px;color:rgba(255,255,255,0.25);',
+        'font-size:11px;color:var(--text-muted);',
         'margin-top:7px;text-align:center;letter-spacing:0.1px;',
       ].join('');
       hint.textContent = 'One reply \u00b7 resets tomorrow';
@@ -4333,27 +4367,44 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       return;
     }
 
+    // ── Cache-first: restore today's session without an API call ─────────────
+    const stored = _copilotGetSession();
+    if (stored && stored.insight) {
+      narrativeZone.style.display = 'block';
+      narrativeZone.innerHTML = '';
+      _renderGrowthCopilotNarrative(narrativeZone, stored.insight, growth, sig, stored);
+      const aiBtn = document.getElementById('qs-ask-ai-btn');
+      if (aiBtn) {
+        aiBtn.disabled = false;
+        aiBtn.style.opacity = '1';
+        const lbl = aiBtn.querySelector('span:last-child');
+        if (lbl) lbl.textContent = 'Refresh Chat';
+      }
+      return;
+    }
+
+    // ── No stored session — call Gemini for today's fresh insight ─────────────
     const aiBtn = document.getElementById('qs-ask-ai-btn');
     if (aiBtn) {
       aiBtn.disabled = true;
       aiBtn.style.opacity = '0.6';
       const lbl = aiBtn.querySelector('span:last-child');
-      if (lbl) lbl.textContent = 'Thinking like a growth coach…';
+      if (lbl) lbl.textContent = 'Thinking like a growth coach\u2026';
     }
 
     narrativeZone.style.display = 'block';
     narrativeZone.innerHTML = '';
     const skel = document.createElement('div');
     skel.style.cssText = [
-      'background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.2);',
+      'background:var(--card-glass);border:1px solid var(--border-glass);',
       'border-radius:16px;padding:20px 18px;',
     ].join('');
     const skelLbl = document.createElement('div');
-    skelLbl.style.cssText = 'font-size:11px;font-weight:700;color:rgba(167,139,250,0.7);letter-spacing:0.5px;text-transform:uppercase;margin-bottom:12px;';
-    skelLbl.textContent = '✨ Growth Copilot is thinking…';
+    skelLbl.style.cssText = 'font-size:11px;font-weight:700;color:var(--accent-primary);letter-spacing:0.5px;text-transform:uppercase;margin-bottom:12px;opacity:0.7;';
+    skelLbl.textContent = '\u2728 Growth Copilot is thinking\u2026';
     [92, 78, 88, 66, 82].forEach(function(w) {
       const l = document.createElement('div');
-      l.style.cssText = 'height:12px;border-radius:6px;background:rgba(255,255,255,0.07);margin-bottom:8px;width:' + w + '%;';
+      l.style.cssText = 'height:12px;border-radius:6px;background:var(--border-glass);margin-bottom:8px;width:' + w + '%;';
       skel.appendChild(l);
     });
     skel.appendChild(skelLbl);
@@ -4384,10 +4435,10 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       '- Mention product names only when strategically useful.',
       '- End with exactly one question the merchant should answer today.',
       '',
-      'RESPONSE FORMAT — natural prose only, no section headers or labels:',
+      'RESPONSE FORMAT \u2014 natural prose only, no section headers or labels:',
       'Open with one sharp sentence: your verdict on what is actually happening in this store right now.',
       'Follow with one sentence: the hidden pattern or risk the merchant has not noticed.',
-      'Follow with one sentence: the single highest-leverage move — name it specifically.',
+      'Follow with one sentence: the single highest-leverage move \u2014 name it specifically.',
       'If genuinely relevant, one sentence on a storefront or social angle.',
       'End with exactly one focused question on its own line. No preamble before it.',
       'Total response: 4-5 sentences maximum. Do not add greetings or sign-offs.',
@@ -4426,7 +4477,10 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
                     data.candidates[0].content.parts[0].text) || '';
       if (!text) throw new Error('Empty response from Gemini');
 
-      _renderGrowthCopilotNarrative(narrativeZone, text, growth, sig);
+      // Save today's insight — subsequent panel opens restore from here, no API call
+      _copilotSaveSession({ v: 1, insight: text, userReply: null, followup: null });
+
+      _renderGrowthCopilotNarrative(narrativeZone, text, growth, sig, null);
 
       if (aiBtn) {
         aiBtn.disabled = false;
@@ -4454,7 +4508,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
         const lbl = aiBtn.querySelector('span:last-child');
         if (lbl) lbl.textContent = 'Try Again';
       }
-      toast('AI analysis failed — check your Gemini key or connection.', 'error');
+      toast('AI analysis failed \u2014 check your Gemini key or connection.', 'error');
     }
   }
 
@@ -4467,11 +4521,11 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       return;
     }
 
-    // Retrieve thread helpers stored by _renderGrowthCopilotNarrative
-    const thread        = narrativeZone.__qsCopilotThread;
-    const appendUser    = narrativeZone.__qsAppendUserBubble;
-    const appendAi      = narrativeZone.__qsAppendAiBubble;
+    const thread         = narrativeZone.__qsCopilotThread;
+    const appendUser     = narrativeZone.__qsAppendUserBubble;
+    const appendAi       = narrativeZone.__qsAppendAiBubble;
     const appendThinking = narrativeZone.__qsAppendThinkingBubble;
+    const initialInsight = _safeStr(narrativeZone.__qsCopilotInsight);
 
     if (!thread || !appendUser || !appendAi || !appendThinking) {
       toast('Follow-up failed — please refresh.', 'error');
@@ -4480,7 +4534,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       return;
     }
 
-    // Render the user’s reply as a chat bubble immediately
+    // Render the merchant's reply as a chat bubble immediately
     appendUser(userReply);
 
     // Show thinking dots while Gemini works
@@ -4490,21 +4544,56 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     const ctx = _buildCopilotSnapshot(sig, growth);
     const snapshot = ctx.snapshot;
 
+    // ── Smart follow-up prompt ────────────────────────────────────────────────
+    // Intent-classification model: AI reads what the merchant ACTUALLY said
+    // and responds to that — not to what it expected them to say.
     const prompt = [
-      'You are QuickShop Growth Copilot.',
-      'You already gave the initial diagnosis and the merchant replied to the daily question.',
-      'Do not repeat the snapshot, raw numbers, or the earlier insight.',
-      'Use the reply to sharpen the one best next action for visibility, conversion, trust, or virality.',
-      'Write 2-3 short sentences maximum. No headers, bullets, or code fences.',
-      'Be specific, human, and practical. Do not ask another question.',
+      'You are QuickShop Growth Copilot giving a follow-up to a Nigerian merchant.',
       '',
-      'THE QUESTION THEY ANSWERED:',
+      'WHAT YOU TOLD THEM TODAY:',
+      initialInsight || '(initial insight not available)',
+      '',
+      'YOUR QUESTION:',
       questionText,
       '',
-      'MERCHANT REPLY:',
+      'THE MERCHANT SAID:',
       userReply,
       '',
-      'CONTEXT SNAPSHOT:',
+      '═══ YOUR JOB ═══',
+      '',
+      'Internally determine the merchant reply type — DO NOT write this determination in your response.',
+      'React type A if they made a specific request (post, caption, tweet, WhatsApp status, example, idea, template).',
+      'React type B if they gave a real answer about their store, product, or direction.',
+      'React type C if they were vague or unhelpful (I do not know, not sure, you tell me).',
+      'React type D if they pushed back, redirected, or raised a different concern.',
+      '',
+      'TYPE A — Specific request:',
+      'Write the actual ready-to-copy post/caption text. Keep it under 55 words. Make it feel real, not corporate.',
+      'Label it clearly on its own line, e.g. "WhatsApp Status:" or "Try this on Instagram:".',
+      'After the post, write ONE sentence of strategic context explaining why this angle works.',
+      '',
+      'TYPE B — Real answer:',
+      'Synthesize what they said into ONE concrete next action. 2-3 sentences.',
+      'Do not summarize what they said back at them. Move forward.',
+      '',
+      'TYPE C — Vague or no answer:',
+      'Skip the question. Give them your best judgment as if you know the answer.',
+      'Tell them what their store should stand for and what to do about it now. 2-3 sentences.',
+      '',
+      'TYPE D — Pushback or redirect:',
+      'Acknowledge the new direction in one sentence. Then give the sharpest move for where they want to go.',
+      '',
+      'ALWAYS:',
+      '- Use the merchant product names when useful (see snapshot below)',
+      '- Sound human, confident, slightly surprising',
+      '- No headers, bullets, numbered lists, or markdown',
+      '- Do NOT begin your response with any classification label or internal reasoning',
+      '- Do NOT ask another question',
+      '- Do NOT greet or sign off',
+      '- Do NOT repeat what you already said in the initial insight',
+      '- Total response: under 5 sentences (or post text + 1 sentence if writing a post)',
+      '',
+      'MERCHANT SNAPSHOT (for product names and context):',
       snapshot,
     ].join('\n');
 
@@ -4516,7 +4605,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.45, maxOutputTokens: 220 }
+            generationConfig: { temperature: 0.5, maxOutputTokens: 450 }
           })
         }
       );
@@ -4535,12 +4624,15 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
 
       if (thinkingRow.parentNode) thinkingRow.remove();
 
-      appendAi(text.trim());
+      const followupText = text.trim();
+      appendAi(followupText);
       try { thread.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'end' }); } catch (_) {}
 
+      // Save the complete conversation to localStorage for same-day restore
+      _copilotSaveSession({ userReply: userReply, followup: followupText });
       _copilotMarkQuestionUsed();
 
-      // Lock the composer — replace its contents with a done message
+      // Lock the composer
       if (composer) {
         composer.innerHTML = '';
         const lockRow = document.createElement('div');
@@ -4562,7 +4654,6 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       if (thinkingRow.parentNode) thinkingRow.remove();
       errlog('Gemini follow-up failed', e);
 
-      // Show error inline as a neutral message bubble
       const errRow = document.createElement('div');
       errRow.style.cssText = 'display:flex;align-items:flex-start;gap:10px;';
       const errBubble = document.createElement('div');
@@ -4575,13 +4666,13 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       errRow.appendChild(errBubble);
       thread.appendChild(errRow);
 
-      // Re-enable input so they can retry
       if (replyEl) replyEl.disabled = false;
       if (sendBtn) { sendBtn.disabled = false; sendBtn.style.opacity = '1'; }
 
-      toast('Follow-up failed — check your connection or Gemini key.', 'error');
+      toast('Follow-up failed \u2014 check your connection or Gemini key.', 'error');
     }
   }
+
 // ── PUBLIC ENTRY POINT ────────────────────────────────────────────────────
   function generateAdvancedInsights(returnHtml) {
     try {

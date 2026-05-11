@@ -1259,8 +1259,22 @@ body.keyboard-open .panel { padding-bottom: 16px; }
 #confirmModalCancel:hover { background: var(--card-glass); color: var(--text-primary); }
 
 /* ── INSIGHT OVERLAY ─────────────────────────────────────────────── */
-.insight-overlay { position: fixed; z-index: 20000; top: 4vh; left: 10px; right: 10px; max-height: 88vh; overflow-y: auto; background: var(--bg-glass); border: 1px solid var(--border-glass); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow-glass-lg); animation: scaleIn 0.26s cubic-bezier(0.34,1.56,0.64,1); }
-.insight-overlay h3 { color: var(--text-primary); margin-bottom: 10px; font-size: 15px; }
+/* ── Insight Full-Screen ─────────────────────────────────────────── */
+.insight-fullscreen { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg-obsidian); z-index: 999999; display: flex; flex-direction: column; animation: slideUp 0.3s cubic-bezier(0.16,1,0.3,1); }
+.insight-fullscreen.closing { animation: slideDown 0.22s cubic-bezier(0.4,0,1,1) both; pointer-events: none; }
+.insight-fullscreen-header { display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding: 0 12px; height: 56px; min-height: 56px; background: var(--bg-glass); border-bottom: 1px solid var(--border-glass); flex-shrink: 0; box-shadow: var(--shadow-soft); }
+.insight-back-btn { width: 38px; height: 38px; min-width: 38px; border-radius: 50%; border: 0; background: var(--card-glass); color: var(--text-primary); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.18s, transform 0.15s; }
+.insight-back-btn:hover { background: var(--card-glass-hover); transform: translateX(-2px); }
+.insight-back-btn:active { transform: scale(0.92); }
+.insight-header-brand { display: flex; flex-direction: row; align-items: center; gap: 10px; flex: 1; justify-content: center; }
+.insight-qs-logo-wrap { width: 32px; height: 32px; min-width: 32px; border-radius: 9px; background: linear-gradient(135deg, var(--accent-primary), var(--accent-primary-hover)); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.insight-header-title { font-size: 15px; font-weight: 700; color: var(--text-primary); line-height: 1.2; white-space: nowrap; }
+.insight-header-sub { font-size: 11px; color: var(--text-muted); letter-spacing: 0.01em; margin-top: 1px; white-space: nowrap; }
+.insight-header-spacer { width: 38px; min-width: 38px; }
+.insight-fullscreen-body { flex: 1; overflow-y: auto; padding: 16px 16px 40px; -webkit-overflow-scrolling: touch; }
+.insight-fullscreen-body::-webkit-scrollbar { width: 3px; }
+.insight-fullscreen-body::-webkit-scrollbar-thumb { background: var(--border-glass); border-radius: 3px; }
+/* Legacy close-btn kept for other usages */
 .close-btn { position: absolute; top: 10px; right: 10px; background: transparent; border: 0; font-size: 18px; color: var(--text-muted); cursor: pointer; padding: 4px 8px; transition: color 0.18s; border-radius: var(--radius-sm); }
 .close-btn:hover { color: var(--text-primary); background: var(--card-glass); }
 #inventoryInsightView { position: fixed; z-index: 20000; top: 4vh; left: 10px; right: 10px; }
@@ -1557,7 +1571,7 @@ body.customer-mode .btn-sell:hover, #catalogList .btn-sell:hover { background: #
   .modal { max-width: 500px; }
   .app { padding-left: 20px; padding-right: 20px; }
   .list { gap: 10px; }
-  .insight-overlay { max-width: 600px; }
+  .insight-fullscreen-body { padding: 20px 24px 60px; }
 }
 
 /* ── PRINT ───────────────────────────────────────────────────────── */
