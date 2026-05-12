@@ -355,7 +355,28 @@
           var r1 = await supabase.from('products')
             .upsert(productUpsertRows, { onConflict: 'id' });
           if (r1.error) { console.error('[qsdb] Product upsert failed:', r1.error); }
-          else { doneActIds = doneActIds.concat(productUpsertActIds); log('Product upsert OK.'); }
+          else {
+            doneActIds = doneActIds.concat(productUpsertActIds);
+            log('Product upsert OK.');
+            // ── Register/update marketplace listings ──────────────────────
+            // canonical.js::registerListing() calls qs_register_listing RPC which
+            // populates qs_vendor_listings + qs_canonical_products for search.html.
+            // The old inventory.js did this inline on save; the new sync path
+            // (appss.js → indexeddb_sync.js) skipped it, leaving the marketplace
+            // tables empty. Fix: fire-and-forget for every successfully upserted product.
+            if (window.__QS_CANONICAL && typeof window.__QS_CANONICAL.registerListing === 'function') {
+              productUpsertRows.forEach(function(row) {
+                try {
+                  window.__QS_CANONICAL.registerListing({
+                    id:       row.id,
+                    name:     row.name,
+                    price:    row.price,
+                    category: row.category || null
+                  });
+                } catch (_) { /* fire-and-forget: never block sync */ }
+              });
+            }
+          }
         } catch (e) { console.error('[qsdb] Product upsert threw:', e); }
       }
 
