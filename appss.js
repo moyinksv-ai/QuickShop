@@ -3803,7 +3803,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     // ── CARD: PROFIT LEAK ────────────────────────────────────────────────
     if (profitLeaks.length > 0) {
       const plc = _insCard('rgba(239,68,68,0.25)', 'rgba(239,68,68,0.05)');
-      _insCardHead(plc, '\u{1F4B8}', 'Profit Leak', 'High volume, low margin — cost is eating your return');
+      _insCardHead(plc, '💸', 'Profit Leak', 'High volume, low margin — cost is eating your return');
       profitLeaks.slice(0, 3).forEach(function(l) {
         _insRow(plc, l.product.name,
           l.margin.toFixed(0) + '% margin · sold ' + l.qty30 + '\u00D7 · only ' + fmt(l.profitMade) + ' profit kept',
@@ -3835,7 +3835,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     // ── CARD: PRICING OPPORTUNITIES ──────────────────────────────────────
     if (priceOpps.length > 0) {
       const oc = _insCard('rgba(59,130,246,0.24)', 'rgba(59,130,246,0.05)');
-      _insCardHead(oc, '\u{1F4CA}', 'Price Up These Movers', 'Fast sellers you can charge more for without slowing demand');
+      _insCardHead(oc, '📊', 'Price Up These Movers', 'Fast sellers you can charge more for without slowing demand');
       priceOpps.slice(0, 3).forEach(function(o) {
         _insRow(oc, o.product.name,
           o.qty7 + ' sold this week · ' + Number(o.margin).toFixed(0) + '% margin now',
@@ -3849,7 +3849,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     // ── CARD: PROMOTE THESE NOW ───────────────────────────────────────────
     if (growth.promote.length > 0) {
       const prom = _insCard('rgba(16,185,129,0.28)', 'rgba(16,185,129,0.06)');
-      _insCardHead(prom, '\u{1F4E3}', 'Push These Products', 'In-stock items ready for content and storefront spotlight');
+      _insCardHead(prom, '📣', 'Push These Products', 'In-stock items ready for content and storefront spotlight');
       growth.promote.forEach(function(p, idx) {
         _insRow(prom, p.name,
           growth.contentHookForProduct(p) + ' · ' + p.qty + ' in stock',
@@ -3864,7 +3864,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     // ── CARD: LISTINGS TO FIX ─────────────────────────────────────────────
     if (growth.fixNow.length > 0) {
       const fc = _insCard('rgba(245,158,11,0.28)', 'rgba(245,158,11,0.06)');
-      _insCardHead(fc, '\u{1F6E0}\uFE0F', 'Listings to Fix', 'Incomplete details that cost clicks before anyone reads the price');
+      _insCardHead(fc, '🛠\uFE0F', 'Listings to Fix', 'Incomplete details that cost clicks before anyone reads the price');
       growth.fixNow.slice(0, 3).forEach(function(item) {
         const p = item.product;
         const missing = item.missing.length ? item.missing.join(', ') : 'low completeness';
@@ -3963,17 +3963,31 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
 
 
   
+  // ── SECURITY: All copilot keys MUST include authenticated user ID.
+  // Never fall back to a shared/generic key — if user is unknown, return null
+  // and callers must treat null as "no storage available."
+  // This prevents cross-account AI session leakage.
+  function _copilotUserId() {
+    // currentUser is the authoritative auth source set by handleAuthUser.
+    // Do NOT fall back to localStorage or any cached value here.
+    return (currentUser && typeof currentUser.id === 'string' && currentUser.id) ? currentUser.id : null;
+  }
+
   function _copilotDailyQuestionKey() {
+    const uid = _copilotUserId();
+    if (!uid) return null; // no auth — no storage
     const d = new Date();
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
-    return 'qs_copilot_question_' + y + '-' + m + '-' + day;
+    return 'qs_copilot_question_v2_' + uid + '_' + y + '-' + m + '-' + day;
   }
 
   function _copilotHasUsedQuestionToday() {
     try {
-      return localStorage.getItem(_copilotDailyQuestionKey()) === '1';
+      const k = _copilotDailyQuestionKey();
+      if (!k) return false;
+      return localStorage.getItem(k) === '1';
     } catch (_) {
       return false;
     }
@@ -3981,23 +3995,120 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
 
   function _copilotMarkQuestionUsed() {
     try {
-      localStorage.setItem(_copilotDailyQuestionKey(), '1');
+      const k = _copilotDailyQuestionKey();
+      if (!k) return;
+      localStorage.setItem(k, '1');
     } catch (_) {}
   }
 
   // ── Session persistence helpers (store today's full conversation) ─────────
   function _copilotSessionKey() {
+    const uid = _copilotUserId();
+    if (!uid) return null; // no auth — no storage
     const d = new Date();
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
-    return 'qs_copilot_session_' + y + '-' + m + '-' + day;
+    return 'qs_copilot_session_v2_' + uid + '_' + y + '-' + m + '-' + day;
+  }
+
+  // ── Merchant memory: persistent cross-day identity store (per user) ───────
+  // Stores what the AI has learned about this merchant across sessions.
+  // Keyed by user ID — never shared, never migrated across accounts.
+  function _merchantMemoryKey() {
+    const uid = _copilotUserId();
+    if (!uid) return null;
+    return 'qs_merchant_memory_v1_' + uid;
+  }
+
+  function _getMerchantMemory() {
+    try {
+      const k = _merchantMemoryKey();
+      if (!k) return null;
+      const raw = localStorage.getItem(k);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      // Ownership check: stored uid must match current user
+      if (!data || data._uid !== _copilotUserId()) return null;
+      return data;
+    } catch (_) { return null; }
+  }
+
+  function _saveMerchantMemory(patch) {
+    try {
+      const k = _merchantMemoryKey();
+      if (!k) return;
+      const uid = _copilotUserId();
+      const existing = _getMerchantMemory() || {
+        _uid: uid, _v: 1,
+        storeCategory: null,
+        heroProduct: null,
+        merchantGoal: null,
+        recurringTheme: null,
+        lastReplySummary: null,
+        sessionCount: 0,
+        updatedAt: null,
+      };
+      const merged = Object.assign({}, existing, patch, { _uid: uid, updatedAt: new Date().toISOString() });
+      localStorage.setItem(k, JSON.stringify(merged));
+    } catch (_) {}
+  }
+
+  // Extract learnings from a completed merchant reply + followup pair.
+  // Called after a successful followup to update long-term memory.
+  function _updateMerchantMemoryFromSession(ctx, userReply, questionText) {
+    try {
+      const mem = _getMerchantMemory() || {};
+      const count = (typeof mem.sessionCount === 'number' ? mem.sessionCount : 0) + 1;
+
+      // Infer store category from top product if not yet known
+      let storeCategory = mem.storeCategory;
+      if (!storeCategory && ctx && ctx.promoted && ctx.promoted[0]) {
+        const cat = _safeStr((ctx.promoted[0] || {}).category, '');
+        if (cat) storeCategory = cat;
+      }
+
+      // Hero product: who is the current star?
+      let heroProduct = mem.heroProduct;
+      if (ctx && ctx.heroName && ctx.heroName !== 'Choose a hero product') {
+        heroProduct = ctx.heroName;
+      }
+
+      // Extract what the merchant said about their direction
+      const reply = _safeStr(userReply, '').slice(0, 200);
+      const question = _safeStr(questionText, '').slice(0, 150);
+
+      _saveMerchantMemory({
+        storeCategory: storeCategory || mem.storeCategory,
+        heroProduct: heroProduct || mem.heroProduct,
+        lastReplySummary: reply ? (question + ' → ' + reply) : mem.lastReplySummary,
+        sessionCount: count,
+      });
+    } catch (_) {}
+  }
+
+  // Build the memory context block for injection into prompts.
+  // Returns empty string if no memory exists (first-time users).
+  function _buildMemoryContext() {
+    const mem = _getMerchantMemory();
+    if (!mem) return '';
+    const lines = [];
+    if (mem.heroProduct) lines.push('Known hero product: ' + mem.heroProduct);
+    if (mem.storeCategory) lines.push('Primary store category: ' + mem.storeCategory);
+    if (mem.lastReplySummary) lines.push('Last session: merchant said "' + mem.lastReplySummary + '"');
+    if (typeof mem.sessionCount === 'number' && mem.sessionCount > 1) {
+      lines.push('This merchant has used Growth Copilot ' + mem.sessionCount + ' times before.');
+    }
+    if (!lines.length) return '';
+    return 'MERCHANT MEMORY (from previous sessions):\n' + lines.join('\n');
   }
 
   // Returns {v,insight,userReply,followup} or null if nothing stored today.
   function _copilotGetSession() {
     try {
-      const raw = localStorage.getItem(_copilotSessionKey());
+      const k = _copilotSessionKey();
+      if (!k) return null; // no authenticated user — refuse storage access
+      const raw = localStorage.getItem(k);
       if (!raw) return null;
       const data = JSON.parse(raw);
       if (data && data.v === 1 && typeof data.insight === 'string' && data.insight) return data;
@@ -4008,9 +4119,11 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
   // Merge patch into today's stored session (creates it if absent).
   function _copilotSaveSession(patch) {
     try {
+      const k = _copilotSessionKey();
+      if (!k) return; // no authenticated user — refuse storage write
       const existing = _copilotGetSession() || { v: 1, insight: null, userReply: null, followup: null };
       const merged = Object.assign({}, existing, patch);
-      localStorage.setItem(_copilotSessionKey(), JSON.stringify(merged));
+      localStorage.setItem(k, JSON.stringify(merged));
     } catch (_) {}
   }
 
@@ -4071,6 +4184,8 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       alerts ? ('Alerts:\n' + alerts) : 'Alerts: none.',
     ].join('\n');
 
+    const isEmpty = products.length === 0;
+
     return {
       snapshot: snapshot,
       products: products,
@@ -4085,6 +4200,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       priceOpps: priceOpps,
       trendPct: trendPct,
       heroName: _safeStr((promoted[0] || growth.bestSeller || {}).name, 'Choose a hero product'),
+      isEmpty: isEmpty,
     };
   }
 
@@ -4533,6 +4649,76 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     const ctx = _buildCopilotSnapshot(sig, growth);
     const snapshot = ctx.snapshot;
 
+    if (ctx.isEmpty) {
+      // Use a short, grounded empty-state prompt — no product examples, no narrative templates
+      const emptyPrompt = [
+        'You are QuickShop Growth Copilot.',
+        'This merchant has just created their account and has not added any products yet.',
+        'Do NOT invent products, sales patterns, or store narratives.',
+        'Do NOT pretend the store has inventory.',
+        'Give them 2-3 sharp, concrete sentences on what to do first.',
+        'Focus on: what kind of products to start with, how to think about their first listing, and why the first product choice matters.',
+        'Sound like a sharp operator giving real advice, not a tutorial.',
+        'End with one question: what is the first product they plan to sell?',
+        'No markdown. No greetings. No sign-offs. Under 4 sentences total.',
+      ].join('\n');
+      try {
+        const emptyRes = await fetch(
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=' + key,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: emptyPrompt }] }],
+              generationConfig: { temperature: 0.55, maxOutputTokens: 900 }
+            })
+          }
+        );
+        if (!emptyRes.ok) {
+          const errBody = await emptyRes.text().catch(function(){ return ''; });
+          throw new Error('Gemini HTTP ' + emptyRes.status + ': ' + errBody.slice(0, 120));
+        }
+        const emptyData = await emptyRes.json();
+        const emptyText = (emptyData.candidates &&
+                          emptyData.candidates[0] &&
+                          emptyData.candidates[0].content &&
+                          emptyData.candidates[0].content.parts &&
+                          emptyData.candidates[0].content.parts[0] &&
+                          emptyData.candidates[0].content.parts[0].text) || '';
+        if (!emptyText) throw new Error('Empty response from Gemini');
+        _copilotSaveSession({ v: 1, insight: emptyText, userReply: null, followup: null });
+        _renderGrowthCopilotNarrative(narrativeZone, emptyText, growth, sig, null);
+        if (aiBtn) {
+          aiBtn.disabled = false;
+          aiBtn.style.opacity = '1';
+          const lbl = aiBtn.querySelector('span:last-child');
+          if (lbl) lbl.textContent = 'Refresh Chat';
+        }
+      } catch (e) {
+        errlog('Gemini empty-state insight failed', e);
+        narrativeZone.innerHTML = '';
+        const errCard = document.createElement('div');
+        errCard.style.cssText = 'background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);border-radius:14px;padding:16px;';
+        const errTxt = document.createElement('div');
+        errTxt.style.cssText = 'font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:8px;';
+        errTxt.textContent = 'AI analysis failed. Add your first product to get started.';
+        const errDetail = document.createElement('div');
+        errDetail.style.cssText = 'font-size:11px;color:rgba(239,68,68,0.7);font-family:monospace;word-break:break-all;line-height:1.5;';
+        errDetail.textContent = 'Error: ' + (e && e.message ? e.message : String(e));
+        errCard.appendChild(errTxt);
+        errCard.appendChild(errDetail);
+        narrativeZone.appendChild(errCard);
+        if (aiBtn) {
+          aiBtn.disabled = false;
+          aiBtn.style.opacity = '1';
+          const lbl = aiBtn.querySelector('span:last-child');
+          if (lbl) lbl.textContent = 'Try Again';
+        }
+        toast('AI analysis failed \u2014 check your Gemini key or connection.', 'error');
+      }
+      return;
+    }
+
     const prompt = [
       'You are QuickShop Growth Copilot.',
       'You are NOT an analytics narrator.',
@@ -4570,6 +4756,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       '',
       'SNAPSHOT:',
       snapshot,
+      _buildMemoryContext() ? ('\n' + _buildMemoryContext()) : '',
     ].join('\n');
 
     try {
@@ -4715,6 +4902,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       '',
       'MERCHANT SNAPSHOT (for product names and context):',
       snapshot,
+      _buildMemoryContext() ? ('\n' + _buildMemoryContext()) : '',
     ].join('\n');
 
     try {
@@ -4751,6 +4939,8 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       // Save the complete conversation to localStorage for same-day restore
       _copilotSaveSession({ userReply: userReply, followup: followupText });
       _copilotMarkQuestionUsed();
+      // Update persistent cross-day merchant memory from this session
+      _updateMerchantMemoryFromSession(ctx, userReply, questionText);
 
       // Lock the composer
       if (composer) {
