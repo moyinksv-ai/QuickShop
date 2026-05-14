@@ -166,34 +166,76 @@
         '-webkit-backdrop-filter:blur(28px);',
         'border-bottom:1px solid rgba(255,255,255,0.07);',
         'padding:20px 18px 16px;',
-        'display:flex;flex-direction:column;align-items:center;gap:0;}',
+        'display:flex;flex-direction:column;align-items:center;gap:0;',
+        'transition:padding .28s cubic-bezier(.4,0,.2,1),',
+          'border-color .28s cubic-bezier(.4,0,.2,1);}',
 
-      /* top row: avatar centred above name */
+      /* ── COLLAPSED STATE — toggled by JS adding .collapsed on scroll ── */
+      /* Header shrinks to a compact bar */
+      '#cat-hdr.collapsed{padding:10px 14px 10px;}',
+      /* Top row flips from column-centred to row-left */
+      '#cat-hdr.collapsed #cat-hdr-top{',
+        'flex-direction:row;align-items:center;',
+        'gap:10px;margin-bottom:0;justify-content:flex-start;}',
+      /* Avatar shrinks and becomes a circle */
+      '#cat-hdr.collapsed #cat-avatar{',
+        'width:36px;height:36px;border-radius:50%;',
+        'font-size:14px;',
+        'box-shadow:0 2px 8px rgba(124,58,237,0.15);}',
+      '#cat-hdr.collapsed #cat-avatar img{border-radius:50%;}',
+      /* Store info stops centering */
+      '#cat-hdr.collapsed #cat-store-info{align-items:flex-start;}',
+      /* Store name shrinks and left-aligns */
+      '#cat-hdr.collapsed #cat-store-name{',
+        'font-size:16px;font-weight:700;letter-spacing:-.3px;',
+        'text-align:left;-webkit-line-clamp:1;}',
+      /* Meta row, tagline fade out and collapse height */
+      '#cat-hdr.collapsed #cat-hdr-meta{',
+        'max-height:0;opacity:0;overflow:hidden;',
+        'pointer-events:none;margin:0;}',
+      '#cat-hdr.collapsed #cat-tagline{',
+        'max-height:0;opacity:0;overflow:hidden;',
+        'margin:0;padding:0;border-width:0;',
+        'pointer-events:none;}',
+
+      /* All animated properties transition together */
       '#cat-hdr-top{display:flex;flex-direction:column;align-items:center;',
-        'gap:12px;width:100%;margin-bottom:12px;}',
+        'gap:12px;width:100%;margin-bottom:12px;',
+        'transition:flex-direction .28s cubic-bezier(.4,0,.2,1),',
+          'gap .28s cubic-bezier(.4,0,.2,1),',
+          'margin .28s cubic-bezier(.4,0,.2,1);}',
 
-      /* avatar — square card, prominent */
       '#cat-avatar{width:72px;height:72px;border-radius:20px;flex-shrink:0;',
         'background:linear-gradient(145deg,rgba(124,58,237,0.25),rgba(79,70,229,0.1));',
         'border:1.5px solid rgba(124,58,237,0.3);',
         'box-shadow:0 8px 32px rgba(124,58,237,0.2),0 2px 8px rgba(0,0,0,0.6);',
         'display:flex;align-items:center;justify-content:center;',
-        'font-size:26px;font-weight:900;color:#c4b5fd;overflow:hidden;}',
-      '#cat-avatar img{width:100%;height:100%;object-fit:cover;border-radius:18px;}',
+        'font-size:26px;font-weight:900;color:#c4b5fd;overflow:hidden;',
+        'transition:width .28s cubic-bezier(.4,0,.2,1),',
+          'height .28s cubic-bezier(.4,0,.2,1),',
+          'border-radius .28s cubic-bezier(.4,0,.2,1),',
+          'font-size .28s cubic-bezier(.4,0,.2,1),',
+          'box-shadow .28s cubic-bezier(.4,0,.2,1);}',
+      '#cat-avatar img{width:100%;height:100%;object-fit:cover;border-radius:18px;',
+        'transition:border-radius .28s cubic-bezier(.4,0,.2,1);}',
 
-      /* store name — centred, large, shopfront feel */
       '#cat-store-info{display:flex;flex-direction:column;align-items:center;',
-        'gap:0;width:100%;}',
+        'gap:0;width:100%;',
+        'transition:align-items .28s cubic-bezier(.4,0,.2,1);}',
       '#cat-store-name{font-size:26px;font-weight:800;color:#fff;',
         'letter-spacing:-.7px;line-height:1.1;text-align:center;',
         'overflow:hidden;text-overflow:ellipsis;',
-        'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}',
+        'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;',
+        'transition:font-size .28s cubic-bezier(.4,0,.2,1),',
+          'letter-spacing .28s cubic-bezier(.4,0,.2,1);}',
 
-      /* meta row — centred, all on one line */
       '#cat-hdr-meta{display:flex;align-items:center;justify-content:center;',
-        'flex-wrap:wrap;gap:7px;width:100%;}',
-      '#cat-store-sub{font-size:11.5px;color:rgba(240,240,246,0.4);',
-        'font-weight:500;}',
+        'flex-wrap:wrap;gap:7px;width:100%;',
+        'max-height:60px;opacity:1;overflow:hidden;',
+        'transition:max-height .28s cubic-bezier(.4,0,.2,1),',
+          'opacity .2s cubic-bezier(.4,0,.2,1),',
+          'margin .28s cubic-bezier(.4,0,.2,1);}',
+      '#cat-store-sub{font-size:11.5px;color:rgba(240,240,246,0.4);font-weight:500;}',
 
       /* location + delivery */
       '#cat-store-location{display:none;}',
@@ -226,6 +268,12 @@
         'background:rgba(255,255,255,0.03);',
         'border:1px solid rgba(255,255,255,0.06);',
         'border-radius:12px;',
+        'max-height:100px;opacity:1;',
+        'transition:max-height .28s cubic-bezier(.4,0,.2,1),',
+          'opacity .2s cubic-bezier(.4,0,.2,1),',
+          'margin .28s cubic-bezier(.4,0,.2,1),',
+          'padding .28s cubic-bezier(.4,0,.2,1),',
+          'border-width .28s cubic-bezier(.4,0,.2,1);',
       '}',
       '#cat-tagline.visible{display:block;}',
 
@@ -2206,6 +2254,36 @@
     if (lbprevEl) lbprevEl.addEventListener('click', function () { if (_lbIdx > 0) lbShow(_lbIdx - 1); });
     var lbnextEl = document.getElementById('cat-lb-next');
     if (lbnextEl) lbnextEl.addEventListener('click', function () { if (_lbIdx < _lbImages.length - 1) lbShow(_lbIdx + 1); });
+
+    /* ── Header collapse on scroll ───────────────────────────────────────────
+     * Threshold: 80px. rAF gate ensures at most one DOM write per frame.
+     * Only touches #cat-hdr classList — no style properties, no layout reads
+     * inside the handler (scrollY is a compositor-safe property).
+     * Graceful degradation: if JS fails, header stays expanded. ── */
+    var _hdrEl = document.getElementById('cat-hdr');
+    if (_hdrEl) {
+      var _collapsed = false;
+      var _rafPending = false;
+      var COLLAPSE_THRESHOLD = 80;
+
+      function _onScroll() {
+        if (_rafPending) return;
+        _rafPending = true;
+        requestAnimationFrame(function () {
+          _rafPending = false;
+          var shouldCollapse = (window.scrollY || window.pageYOffset) > COLLAPSE_THRESHOLD;
+          if (shouldCollapse === _collapsed) return; // no change — skip class write
+          _collapsed = shouldCollapse;
+          if (_collapsed) {
+            _hdrEl.classList.add('collapsed');
+          } else {
+            _hdrEl.classList.remove('collapsed');
+          }
+        });
+      }
+
+      window.addEventListener('scroll', _onScroll, { passive: true });
+    }
   }
 
   /* ── 17. MAIN BOOTSTRAP ──────────────────────────────────────────────── */
