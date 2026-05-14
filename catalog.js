@@ -161,70 +161,77 @@
       'body.qs-cat #qs-catalog{display:block;}',
 
       /* --- header --- */
+      /* Two-zone: identity row (avatar + name) + meta row (sub + location + status) */
       '#cat-hdr{position:sticky;top:0;z-index:100;',
-        'background:rgba(11,11,16,0.97);backdrop-filter:blur(24px);',
-        '-webkit-backdrop-filter:blur(24px);',
-        'border-bottom:1px solid rgba(255,255,255,0.06);',
-        'padding:13px 16px 13px;display:flex;align-items:center;gap:13px;}',
+        'background:rgba(11,11,16,0.98);backdrop-filter:blur(28px);',
+        '-webkit-backdrop-filter:blur(28px);',
+        'border-bottom:1px solid rgba(255,255,255,0.07);',
+        'padding:18px 18px 14px;',
+        'display:flex;flex-direction:column;gap:0;}',
 
-      /* avatar — circular, elevated */
-      '#cat-avatar{width:46px;height:46px;border-radius:50%;flex-shrink:0;',
-        'background:linear-gradient(135deg,rgba(124,58,237,0.25),rgba(109,40,217,0.12));',
-        'border:1.5px solid rgba(124,58,237,0.4);',
-        'box-shadow:0 0 0 3px rgba(124,58,237,0.08),0 2px 8px rgba(0,0,0,0.4);',
+      /* top row: avatar + name side by side */
+      '#cat-hdr-top{display:flex;align-items:center;gap:14px;margin-bottom:10px;}',
+
+      /* avatar — larger, more presence */
+      '#cat-avatar{width:62px;height:62px;border-radius:18px;flex-shrink:0;',
+        'background:linear-gradient(145deg,rgba(124,58,237,0.3),rgba(79,70,229,0.15));',
+        'border:1.5px solid rgba(124,58,237,0.35);',
+        'box-shadow:0 4px 20px rgba(124,58,237,0.18),0 1px 4px rgba(0,0,0,0.5);',
         'display:flex;align-items:center;justify-content:center;',
-        'font-size:16px;font-weight:900;color:#c4b5fd;overflow:hidden;}',
-      '#cat-avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%;}',
+        'font-size:22px;font-weight:900;color:#c4b5fd;overflow:hidden;}',
+      '#cat-avatar img{width:100%;height:100%;object-fit:cover;border-radius:16px;}',
 
-      /* store info */
+      /* store name — the hero element */
       '#cat-store-info{flex:1;min-width:0;}',
-      '#cat-store-name{font-size:16px;font-weight:800;color:#fff;',
-        'letter-spacing:-.35px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;',
-        'line-height:1.25;}',
-      '#cat-store-sub{font-size:11px;color:rgba(240,240,246,0.38);',
-        'margin-top:2px;font-weight:500;letter-spacing:.1px;}',
+      '#cat-store-name{font-size:22px;font-weight:800;color:#fff;',
+        'letter-spacing:-.6px;line-height:1.15;',
+        'overflow:hidden;text-overflow:ellipsis;',
+        'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}',
 
-      /* location + delivery — sits between sub and status pill */
+      /* bottom row: sub + location + status as a flex-wrap strip */
+      '#cat-hdr-meta{display:flex;align-items:center;flex-wrap:wrap;gap:6px;}',
+      '#cat-store-sub{font-size:11.5px;color:rgba(240,240,246,0.45);',
+        'font-weight:500;letter-spacing:.05px;}',
+
+      /* location + delivery */
       '#cat-store-location{display:none;}',
       '#cat-store-location.cat-store-location-line{',
-        'display:flex;align-items:center;flex-wrap:wrap;gap:5px;',
-        'margin-top:4px;}',
-      '.cat-store-location-line{font-size:11px;color:rgba(240,240,246,0.45);',
-        'font-weight:500;}',
+        'display:contents;}', /* children flow directly into #cat-hdr-meta */
+      '.cat-loc-text{font-size:11.5px;color:rgba(240,240,246,0.45);font-weight:500;}',
       '.cat-delivery-badge{',
-        'display:inline-flex;align-items:center;',
-        'font-size:9.5px;font-weight:700;letter-spacing:.3px;',
-        'padding:2px 7px;border-radius:100px;',
+        'display:inline-flex;align-items:center;gap:4px;',
+        'font-size:10px;font-weight:700;letter-spacing:.25px;',
+        'padding:3px 9px;border-radius:100px;',
         'white-space:nowrap;}',
       '.cat-delivery-yes{',
         'background:rgba(16,185,129,0.1);',
-        'border:1px solid rgba(16,185,129,0.22);',
+        'border:1px solid rgba(16,185,129,0.25);',
         'color:#34d399;}',
       '.cat-delivery-no{',
         'background:rgba(255,255,255,0.05);',
         'border:1px solid rgba(255,255,255,0.1);',
-        'color:rgba(240,240,246,0.45);}',
-
-      /* tagline strip — sits between search bar and category chips */
-      '#cat-tagline{',
-        'display:none;', /* hidden until tagline set */
-        'padding:7px 20px 5px;',
-        'text-align:center;',
-        'font-size:12.5px;font-style:italic;font-weight:400;',
-        'color:rgba(240,240,246,0.5);line-height:1.6;',
-        'border-bottom:1px solid rgba(255,255,255,0.04);',
-        'margin:0;',
-      '}',
-      '#cat-tagline.visible{display:block;}',
+        'color:rgba(240,240,246,0.4);}',
 
       /* status pill */
       '#cat-status{display:inline-flex;align-items:center;gap:5px;',
         'background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);',
-        'border-radius:100px;padding:3px 8px 3px 6px;margin-top:5px;}',
-      '#cat-status-text{font-size:9.5px;font-weight:700;color:#34d399;letter-spacing:.5px;}',
+        'border-radius:100px;padding:3px 9px 3px 7px;}',
+      '#cat-status-text{font-size:10px;font-weight:700;color:#34d399;letter-spacing:.4px;}',
       '.cat-live-dot{width:5px;height:5px;border-radius:50%;background:#34d399;flex-shrink:0;',
         'animation:cat-pulse 2s ease-in-out infinite;}',
       '@keyframes cat-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.65)}}',
+
+      /* tagline — inside header, just below meta row, italicised */
+      '#cat-tagline{',
+        'display:none;',
+        'margin:10px 0 0;padding:10px 14px;',
+        'font-size:12.5px;font-style:italic;font-weight:400;',
+        'color:rgba(240,240,246,0.5);line-height:1.65;',
+        'background:rgba(255,255,255,0.03);',
+        'border:1px solid rgba(255,255,255,0.06);',
+        'border-radius:10px;',
+      '}',
+      '#cat-tagline.visible{display:block;}',
 
       /* --- search --- */
       '#cat-search-wrap{padding:10px 12px 4px;background:#0b0b10;}',
@@ -629,6 +636,10 @@
     var hdr = document.createElement('header');
     hdr.id = 'cat-hdr';
     hdr.setAttribute('role', 'banner');
+
+    // Top row: avatar + store name
+    var hdrTop = document.createElement('div');
+    hdrTop.id = 'cat-hdr-top';
     var avatar = document.createElement('div');
     avatar.id = 'cat-avatar';
     avatar.setAttribute('aria-hidden', 'true');
@@ -637,9 +648,19 @@
     var sname = document.createElement('div');
     sname.id = 'cat-store-name';
     sname.textContent = 'Loading…';
+    sinfo.appendChild(sname);
+    hdrTop.appendChild(avatar);
+    hdrTop.appendChild(sinfo);
+    hdr.appendChild(hdrTop);
+
+    // Meta row: sub · location · delivery · status — all inline
+    var hdrMeta = document.createElement('div');
+    hdrMeta.id = 'cat-hdr-meta';
     var ssub = document.createElement('div');
     ssub.id = 'cat-store-sub';
     ssub.textContent = 'WhatsApp catalog';
+    var sloc = document.createElement('div');
+    sloc.id = 'cat-store-location';
     var sstat = document.createElement('div');
     sstat.id = 'cat-status';
     var dot = document.createElement('span');
@@ -650,15 +671,17 @@
     stxt.textContent = 'OPEN NOW';
     sstat.appendChild(dot);
     sstat.appendChild(stxt);
-    sinfo.appendChild(sname);
-    sinfo.appendChild(ssub);
-    // Location line — hidden until populated
-    var sloc = document.createElement('div');
-    sloc.id = 'cat-store-location';
-    sinfo.appendChild(sloc);
-    sinfo.appendChild(sstat);
-    hdr.appendChild(avatar);
-    hdr.appendChild(sinfo);
+    hdrMeta.appendChild(ssub);
+    hdrMeta.appendChild(sloc);
+    hdrMeta.appendChild(sstat);
+    hdr.appendChild(hdrMeta);
+
+    // Tagline — inside header, hidden until set
+    var taglineEl = document.createElement('p');
+    taglineEl.id = 'cat-tagline';
+    taglineEl.setAttribute('aria-label', 'Store tagline');
+    hdr.appendChild(taglineEl);
+
     root.appendChild(hdr);
 
     // Search
@@ -673,12 +696,6 @@
     si.setAttribute('spellcheck', 'false');
     sw.appendChild(si);
     root.appendChild(sw);
-
-    // Tagline strip — hidden until populated
-    var taglineEl = document.createElement('p');
-    taglineEl.id = 'cat-tagline';
-    taglineEl.setAttribute('aria-label', 'Store tagline');
-    root.appendChild(taglineEl);
 
     // Category chips
     var chips = document.createElement('div');
@@ -2351,23 +2368,22 @@
     if (slocEl) {
       var _loc = profile && profile.location && profile.location.trim();
       var _delivery = profile && profile.delivery_available;
-      var _locParts = [];
+      var _hasContent = false;
       if (_loc) {
-        var _pin = document.createElement('span');
-        _pin.setAttribute('aria-hidden', 'true');
-        _pin.textContent = '📍 ';
-        var _locText = document.createTextNode(_loc);
-        slocEl.appendChild(_pin);
-        slocEl.appendChild(_locText);
-        slocEl.className = 'cat-store-location-line';
+        var _locSpan = document.createElement('span');
+        _locSpan.className = 'cat-loc-text';
+        _locSpan.textContent = '📍 ' + _loc;
+        slocEl.appendChild(_locSpan);
+        _hasContent = true;
       }
       if (typeof _delivery === 'boolean') {
         var _badge = document.createElement('span');
         _badge.className = _delivery ? 'cat-delivery-badge cat-delivery-yes' : 'cat-delivery-badge cat-delivery-no';
         _badge.textContent = _delivery ? '🚚 Delivers' : '🏪 Pickup only';
         slocEl.appendChild(_badge);
-        slocEl.className = (slocEl.className ? slocEl.className + ' ' : '') + 'cat-store-location-line';
+        _hasContent = true;
       }
+      if (_hasContent) slocEl.className = 'cat-store-location-line';
     }
 
     // SOFT GATE: header identity is now rendered — apply gate if inactive
