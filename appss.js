@@ -3803,7 +3803,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     // ── CARD: PROFIT LEAK ────────────────────────────────────────────────
     if (profitLeaks.length > 0) {
       const plc = _insCard('rgba(239,68,68,0.25)', 'rgba(239,68,68,0.05)');
-      _insCardHead(plc, '💸', 'Profit Leak', 'High volume, low margin — cost is eating your return');
+      _insCardHead(plc, '\u{1F4B8}', 'Profit Leak', 'High volume, low margin — cost is eating your return');
       profitLeaks.slice(0, 3).forEach(function(l) {
         _insRow(plc, l.product.name,
           l.margin.toFixed(0) + '% margin · sold ' + l.qty30 + '\u00D7 · only ' + fmt(l.profitMade) + ' profit kept',
@@ -3835,7 +3835,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     // ── CARD: PRICING OPPORTUNITIES ──────────────────────────────────────
     if (priceOpps.length > 0) {
       const oc = _insCard('rgba(59,130,246,0.24)', 'rgba(59,130,246,0.05)');
-      _insCardHead(oc, '📊', 'Price Up These Movers', 'Fast sellers you can charge more for without slowing demand');
+      _insCardHead(oc, '\u{1F4CA}', 'Price Up These Movers', 'Fast sellers you can charge more for without slowing demand');
       priceOpps.slice(0, 3).forEach(function(o) {
         _insRow(oc, o.product.name,
           o.qty7 + ' sold this week · ' + Number(o.margin).toFixed(0) + '% margin now',
@@ -3849,7 +3849,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     // ── CARD: PROMOTE THESE NOW ───────────────────────────────────────────
     if (growth.promote.length > 0) {
       const prom = _insCard('rgba(16,185,129,0.28)', 'rgba(16,185,129,0.06)');
-      _insCardHead(prom, '📣', 'Push These Products', 'In-stock items ready for content and storefront spotlight');
+      _insCardHead(prom, '\u{1F4E3}', 'Push These Products', 'In-stock items ready for content and storefront spotlight');
       growth.promote.forEach(function(p, idx) {
         _insRow(prom, p.name,
           growth.contentHookForProduct(p) + ' · ' + p.qty + ' in stock',
@@ -3864,7 +3864,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     // ── CARD: LISTINGS TO FIX ─────────────────────────────────────────────
     if (growth.fixNow.length > 0) {
       const fc = _insCard('rgba(245,158,11,0.28)', 'rgba(245,158,11,0.06)');
-      _insCardHead(fc, '🛠\uFE0F', 'Listings to Fix', 'Incomplete details that cost clicks before anyone reads the price');
+      _insCardHead(fc, '\u{1F6E0}\uFE0F', 'Listings to Fix', 'Incomplete details that cost clicks before anyone reads the price');
       growth.fixNow.slice(0, 3).forEach(function(item) {
         const p = item.product;
         const missing = item.missing.length ? item.missing.join(', ') : 'low completeness';
@@ -4184,8 +4184,6 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       alerts ? ('Alerts:\n' + alerts) : 'Alerts: none.',
     ].join('\n');
 
-    const isEmpty = products.length === 0;
-
     return {
       snapshot: snapshot,
       products: products,
@@ -4200,7 +4198,6 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       priceOpps: priceOpps,
       trendPct: trendPct,
       heroName: _safeStr((promoted[0] || growth.bestSeller || {}).name, 'Choose a hero product'),
-      isEmpty: isEmpty,
     };
   }
 
@@ -4648,76 +4645,6 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
 
     const ctx = _buildCopilotSnapshot(sig, growth);
     const snapshot = ctx.snapshot;
-
-    if (ctx.isEmpty) {
-      // Use a short, grounded empty-state prompt — no product examples, no narrative templates
-      const emptyPrompt = [
-        'You are QuickShop Growth Copilot.',
-        'This merchant has just created their account and has not added any products yet.',
-        'Do NOT invent products, sales patterns, or store narratives.',
-        'Do NOT pretend the store has inventory.',
-        'Give them 2-3 sharp, concrete sentences on what to do first.',
-        'Focus on: what kind of products to start with, how to think about their first listing, and why the first product choice matters.',
-        'Sound like a sharp operator giving real advice, not a tutorial.',
-        'End with one question: what is the first product they plan to sell?',
-        'No markdown. No greetings. No sign-offs. Under 4 sentences total.',
-      ].join('\n');
-      try {
-        const emptyRes = await fetch(
-          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=' + key,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: emptyPrompt }] }],
-              generationConfig: { temperature: 0.55, maxOutputTokens: 900 }
-            })
-          }
-        );
-        if (!emptyRes.ok) {
-          const errBody = await emptyRes.text().catch(function(){ return ''; });
-          throw new Error('Gemini HTTP ' + emptyRes.status + ': ' + errBody.slice(0, 120));
-        }
-        const emptyData = await emptyRes.json();
-        const emptyText = (emptyData.candidates &&
-                          emptyData.candidates[0] &&
-                          emptyData.candidates[0].content &&
-                          emptyData.candidates[0].content.parts &&
-                          emptyData.candidates[0].content.parts[0] &&
-                          emptyData.candidates[0].content.parts[0].text) || '';
-        if (!emptyText) throw new Error('Empty response from Gemini');
-        _copilotSaveSession({ v: 1, insight: emptyText, userReply: null, followup: null });
-        _renderGrowthCopilotNarrative(narrativeZone, emptyText, growth, sig, null);
-        if (aiBtn) {
-          aiBtn.disabled = false;
-          aiBtn.style.opacity = '1';
-          const lbl = aiBtn.querySelector('span:last-child');
-          if (lbl) lbl.textContent = 'Refresh Chat';
-        }
-      } catch (e) {
-        errlog('Gemini empty-state insight failed', e);
-        narrativeZone.innerHTML = '';
-        const errCard = document.createElement('div');
-        errCard.style.cssText = 'background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);border-radius:14px;padding:16px;';
-        const errTxt = document.createElement('div');
-        errTxt.style.cssText = 'font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:8px;';
-        errTxt.textContent = 'AI analysis failed. Add your first product to get started.';
-        const errDetail = document.createElement('div');
-        errDetail.style.cssText = 'font-size:11px;color:rgba(239,68,68,0.7);font-family:monospace;word-break:break-all;line-height:1.5;';
-        errDetail.textContent = 'Error: ' + (e && e.message ? e.message : String(e));
-        errCard.appendChild(errTxt);
-        errCard.appendChild(errDetail);
-        narrativeZone.appendChild(errCard);
-        if (aiBtn) {
-          aiBtn.disabled = false;
-          aiBtn.style.opacity = '1';
-          const lbl = aiBtn.querySelector('span:last-child');
-          if (lbl) lbl.textContent = 'Try Again';
-        }
-        toast('AI analysis failed \u2014 check your Gemini key or connection.', 'error');
-      }
-      return;
-    }
 
     const prompt = [
       'You are QuickShop Growth Copilot.',
@@ -5646,6 +5573,15 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       // Pre-fill tagline textarea with existing value
       const taglineInput = settingsPanel.querySelector('#qs-tagline-input');
       if (taglineInput && profile.tagline) taglineInput.value = profile.tagline;
+      // Pre-fill location
+      const locationInput = settingsPanel.querySelector('#qs-location-input');
+      if (locationInput && profile.location) locationInput.value = profile.location;
+      // Pre-fill delivery radio
+      if (typeof profile.delivery_available === 'boolean') {
+        const radioId = profile.delivery_available ? '#qs-delivery-yes' : '#qs-delivery-no';
+        const radio = settingsPanel.querySelector(radioId);
+        if (radio) radio.checked = true;
+      }
     }).catch(function() {});
 
     const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
@@ -5727,7 +5663,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
                 <div class="qs-row-icon">🏪</div>
                 <div class="qs-action-label">
                   <div>Edit Store</div>
-                  <div class="qs-action-sub">Tagline, categories</div>
+                  <div class="qs-action-sub">Tagline, location, delivery</div>
                 </div>
                 <div class="qs-row-chevron">
                   <svg width="7" height="12" viewBox="0 0 7 12" fill="none">
@@ -5749,6 +5685,30 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
                         placeholder="e.g. Get confidence in a bottle from ALL'S Signature"></textarea>
                     </div>
                     <button id="qs-tagline-save" class="qs-save-btn">Save Tagline</button>
+                    <div class="qs-drawer-divider"></div>
+                    <div>
+                      <div class="qs-field-label">Location</div>
+                      <div class="qs-field-sub">City or area shown on your catalog — e.g. Lagos, Abuja, Ibadan</div>
+                      <input id="qs-location-input" class="qs-input" type="text" maxlength="80"
+                        placeholder="e.g. Lagos Island, Lagos" />
+                    </div>
+                    <div style="margin-top:14px;">
+                      <div class="qs-field-label">Delivery Available?</div>
+                      <div class="qs-field-sub">Customers will see this on your catalog as a trust signal</div>
+                      <div style="display:flex;gap:10px;margin-top:8px;">
+                        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;color:var(--text-secondary);">
+                          <input type="radio" id="qs-delivery-yes" name="qs-delivery" value="yes"
+                                 style="accent-color:var(--accent-primary);width:16px;height:16px;" />
+                          🚚 Yes, I deliver
+                        </label>
+                        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;color:var(--text-secondary);">
+                          <input type="radio" id="qs-delivery-no" name="qs-delivery" value="no"
+                                 style="accent-color:var(--accent-primary);width:16px;height:16px;" />
+                          🏪 Pickup only
+                        </label>
+                      </div>
+                    </div>
+                    <button id="qs-store-info-save" class="qs-save-btn" style="margin-top:16px;">Save Location &amp; Delivery</button>
                     <div class="qs-drawer-divider"></div>
                     <div>
                       <div class="qs-field-label" style="margin-bottom:10px;">Categories</div>
@@ -6007,6 +5967,41 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
         } finally {
           taglineSaveBtn.disabled = false;
           taglineSaveBtn.textContent = 'Save Tagline';
+        }
+      });
+    }
+
+    // Wire location + delivery save
+    const storeInfoSaveBtn = settingsPanel.querySelector('#qs-store-info-save');
+    if (storeInfoSaveBtn) {
+      storeInfoSaveBtn.addEventListener('click', async function () {
+        const locationInput = settingsPanel.querySelector('#qs-location-input');
+        const deliveryYes   = settingsPanel.querySelector('#qs-delivery-yes');
+        const deliveryNo    = settingsPanel.querySelector('#qs-delivery-no');
+        const newLocation   = (locationInput ? locationInput.value : '').trim().slice(0, 80);
+        // delivery_available: true if Yes checked, false if No checked, null if neither
+        var deliveryAvailable = null;
+        if (deliveryYes && deliveryYes.checked) deliveryAvailable = true;
+        else if (deliveryNo && deliveryNo.checked) deliveryAvailable = false;
+        const u  = getUser();
+        const sb = getClient();
+        if (!u || !sb) { toast('Not logged in', 'error'); return; }
+        storeInfoSaveBtn.disabled = true;
+        storeInfoSaveBtn.textContent = 'Saving…';
+        try {
+          const updatePayload = { location: newLocation || null };
+          if (deliveryAvailable !== null) updatePayload.delivery_available = deliveryAvailable;
+          const { error } = await sb.from('profiles')
+            .update(updatePayload)
+            .eq('id', u.id);
+          if (error) throw error;
+          toast('Location & delivery saved ✓');
+        } catch (e) {
+          errlog('store info save', e);
+          toast('Failed to save: ' + (e.message || 'unknown error'), 'error');
+        } finally {
+          storeInfoSaveBtn.disabled = false;
+          storeInfoSaveBtn.textContent = 'Save Location & Delivery';
         }
       });
     }
