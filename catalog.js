@@ -233,41 +233,42 @@
       '#cat-tagline.visible{display:block;}',
 
       /* ── COLLAPSED STATE ─────────────────────────────────────────────────
-       * Only opacity and transform are animated — both compositor-only.
-       * Layout properties (width, height, flex-direction, font-size) switch
-       * instantly under the opacity fade so the browser never reflows mid-frame.
-       * The .collapsing class is added one frame before .collapsed to let the
-       * opacity-out start before the layout switches. ── */
+       * Single .collapsed class only — no .collapsing phase.
+       * Only opacity + transform animate (compositor-only, zero reflow).
+       * Layout snaps instantly — hidden by the opacity fade.
+       * Threshold is set high enough that the header is fully stuck
+       * before collapse can trigger. ── */
 
-      /* Step 1: fade everything out */
-      '#cat-hdr.collapsing #cat-hdr-meta,',
-      '#cat-hdr.collapsed  #cat-hdr-meta{opacity:0;pointer-events:none;}',
-
-      '#cat-hdr.collapsing #cat-tagline,',
-      '#cat-hdr.collapsed  #cat-tagline{opacity:0;pointer-events:none;}',
-
-      /* Step 2: once collapsed class settles, snap layout */
       '#cat-hdr.collapsed{padding:10px 14px;}',
+
       '#cat-hdr.collapsed #cat-hdr-top{',
         'flex-direction:row;align-items:center;',
         'gap:10px;margin-bottom:0;justify-content:flex-start;}',
+
+      /* Avatar: scale down in-place. transform-origin matches the flex-start
+         position it lands in after flex-direction:row kicks in */
       '#cat-hdr.collapsed #cat-avatar{',
-        /* scale from 72 → 36 using transform — zero layout impact */
-        'transform:scale(0.5);',
-        'transform-origin:left center;',
+        'transform:scale(0.5);transform-origin:left center;',
         'border-radius:50%;}',
       '#cat-hdr.collapsed #cat-avatar img{border-radius:50%;}',
+
       '#cat-hdr.collapsed #cat-store-info{align-items:flex-start;}',
       '#cat-hdr.collapsed #cat-store-name{',
         'font-size:16px;font-weight:700;letter-spacing:-.3px;',
         'text-align:left;-webkit-line-clamp:1;}',
-      /* hide meta + tagline from flow without animating height */
-      '#cat-hdr.collapsed #cat-hdr-meta{visibility:hidden;height:0;overflow:hidden;margin:0;}',
-      '#cat-hdr.collapsed #cat-tagline{visibility:hidden;height:0;overflow:hidden;margin:0;padding:0;}',
 
-      /* Step 3: fade back in on expand */
-      '#cat-hdr:not(.collapsed):not(.collapsing) #cat-hdr-meta{opacity:1;}',
-      '#cat-hdr:not(.collapsed):not(.collapsing) #cat-tagline{opacity:1;}',
+      /* Meta + tagline: invisible and out of flow */
+      '#cat-hdr.collapsed #cat-hdr-meta{',
+        'opacity:0;visibility:hidden;height:0;',
+        'overflow:hidden;margin:0;pointer-events:none;}',
+      '#cat-hdr.collapsed #cat-tagline{',
+        'opacity:0;visibility:hidden;height:0;',
+        'overflow:hidden;margin:0;padding:0;pointer-events:none;}',
+
+      /* Transitions — opacity only on the things that hide/show */
+      '#cat-hdr-meta{transition:opacity .18s ease;}',
+      '#cat-tagline{transition:opacity .18s ease;}',
+      '#cat-avatar{transition:transform .22s cubic-bezier(.4,0,.2,1);}',
 
       /* --- search --- */
       '#cat-search-wrap{padding:10px 12px 4px;background:#0b0b10;}',
@@ -2247,47 +2248,28 @@
     var lbnextEl = document.getElementById('cat-lb-next');
     if (lbnextEl) lbnextEl.addEventListener('click', function () { if (_lbIdx < _lbImages.length - 1) lbShow(_lbIdx + 1); });
 
-    /* ── Header collapse on scroll ───────────────────────────────────────────
-     * Two-phase: .collapsing fades meta/tagline out first (opacity only,
-     * compositor-safe), then .collapsed snaps layout on the next frame after
-     * the fade completes. Expanding reverses: layout snaps first, then fade-in.
-     * rAF gate: at most one DOM write per frame. { passive:true } lets the
-     * compositor scroll without waiting for JS. ── */
+    /* ── Header collapse on scroll ────────────────────────────────────────── */
     var _hdrEl = document.getElementById('cat-hdr');
     if (_hdrEl) {
-      var _hdrState  = 'expanded'; // 'expanded' | 'collapsing' | 'collapsed'
-      var _rafPending = false;
-      var _collapseTimer = null;
-      var THRESHOLD = 80;
-      var FADE_MS   = 200; // must match opacity transition in CSS
+      var _isCollapsed = false;
+      var _rafPending  = false;
+
+      /* Threshold: header is ~200px tall when expanded. We wait until the
+       * customer has scrolled a full header-height past the top so the header
+       * is completely stuck before we ever collapse it. This prevents the
+       * "dancing" that happens when collapse fires while the header is still
+       * sliding into its sticky position. */
+      var THRESHOLD = 180;
 
       function _applyCollapse() {
         _rafPending = false;
         var past = (window.scrollY || window.pageYOffset) > THRESHOLD;
-
-        if (past && _hdrState === 'expanded') {
-          // Phase 1: fade out meta + tagline
-          _hdrState = 'collapsing';
-          _hdrEl.classList.add('collapsing');
-          // Phase 2: after fade completes, snap layout
-          _collapseTimer = setTimeout(function () {
-            _hdrEl.classList.add('collapsed');
-            _hdrEl.classList.remove('collapsing');
-            _hdrState = 'collapsed';
-          }, FADE_MS);
-
-        } else if (!past && _hdrState === 'collapsed') {
-          // Expand: snap layout immediately, then fade meta back in
-          clearTimeout(_collapseTimer);
+        if (past === _isCollapsed) return; // no state change — nothing to do
+        _isCollapsed = past;
+        if (past) {
+          _hdrEl.classList.add('collapsed');
+        } else {
           _hdrEl.classList.remove('collapsed');
-          _hdrState = 'expanded';
-          // collapsing is already absent here — opacity transition fires naturally
-
-        } else if (!past && _hdrState === 'collapsing') {
-          // Scrolled back up before collapse finished — cancel cleanly
-          clearTimeout(_collapseTimer);
-          _hdrEl.classList.remove('collapsing');
-          _hdrState = 'expanded';
         }
       }
 
