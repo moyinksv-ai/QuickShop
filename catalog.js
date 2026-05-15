@@ -166,83 +166,43 @@
         '-webkit-backdrop-filter:blur(28px);',
         'border-bottom:1px solid rgba(255,255,255,0.07);',
         'padding:20px 18px 16px;',
-        'display:flex;flex-direction:column;align-items:center;gap:0;',
-        'transition:padding .28s cubic-bezier(.4,0,.2,1),',
-          'border-color .28s cubic-bezier(.4,0,.2,1);}',
+        'display:flex;flex-direction:column;align-items:center;gap:0;}',
 
-      /* ── COLLAPSED STATE — toggled by JS adding .collapsed on scroll ── */
-      /* Header shrinks to a compact bar */
-      '#cat-hdr.collapsed{padding:10px 14px 10px;}',
-      /* Top row flips from column-centred to row-left */
-      '#cat-hdr.collapsed #cat-hdr-top{',
-        'flex-direction:row;align-items:center;',
-        'gap:10px;margin-bottom:0;justify-content:flex-start;}',
-      /* Avatar shrinks and becomes a circle */
-      '#cat-hdr.collapsed #cat-avatar{',
-        'width:36px;height:36px;border-radius:50%;',
-        'font-size:14px;',
-        'box-shadow:0 2px 8px rgba(124,58,237,0.15);}',
-      '#cat-hdr.collapsed #cat-avatar img{border-radius:50%;}',
-      /* Store info stops centering */
-      '#cat-hdr.collapsed #cat-store-info{align-items:flex-start;}',
-      /* Store name shrinks and left-aligns */
-      '#cat-hdr.collapsed #cat-store-name{',
-        'font-size:16px;font-weight:700;letter-spacing:-.3px;',
-        'text-align:left;-webkit-line-clamp:1;}',
-      /* Meta row, tagline fade out and collapse height */
-      '#cat-hdr.collapsed #cat-hdr-meta{',
-        'max-height:0;opacity:0;overflow:hidden;',
-        'pointer-events:none;margin:0;}',
-      '#cat-hdr.collapsed #cat-tagline{',
-        'max-height:0;opacity:0;overflow:hidden;',
-        'margin:0;padding:0;border-width:0;',
-        'pointer-events:none;}',
-
-      /* All animated properties transition together */
+      /* ── TOP ROW: avatar above name (expanded) ── */
       '#cat-hdr-top{display:flex;flex-direction:column;align-items:center;',
-        'gap:12px;width:100%;margin-bottom:12px;',
-        'transition:flex-direction .28s cubic-bezier(.4,0,.2,1),',
-          'gap .28s cubic-bezier(.4,0,.2,1),',
-          'margin .28s cubic-bezier(.4,0,.2,1);}',
+        'gap:12px;width:100%;margin-bottom:12px;}',
 
+      /* avatar */
       '#cat-avatar{width:72px;height:72px;border-radius:20px;flex-shrink:0;',
         'background:linear-gradient(145deg,rgba(124,58,237,0.25),rgba(79,70,229,0.1));',
         'border:1.5px solid rgba(124,58,237,0.3);',
         'box-shadow:0 8px 32px rgba(124,58,237,0.2),0 2px 8px rgba(0,0,0,0.6);',
         'display:flex;align-items:center;justify-content:center;',
         'font-size:26px;font-weight:900;color:#c4b5fd;overflow:hidden;',
-        'transition:width .28s cubic-bezier(.4,0,.2,1),',
-          'height .28s cubic-bezier(.4,0,.2,1),',
-          'border-radius .28s cubic-bezier(.4,0,.2,1),',
-          'font-size .28s cubic-bezier(.4,0,.2,1),',
-          'box-shadow .28s cubic-bezier(.4,0,.2,1);}',
-      '#cat-avatar img{width:100%;height:100%;object-fit:cover;border-radius:18px;',
-        'transition:border-radius .28s cubic-bezier(.4,0,.2,1);}',
+        'transform-origin:top left;',
+        'transition:transform .26s cubic-bezier(.4,0,.2,1);}',
+      '#cat-avatar img{width:100%;height:100%;object-fit:cover;border-radius:18px;}',
 
+      /* store info + name */
       '#cat-store-info{display:flex;flex-direction:column;align-items:center;',
-        'gap:0;width:100%;',
-        'transition:align-items .28s cubic-bezier(.4,0,.2,1);}',
+        'gap:0;width:100%;}',
       '#cat-store-name{font-size:26px;font-weight:800;color:#fff;',
         'letter-spacing:-.7px;line-height:1.1;text-align:center;',
         'overflow:hidden;text-overflow:ellipsis;',
-        'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;',
-        'transition:font-size .28s cubic-bezier(.4,0,.2,1),',
-          'letter-spacing .28s cubic-bezier(.4,0,.2,1);}',
+        'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}',
 
+      /* meta row */
       '#cat-hdr-meta{display:flex;align-items:center;justify-content:center;',
         'flex-wrap:wrap;gap:7px;width:100%;',
-        'max-height:60px;opacity:1;overflow:hidden;',
-        'transition:max-height .28s cubic-bezier(.4,0,.2,1),',
-          'opacity .2s cubic-bezier(.4,0,.2,1),',
-          'margin .28s cubic-bezier(.4,0,.2,1);}',
+        'transition:opacity .2s cubic-bezier(.4,0,.2,1);',
+        'will-change:opacity;}',
       '#cat-store-sub{font-size:11.5px;color:rgba(240,240,246,0.4);font-weight:500;}',
 
       /* location + delivery */
       '#cat-store-location{display:none;}',
       '#cat-store-location.cat-store-location-line{display:contents;}',
       '.cat-loc-text{font-size:11.5px;color:rgba(240,240,246,0.4);font-weight:500;}',
-      '.cat-delivery-badge{',
-        'display:inline-flex;align-items:center;gap:4px;',
+      '.cat-delivery-badge{display:inline-flex;align-items:center;gap:4px;',
         'font-size:10px;font-weight:700;letter-spacing:.25px;',
         'padding:3px 9px;border-radius:100px;white-space:nowrap;}',
       '.cat-delivery-yes{background:rgba(16,185,129,0.1);',
@@ -259,7 +219,7 @@
         'animation:cat-pulse 2s ease-in-out infinite;}',
       '@keyframes cat-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.65)}}',
 
-      /* tagline — centred, inside header */
+      /* tagline */
       '#cat-tagline{',
         'display:none;',
         'margin:12px 0 0;padding:10px 16px;width:100%;box-sizing:border-box;',
@@ -268,14 +228,46 @@
         'background:rgba(255,255,255,0.03);',
         'border:1px solid rgba(255,255,255,0.06);',
         'border-radius:12px;',
-        'max-height:100px;opacity:1;',
-        'transition:max-height .28s cubic-bezier(.4,0,.2,1),',
-          'opacity .2s cubic-bezier(.4,0,.2,1),',
-          'margin .28s cubic-bezier(.4,0,.2,1),',
-          'padding .28s cubic-bezier(.4,0,.2,1),',
-          'border-width .28s cubic-bezier(.4,0,.2,1);',
-      '}',
+        'transition:opacity .2s cubic-bezier(.4,0,.2,1);',
+        'will-change:opacity;}',
       '#cat-tagline.visible{display:block;}',
+
+      /* ── COLLAPSED STATE ─────────────────────────────────────────────────
+       * Only opacity and transform are animated — both compositor-only.
+       * Layout properties (width, height, flex-direction, font-size) switch
+       * instantly under the opacity fade so the browser never reflows mid-frame.
+       * The .collapsing class is added one frame before .collapsed to let the
+       * opacity-out start before the layout switches. ── */
+
+      /* Step 1: fade everything out */
+      '#cat-hdr.collapsing #cat-hdr-meta,',
+      '#cat-hdr.collapsed  #cat-hdr-meta{opacity:0;pointer-events:none;}',
+
+      '#cat-hdr.collapsing #cat-tagline,',
+      '#cat-hdr.collapsed  #cat-tagline{opacity:0;pointer-events:none;}',
+
+      /* Step 2: once collapsed class settles, snap layout */
+      '#cat-hdr.collapsed{padding:10px 14px;}',
+      '#cat-hdr.collapsed #cat-hdr-top{',
+        'flex-direction:row;align-items:center;',
+        'gap:10px;margin-bottom:0;justify-content:flex-start;}',
+      '#cat-hdr.collapsed #cat-avatar{',
+        /* scale from 72 → 36 using transform — zero layout impact */
+        'transform:scale(0.5);',
+        'transform-origin:left center;',
+        'border-radius:50%;}',
+      '#cat-hdr.collapsed #cat-avatar img{border-radius:50%;}',
+      '#cat-hdr.collapsed #cat-store-info{align-items:flex-start;}',
+      '#cat-hdr.collapsed #cat-store-name{',
+        'font-size:16px;font-weight:700;letter-spacing:-.3px;',
+        'text-align:left;-webkit-line-clamp:1;}',
+      /* hide meta + tagline from flow without animating height */
+      '#cat-hdr.collapsed #cat-hdr-meta{visibility:hidden;height:0;overflow:hidden;margin:0;}',
+      '#cat-hdr.collapsed #cat-tagline{visibility:hidden;height:0;overflow:hidden;margin:0;padding:0;}',
+
+      /* Step 3: fade back in on expand */
+      '#cat-hdr:not(.collapsed):not(.collapsing) #cat-hdr-meta{opacity:1;}',
+      '#cat-hdr:not(.collapsed):not(.collapsing) #cat-tagline{opacity:1;}',
 
       /* --- search --- */
       '#cat-search-wrap{padding:10px 12px 4px;background:#0b0b10;}',
@@ -2256,30 +2248,53 @@
     if (lbnextEl) lbnextEl.addEventListener('click', function () { if (_lbIdx < _lbImages.length - 1) lbShow(_lbIdx + 1); });
 
     /* ── Header collapse on scroll ───────────────────────────────────────────
-     * Threshold: 80px. rAF gate ensures at most one DOM write per frame.
-     * Only touches #cat-hdr classList — no style properties, no layout reads
-     * inside the handler (scrollY is a compositor-safe property).
-     * Graceful degradation: if JS fails, header stays expanded. ── */
+     * Two-phase: .collapsing fades meta/tagline out first (opacity only,
+     * compositor-safe), then .collapsed snaps layout on the next frame after
+     * the fade completes. Expanding reverses: layout snaps first, then fade-in.
+     * rAF gate: at most one DOM write per frame. { passive:true } lets the
+     * compositor scroll without waiting for JS. ── */
     var _hdrEl = document.getElementById('cat-hdr');
     if (_hdrEl) {
-      var _collapsed = false;
+      var _hdrState  = 'expanded'; // 'expanded' | 'collapsing' | 'collapsed'
       var _rafPending = false;
-      var COLLAPSE_THRESHOLD = 80;
+      var _collapseTimer = null;
+      var THRESHOLD = 80;
+      var FADE_MS   = 200; // must match opacity transition in CSS
+
+      function _applyCollapse() {
+        _rafPending = false;
+        var past = (window.scrollY || window.pageYOffset) > THRESHOLD;
+
+        if (past && _hdrState === 'expanded') {
+          // Phase 1: fade out meta + tagline
+          _hdrState = 'collapsing';
+          _hdrEl.classList.add('collapsing');
+          // Phase 2: after fade completes, snap layout
+          _collapseTimer = setTimeout(function () {
+            _hdrEl.classList.add('collapsed');
+            _hdrEl.classList.remove('collapsing');
+            _hdrState = 'collapsed';
+          }, FADE_MS);
+
+        } else if (!past && _hdrState === 'collapsed') {
+          // Expand: snap layout immediately, then fade meta back in
+          clearTimeout(_collapseTimer);
+          _hdrEl.classList.remove('collapsed');
+          _hdrState = 'expanded';
+          // collapsing is already absent here — opacity transition fires naturally
+
+        } else if (!past && _hdrState === 'collapsing') {
+          // Scrolled back up before collapse finished — cancel cleanly
+          clearTimeout(_collapseTimer);
+          _hdrEl.classList.remove('collapsing');
+          _hdrState = 'expanded';
+        }
+      }
 
       function _onScroll() {
         if (_rafPending) return;
         _rafPending = true;
-        requestAnimationFrame(function () {
-          _rafPending = false;
-          var shouldCollapse = (window.scrollY || window.pageYOffset) > COLLAPSE_THRESHOLD;
-          if (shouldCollapse === _collapsed) return; // no change — skip class write
-          _collapsed = shouldCollapse;
-          if (_collapsed) {
-            _hdrEl.classList.add('collapsed');
-          } else {
-            _hdrEl.classList.remove('collapsed');
-          }
-        });
+        requestAnimationFrame(_applyCollapse);
       }
 
       window.addEventListener('scroll', _onScroll, { passive: true });
