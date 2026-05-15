@@ -168,7 +168,7 @@
    */
 
   var SCRIPT_ALLOWLIST = [
-    'catalog.js',
+    'catalogs.js',
     'indexeddb_sync.js',
     'share-catalog.js',
     'appss.js',
