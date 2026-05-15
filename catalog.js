@@ -161,12 +161,12 @@
       'body.qs-cat #qs-catalog{display:block;}',
 
       /* ── HEADER ─────────────────────────────────────────────────────────────
-       * Architecture: the header always occupies exactly COLLAPSED_HEIGHT (58px).
-       * The expanded content (#cat-hdr-expanded) sits absolutely on top, adding
-       * visual height without affecting the sticky element's layout box.
-       * Collapsing = fading #cat-hdr-expanded to opacity:0 and pointer-events:none.
-       * The sticky element's height NEVER changes → zero reflow → zero feedback loop.
-       * Only opacity and transform are animated (compositor-only). ── */
+       * Expanded layer is in normal flow — it sets the header's real height.
+       * Compact bar is position:absolute, always behind the expanded layer.
+       * On collapse: expanded fades to opacity:0 + height:0 BUT only AFTER
+       * the user has scrolled past the full expanded height, so the height
+       * change is already off-screen — no reflow visible, no feedback loop.
+       * Scroll threshold = expanded header height (~290px). ── */
 
       '#cat-hdr{position:sticky;top:0;z-index:100;',
         'background:rgba(11,11,16,0.98);',
@@ -174,10 +174,11 @@
         'border-bottom:1px solid rgba(255,255,255,0.07);',
         'will-change:transform;}',
 
-      /* Compact bar — always in flow, always 58px tall */
+      /* Compact bar — always rendered, sits behind expanded layer */
       '#cat-hdr-compact{',
+        'position:absolute;top:0;left:0;right:0;',
         'height:58px;display:flex;align-items:center;',
-        'padding:0 14px;gap:10px;}',
+        'padding:0 14px;gap:10px;z-index:1;}',
 
       /* Avatar in compact bar */
       '#cat-avatar-sm{width:36px;height:36px;border-radius:50%;flex-shrink:0;',
@@ -192,7 +193,7 @@
         'letter-spacing:-.3px;flex:1;',
         'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
 
-      /* Status pill in compact bar — always visible */
+      /* Status pill */
       '#cat-status{display:inline-flex;align-items:center;gap:5px;flex-shrink:0;',
         'background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);',
         'border-radius:100px;padding:3px 9px 3px 7px;}',
@@ -201,17 +202,15 @@
         'animation:cat-pulse 2s ease-in-out infinite;}',
       '@keyframes cat-pulse{0%,100%{opacity:1}50%{opacity:.25}}',
 
-      /* Expanded layer — absolutely positioned, sits on top of compact bar.
-         Does NOT affect the sticky element layout height at all. */
+      /* Expanded layer — in normal flow, sits above compact bar */
       '#cat-hdr-expanded{',
-        'position:absolute;top:0;left:0;right:0;',
+        'position:relative;z-index:2;',
         'background:rgba(11,11,16,0.98);',
         'padding:20px 18px 16px;',
         'display:flex;flex-direction:column;align-items:center;gap:0;',
-        'opacity:1;pointer-events:auto;',
-        'transition:opacity .2s ease;}',
+        'transition:opacity .18s ease;}',
 
-      /* Large avatar in expanded layer */
+      /* Large avatar */
       '#cat-avatar{width:72px;height:72px;border-radius:20px;flex-shrink:0;',
         'background:linear-gradient(145deg,rgba(124,58,237,0.25),rgba(79,70,229,0.1));',
         'border:1.5px solid rgba(124,58,237,0.3);',
@@ -227,7 +226,7 @@
         'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;',
         'margin-bottom:10px;width:100%;}',
 
-      /* Meta row inside expanded */
+      /* Meta row */
       '#cat-hdr-meta{display:flex;align-items:center;justify-content:center;',
         'flex-wrap:wrap;gap:7px;width:100%;}',
       '#cat-store-sub{font-size:11.5px;color:rgba(240,240,246,0.4);font-weight:500;}',
@@ -244,7 +243,7 @@
       '.cat-delivery-no{background:rgba(255,255,255,0.05);',
         'border:1px solid rgba(255,255,255,0.1);color:rgba(240,240,246,0.4);}',
 
-      /* tagline inside expanded */
+      /* tagline */
       '#cat-tagline{',
         'display:none;',
         'margin:12px 0 0;padding:10px 16px;width:100%;box-sizing:border-box;',
@@ -255,9 +254,10 @@
         'border-radius:12px;}',
       '#cat-tagline.visible{display:block;}',
 
-      /* COLLAPSED: just hide the expanded layer — nothing else changes */
+      /* COLLAPSED: fade expanded out — height collapses but user has already
+         scrolled past it so it is off-screen when this change happens */
       '#cat-hdr.collapsed #cat-hdr-expanded{',
-        'opacity:0;pointer-events:none;}',
+        'opacity:0;height:0;overflow:hidden;padding:0;pointer-events:none;}',
 
       /* --- search --- */
       '#cat-search-wrap{padding:10px 12px 4px;background:#0b0b10;}',
@@ -326,10 +326,9 @@
       /* --- stock badges --- */
       '.cat-badge{position:absolute;top:8px;right:8px;',
         'font-size:8.5px;font-weight:800;letter-spacing:.5px;',
-        'padding:3px 7px;border-radius:100px;text-transform:uppercase;',
-        'backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}',
-      '.cat-badge-oos{background:rgba(220,38,38,0.82);color:#fff;}',
-      '.cat-badge-low{background:rgba(217,119,6,0.85);color:#fff;}',
+        'padding:3px 7px;border-radius:100px;text-transform:uppercase;}',
+      '.cat-badge-oos{background:rgba(220,38,38,0.9);color:#fff;}',
+      '.cat-badge-low{background:rgba(217,119,6,0.92);color:#fff;}',
 
       /* --- stock count --- */
       '.cat-stock{font-size:10px;font-weight:600;color:#10b981;margin-top:3px;',
@@ -2246,22 +2245,24 @@
     if (lbnextEl) lbnextEl.addEventListener('click', function () { if (_lbIdx < _lbImages.length - 1) lbShow(_lbIdx + 1); });
 
     /* ── Header collapse on scroll ────────────────────────────────────────── */
-    var _hdrEl = document.getElementById('cat-hdr');
-    if (_hdrEl) {
+    /* ── Header collapse ─────────────────────────────────────────────────────
+     * Threshold is measured from the actual expanded header height so the
+     * height:0 snap always happens while it's off-screen — never visible.
+     * rAF gate, passive listener, single class toggle. ── */
+    var _hdrEl      = document.getElementById('cat-hdr');
+    var _expandedEl = document.getElementById('cat-hdr-expanded');
+    if (_hdrEl && _expandedEl) {
       var _isCollapsed = false;
       var _rafPending  = false;
-
-      /* Threshold: header is ~200px tall when expanded. We wait until the
-       * customer has scrolled a full header-height past the top so the header
-       * is completely stuck before we ever collapse it. This prevents the
-       * "dancing" that happens when collapse fires while the header is still
-       * sliding into its sticky position. */
-      var THRESHOLD = 180;
+      /* Measure once after first paint. The expanded header height is the
+         natural scroll distance before content reaches top:0 sticky position. */
+      var THRESHOLD = _expandedEl.offsetHeight || 260;
 
       function _applyCollapse() {
         _rafPending = false;
-        var past = (window.scrollY || window.pageYOffset) > THRESHOLD;
-        if (past === _isCollapsed) return; // no state change — nothing to do
+        var scrolled = window.scrollY || window.pageYOffset;
+        var past = scrolled > THRESHOLD;
+        if (past === _isCollapsed) return;
         _isCollapsed = past;
         if (past) {
           _hdrEl.classList.add('collapsed');
