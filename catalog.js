@@ -160,43 +160,76 @@
       '#qs-catalog{display:none;padding-bottom:140px;}',
       'body.qs-cat #qs-catalog{display:block;}',
 
-      /* --- header --- */
+      /* ── HEADER ─────────────────────────────────────────────────────────────
+       * Architecture: the header always occupies exactly COLLAPSED_HEIGHT (58px).
+       * The expanded content (#cat-hdr-expanded) sits absolutely on top, adding
+       * visual height without affecting the sticky element's layout box.
+       * Collapsing = fading #cat-hdr-expanded to opacity:0 and pointer-events:none.
+       * The sticky element's height NEVER changes → zero reflow → zero feedback loop.
+       * Only opacity and transform are animated (compositor-only). ── */
+
       '#cat-hdr{position:sticky;top:0;z-index:100;',
-        'background:rgba(11,11,16,0.98);backdrop-filter:blur(20px);',
-        '-webkit-backdrop-filter:blur(20px);',
+        'background:rgba(11,11,16,0.98);',
+        'backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);',
         'border-bottom:1px solid rgba(255,255,255,0.07);',
-        'padding:20px 18px 16px;',
-        'display:flex;flex-direction:column;align-items:center;gap:0;',
         'will-change:transform;}',
 
-      /* ── TOP ROW: avatar above name (expanded) ── */
-      '#cat-hdr-top{display:flex;flex-direction:column;align-items:center;',
-        'gap:12px;width:100%;margin-bottom:12px;}',
+      /* Compact bar — always in flow, always 58px tall */
+      '#cat-hdr-compact{',
+        'height:58px;display:flex;align-items:center;',
+        'padding:0 14px;gap:10px;}',
 
-      /* avatar */
+      /* Avatar in compact bar */
+      '#cat-avatar-sm{width:36px;height:36px;border-radius:50%;flex-shrink:0;',
+        'background:linear-gradient(145deg,rgba(124,58,237,0.25),rgba(79,70,229,0.1));',
+        'border:1.5px solid rgba(124,58,237,0.3);',
+        'display:flex;align-items:center;justify-content:center;',
+        'font-size:13px;font-weight:900;color:#c4b5fd;overflow:hidden;}',
+      '#cat-avatar-sm img{width:100%;height:100%;object-fit:cover;border-radius:50%;}',
+
+      /* Store name in compact bar */
+      '#cat-name-sm{font-size:16px;font-weight:700;color:#fff;',
+        'letter-spacing:-.3px;flex:1;',
+        'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
+
+      /* Status pill in compact bar — always visible */
+      '#cat-status{display:inline-flex;align-items:center;gap:5px;flex-shrink:0;',
+        'background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);',
+        'border-radius:100px;padding:3px 9px 3px 7px;}',
+      '#cat-status-text{font-size:10px;font-weight:700;color:#34d399;letter-spacing:.4px;}',
+      '.cat-live-dot{width:6px;height:6px;border-radius:50%;background:#34d399;flex-shrink:0;',
+        'animation:cat-pulse 2s ease-in-out infinite;}',
+      '@keyframes cat-pulse{0%,100%{opacity:1}50%{opacity:.25}}',
+
+      /* Expanded layer — absolutely positioned, sits on top of compact bar.
+         Does NOT affect the sticky element layout height at all. */
+      '#cat-hdr-expanded{',
+        'position:absolute;top:0;left:0;right:0;',
+        'background:rgba(11,11,16,0.98);',
+        'padding:20px 18px 16px;',
+        'display:flex;flex-direction:column;align-items:center;gap:0;',
+        'opacity:1;pointer-events:auto;',
+        'transition:opacity .2s ease;}',
+
+      /* Large avatar in expanded layer */
       '#cat-avatar{width:72px;height:72px;border-radius:20px;flex-shrink:0;',
         'background:linear-gradient(145deg,rgba(124,58,237,0.25),rgba(79,70,229,0.1));',
         'border:1.5px solid rgba(124,58,237,0.3);',
         'box-shadow:0 8px 32px rgba(124,58,237,0.2),0 2px 8px rgba(0,0,0,0.6);',
         'display:flex;align-items:center;justify-content:center;',
         'font-size:26px;font-weight:900;color:#c4b5fd;overflow:hidden;',
-        'transform-origin:top left;',
-        'transition:transform .26s cubic-bezier(.4,0,.2,1);}',
+        'margin-bottom:12px;}',
       '#cat-avatar img{width:100%;height:100%;object-fit:cover;border-radius:18px;}',
 
-      /* store info + name */
-      '#cat-store-info{display:flex;flex-direction:column;align-items:center;',
-        'gap:0;width:100%;}',
       '#cat-store-name{font-size:26px;font-weight:800;color:#fff;',
         'letter-spacing:-.7px;line-height:1.1;text-align:center;',
         'overflow:hidden;text-overflow:ellipsis;',
-        'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}',
+        'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;',
+        'margin-bottom:10px;width:100%;}',
 
-      /* meta row */
+      /* Meta row inside expanded */
       '#cat-hdr-meta{display:flex;align-items:center;justify-content:center;',
-        'flex-wrap:wrap;gap:7px;width:100%;',
-        'transition:opacity .2s cubic-bezier(.4,0,.2,1);',
-        'will-change:opacity;}',
+        'flex-wrap:wrap;gap:7px;width:100%;}',
       '#cat-store-sub{font-size:11.5px;color:rgba(240,240,246,0.4);font-weight:500;}',
 
       /* location + delivery */
@@ -211,16 +244,7 @@
       '.cat-delivery-no{background:rgba(255,255,255,0.05);',
         'border:1px solid rgba(255,255,255,0.1);color:rgba(240,240,246,0.4);}',
 
-      /* status pill */
-      '#cat-status{display:inline-flex;align-items:center;gap:5px;',
-        'background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);',
-        'border-radius:100px;padding:3px 9px 3px 7px;}',
-      '#cat-status-text{font-size:10px;font-weight:700;color:#34d399;letter-spacing:.4px;}',
-      '.cat-live-dot{width:6px;height:6px;border-radius:50%;background:#34d399;flex-shrink:0;',
-        'animation:cat-pulse 2s ease-in-out infinite;}',
-      '@keyframes cat-pulse{0%,100%{opacity:1}50%{opacity:.25}}',
-
-      /* tagline */
+      /* tagline inside expanded */
       '#cat-tagline{',
         'display:none;',
         'margin:12px 0 0;padding:10px 16px;width:100%;box-sizing:border-box;',
@@ -228,48 +252,12 @@
         'color:rgba(240,240,246,0.5);line-height:1.65;',
         'background:rgba(255,255,255,0.03);',
         'border:1px solid rgba(255,255,255,0.06);',
-        'border-radius:12px;',
-        'transition:opacity .2s cubic-bezier(.4,0,.2,1);',
-        'will-change:opacity;}',
+        'border-radius:12px;}',
       '#cat-tagline.visible{display:block;}',
 
-      /* ── COLLAPSED STATE ─────────────────────────────────────────────────
-       * Single .collapsed class only — no .collapsing phase.
-       * Only opacity + transform animate (compositor-only, zero reflow).
-       * Layout snaps instantly — hidden by the opacity fade.
-       * Threshold is set high enough that the header is fully stuck
-       * before collapse can trigger. ── */
-
-      '#cat-hdr.collapsed{padding:10px 14px;}',
-
-      '#cat-hdr.collapsed #cat-hdr-top{',
-        'flex-direction:row;align-items:center;',
-        'gap:10px;margin-bottom:0;justify-content:flex-start;}',
-
-      /* Avatar: scale down in-place. transform-origin matches the flex-start
-         position it lands in after flex-direction:row kicks in */
-      '#cat-hdr.collapsed #cat-avatar{',
-        'transform:scale(0.5);transform-origin:left center;',
-        'border-radius:50%;}',
-      '#cat-hdr.collapsed #cat-avatar img{border-radius:50%;}',
-
-      '#cat-hdr.collapsed #cat-store-info{align-items:flex-start;}',
-      '#cat-hdr.collapsed #cat-store-name{',
-        'font-size:16px;font-weight:700;letter-spacing:-.3px;',
-        'text-align:left;-webkit-line-clamp:1;}',
-
-      /* Meta + tagline: invisible and out of flow */
-      '#cat-hdr.collapsed #cat-hdr-meta{',
-        'opacity:0;visibility:hidden;height:0;',
-        'overflow:hidden;margin:0;pointer-events:none;}',
-      '#cat-hdr.collapsed #cat-tagline{',
-        'opacity:0;visibility:hidden;height:0;',
-        'overflow:hidden;margin:0;padding:0;pointer-events:none;}',
-
-      /* Transitions — opacity only on the things that hide/show */
-      '#cat-hdr-meta{transition:opacity .18s ease;}',
-      '#cat-tagline{transition:opacity .18s ease;}',
-      '#cat-avatar{transition:transform .22s cubic-bezier(.4,0,.2,1);}',
+      /* COLLAPSED: just hide the expanded layer — nothing else changes */
+      '#cat-hdr.collapsed #cat-hdr-expanded{',
+        'opacity:0;pointer-events:none;}',
 
       /* --- search --- */
       '#cat-search-wrap{padding:10px 12px 4px;background:#0b0b10;}',
@@ -670,35 +658,22 @@
     var root = document.createElement('div');
     root.id = 'qs-catalog';
 
-    // Header
+    // Header — fixed-height architecture
+    // #cat-hdr-compact: always 58px in flow (sets sticky height, never changes)
+    // #cat-hdr-expanded: absolute on top, fades out on collapse (no reflow)
     var hdr = document.createElement('header');
     hdr.id = 'cat-hdr';
     hdr.setAttribute('role', 'banner');
 
-    // Top row: avatar + store name
-    var hdrTop = document.createElement('div');
-    hdrTop.id = 'cat-hdr-top';
-    var avatar = document.createElement('div');
-    avatar.id = 'cat-avatar';
-    avatar.setAttribute('aria-hidden', 'true');
-    var sinfo = document.createElement('div');
-    sinfo.id = 'cat-store-info';
-    var sname = document.createElement('div');
-    sname.id = 'cat-store-name';
-    sname.textContent = 'Loading…';
-    sinfo.appendChild(sname);
-    hdrTop.appendChild(avatar);
-    hdrTop.appendChild(sinfo);
-    hdr.appendChild(hdrTop);
-
-    // Meta row: sub · location · delivery · status — all inline
-    var hdrMeta = document.createElement('div');
-    hdrMeta.id = 'cat-hdr-meta';
-    var ssub = document.createElement('div');
-    ssub.id = 'cat-store-sub';
-    ssub.textContent = 'WhatsApp catalog';
-    var sloc = document.createElement('div');
-    sloc.id = 'cat-store-location';
+    // Compact bar — always visible, sets the sticky element height
+    var compact = document.createElement('div');
+    compact.id = 'cat-hdr-compact';
+    var avatarSm = document.createElement('div');
+    avatarSm.id = 'cat-avatar-sm';
+    avatarSm.setAttribute('aria-hidden', 'true');
+    var nameSm = document.createElement('div');
+    nameSm.id = 'cat-name-sm';
+    nameSm.textContent = 'Loading…';
     var sstat = document.createElement('div');
     sstat.id = 'cat-status';
     var dot = document.createElement('span');
@@ -709,16 +684,37 @@
     stxt.textContent = 'OPEN NOW';
     sstat.appendChild(dot);
     sstat.appendChild(stxt);
+    compact.appendChild(avatarSm);
+    compact.appendChild(nameSm);
+    compact.appendChild(sstat);
+    hdr.appendChild(compact);
+
+    // Expanded layer — absolutely positioned, fades out when collapsed
+    var expanded = document.createElement('div');
+    expanded.id = 'cat-hdr-expanded';
+    var avatar = document.createElement('div');
+    avatar.id = 'cat-avatar';
+    avatar.setAttribute('aria-hidden', 'true');
+    var sname = document.createElement('div');
+    sname.id = 'cat-store-name';
+    sname.textContent = 'Loading…';
+    var hdrMeta = document.createElement('div');
+    hdrMeta.id = 'cat-hdr-meta';
+    var ssub = document.createElement('div');
+    ssub.id = 'cat-store-sub';
+    ssub.textContent = 'WhatsApp catalog';
+    var sloc = document.createElement('div');
+    sloc.id = 'cat-store-location';
     hdrMeta.appendChild(ssub);
     hdrMeta.appendChild(sloc);
-    hdrMeta.appendChild(sstat);
-    hdr.appendChild(hdrMeta);
-
-    // Tagline — inside header, hidden until set
     var taglineEl = document.createElement('p');
     taglineEl.id = 'cat-tagline';
     taglineEl.setAttribute('aria-label', 'Store tagline');
-    hdr.appendChild(taglineEl);
+    expanded.appendChild(avatar);
+    expanded.appendChild(sname);
+    expanded.appendChild(hdrMeta);
+    expanded.appendChild(taglineEl);
+    hdr.appendChild(expanded);
 
     root.appendChild(hdr);
 
@@ -2404,36 +2400,40 @@
       storeName = 'Our Store';
     }
 
-    // Update header
+    // Update header — write to both compact bar and expanded layer
     var sname = document.getElementById('cat-store-name');
     if (sname) sname.textContent = storeName;
+    var nameSm = document.getElementById('cat-name-sm');
+    if (nameSm) nameSm.textContent = storeName;
 
     // Render tagline if vendor has set one
     var taglineDiv = document.getElementById('cat-tagline');
     if (taglineDiv) {
       var tagline = profile && profile.tagline && profile.tagline.trim();
       if (tagline) {
-        taglineDiv.textContent = tagline; // textContent — safe, no XSS
+        taglineDiv.textContent = tagline;
         taglineDiv.classList.add('visible');
       }
     }
 
     var ssub = document.getElementById('cat-store-sub');
     if (ssub) ssub.textContent = 'WhatsApp orders';
-    var avatar = document.getElementById('cat-avatar');
-    if (avatar) {
+
+    // Populate large avatar (expanded) and small avatar (compact)
+    function _populateAvatar(el, isSmall) {
+      if (!el) return;
       if (profile && profile.avatar_url) {
-        // Show real logo/photo
         var avImg = document.createElement('img');
         avImg.src = safeImgSrc(profile.avatar_url);
         avImg.alt = storeName;
-        avatar.innerHTML = '';
-        avatar.appendChild(avImg);
+        el.innerHTML = '';
+        el.appendChild(avImg);
       } else {
-        // Fallback to initials
-        avatar.textContent = mono(_rawName || storeName);
+        el.textContent = mono(_rawName || storeName);
       }
     }
+    _populateAvatar(document.getElementById('cat-avatar'), false);
+    _populateAvatar(document.getElementById('cat-avatar-sm'), true);
 
     // Render location + delivery badge
     var slocEl = document.getElementById('cat-store-location');
