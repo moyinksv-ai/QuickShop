@@ -3732,6 +3732,61 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     const wrap = document.createElement('div');
     wrap.style.cssText = 'display:flex;flex-direction:column;gap:10px;padding:4px 0 16px;';
 
+    // ── EMPTY STORE GUARD ─────────────────────────────────────────────────────
+    // A store with no products has no signals to analyse. Show a focused
+    // onboarding card instead of a misleading 0/100 score.
+    if (!s.products || s.products.length === 0) {
+      const card = document.createElement('div');
+      card.style.cssText = [
+        'background:var(--card-glass);border:1px solid var(--border-glass);',
+        'border-radius:16px;padding:20px 18px;',
+        'display:flex;flex-direction:column;gap:12px;',
+      ].join('');
+
+      const title = document.createElement('div');
+      title.style.cssText = 'font-size:15px;font-weight:800;color:var(--text-primary);';
+      title.textContent = '👋 Welcome — let\'s build your store';
+
+      const body = document.createElement('div');
+      body.style.cssText = 'font-size:13px;color:var(--text-secondary);line-height:1.6;';
+      body.textContent = 'Your store has no products yet. Insights and growth signals will appear here once you add your first item.';
+
+      const steps = [
+        { n: '1', text: 'Add your first product — name, price, and a photo' },
+        { n: '2', text: 'Set a category so buyers can filter your catalog' },
+        { n: '3', text: 'Write at least one sentence of description per product' },
+        { n: '4', text: 'Come back here — the copilot will have real advice' },
+      ];
+
+      const list = document.createElement('div');
+      list.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
+      steps.forEach(function(step) {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:flex-start;gap:10px;';
+        const num = document.createElement('div');
+        num.style.cssText = [
+          'width:22px;height:22px;border-radius:50%;flex-shrink:0;',
+          'background:rgba(124,58,237,0.18);border:1px solid rgba(124,58,237,0.3);',
+          'display:flex;align-items:center;justify-content:center;',
+          'font-size:11px;font-weight:800;color:#a78bfa;',
+        ].join('');
+        num.textContent = step.n;
+        const txt = document.createElement('div');
+        txt.style.cssText = 'font-size:12.5px;color:var(--text-secondary);line-height:1.5;padding-top:2px;';
+        txt.textContent = step.text;
+        row.appendChild(num);
+        row.appendChild(txt);
+        list.appendChild(row);
+      });
+
+      card.appendChild(title);
+      card.appendChild(body);
+      card.appendChild(list);
+      wrap.appendChild(card);
+      return wrap;
+    }
+    // ── END EMPTY STORE GUARD ─────────────────────────────────────────────────
+
     // ─────────────────────────────────────────────────────────────────────
     // SECTION 1 — STOREFRONT SCORE
     // Visual and direct. Shows vendor what shoppers see. Sets context for
@@ -4273,15 +4328,17 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
 
     const snapshot = [
       'QuickShop merchant in Nigeria. Currency: NGN.',
-      'Goal: improve visibility, conversion, trust, and social reach; do not repeat raw metrics.',
+      products.length === 0
+        ? 'STORE STATUS: Brand new — zero products added yet. This merchant needs onboarding guidance, not market analysis. Focus entirely on what to do first: add products, write descriptions, set prices, upload photos. Be direct and practical.'
+        : 'Goal: improve visibility, conversion, trust, and social reach; do not repeat raw metrics.',
       'Sales trend: ' + (trendPct !== null ? (trendPct >= 0 ? '+' : '') + Number(trendPct).toFixed(0) + '%' : 'n/a') + ' vs previous 7 days.',
-      'Operational context: ' + (restockAlerts.length ? restockAlerts.length + ' low-stock issue(s).' : 'No urgent stockouts.') + ' ' + (profitLeaks.length ? profitLeaks.length + ' margin issue(s).' : 'No serious margin leak.') +
-        ' ' + (fixes.length ? fixes.length + ' listing issue(s) need attention.' : 'Listings are reasonably complete.'),
-      'Best candidate to feature: ' + (_safeStr((promoted[0] || growth.bestSeller || {}).name, 'Choose a hero product')) + '.',
-      'Products to feature:\n' + topProducts,
-      'Products to fix:\n' + fixLines,
-      alerts ? ('Alerts:\n' + alerts) : 'Alerts: none.',
-    ].join('\n');
+      products.length > 0 ? ('Operational context: ' + (restockAlerts.length ? restockAlerts.length + ' low-stock issue(s).' : 'No urgent stockouts.') + ' ' + (profitLeaks.length ? profitLeaks.length + ' margin issue(s).' : 'No serious margin leak.') +
+        ' ' + (fixes.length ? fixes.length + ' listing issue(s) need attention.' : 'Listings are reasonably complete.')) : '',
+      products.length > 0 ? ('Best candidate to feature: ' + (_safeStr((promoted[0] || growth.bestSeller || {}).name, 'Choose a hero product')) + '.') : '',
+      products.length > 0 ? ('Products to feature:\n' + topProducts) : '',
+      products.length > 0 ? ('Products to fix:\n' + fixLines) : '',
+      products.length > 0 && alerts ? ('Alerts:\n' + alerts) : products.length > 0 ? 'Alerts: none.' : '',
+    ].filter(Boolean).join('\n');
 
     return {
       snapshot: snapshot,
