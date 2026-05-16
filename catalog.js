@@ -162,34 +162,61 @@
 
       /* ── HEADER ── */
       '#cat-hdr{position:sticky;top:0;z-index:100;',
-        'background:rgba(11,11,16,0.97);',
-        'border-bottom:1px solid rgba(255,255,255,0.07);',
-        'padding:16px 18px 14px;',
-        'display:flex;flex-direction:column;align-items:center;gap:10px;}',
+        'overflow:hidden;', /* clips the scaled blur layer */
+        'border-bottom:1px solid rgba(255,255,255,0.08);',
+        'display:flex;flex-direction:column;align-items:center;',
+        'padding:20px 18px 16px;gap:10px;}',
 
-      /* Avatar */
-      '#cat-avatar{width:64px;height:64px;border-radius:18px;flex-shrink:0;',
-        'background:linear-gradient(145deg,rgba(124,58,237,0.22),rgba(79,70,229,0.1));',
-        'border:1.5px solid rgba(124,58,237,0.28);',
-        'box-shadow:0 4px 20px rgba(124,58,237,0.15),0 1px 4px rgba(0,0,0,0.5);',
+      /* Banner blur layer — sits behind everything, fills the header.
+         background-image is set by JS once avatar_url is known.
+         scale(1.12) covers blur edge bleed without cutting content. */
+      '#cat-hdr-banner{',
+        'position:absolute;inset:-10px;',
+        'background-size:cover;background-position:center;',
+        'filter:blur(22px) brightness(0.28) saturate(1.4);',
+        'transform:scale(1.12);',
+        'z-index:0;}',
+
+      /* Solid fallback shown before/without an image */
+      '#cat-hdr-banner.no-image{',
+        'background:linear-gradient(160deg,#12101a 0%,#0d0b14 100%);',
+        'filter:none;transform:none;}',
+
+      /* Scrim — ensures text legibility over any image colour */
+      '#cat-hdr-scrim{',
+        'position:absolute;inset:0;z-index:1;',
+        'background:linear-gradient(',
+          '180deg,',
+          'rgba(0,0,0,0.18) 0%,',
+          'rgba(0,0,0,0.52) 100%);}',
+
+      /* All content sits above banner + scrim */
+      '#cat-avatar,#cat-store-name,#cat-hdr-meta,#cat-tagline{position:relative;z-index:2;}',
+
+      /* Avatar — sharp, unblurred, sits on top */
+      '#cat-avatar{width:68px;height:68px;border-radius:18px;flex-shrink:0;',
+        'background:rgba(255,255,255,0.08);',
+        'border:2px solid rgba(255,255,255,0.18);',
+        'box-shadow:0 4px 24px rgba(0,0,0,0.5),0 1px 4px rgba(0,0,0,0.4);',
         'display:flex;align-items:center;justify-content:center;',
-        'font-size:22px;font-weight:900;color:#c4b5fd;overflow:hidden;}',
+        'font-size:22px;font-weight:900;color:#fff;overflow:hidden;}',
       '#cat-avatar img{width:100%;height:100%;object-fit:cover;border-radius:16px;}',
 
       /* Store name */
       '#cat-store-name{font-size:22px;font-weight:800;color:#fff;',
         'letter-spacing:-.5px;line-height:1.15;text-align:center;',
+        'text-shadow:0 1px 8px rgba(0,0,0,0.5);',
         'overflow:hidden;text-overflow:ellipsis;width:100%;',
         'display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;}',
 
       /* Meta row */
       '#cat-hdr-meta{display:flex;align-items:center;justify-content:center;',
         'flex-wrap:wrap;gap:6px;width:100%;}',
-      '#cat-store-sub{font-size:11px;color:rgba(240,240,246,0.38);font-weight:500;}',
+      '#cat-store-sub{font-size:11px;color:rgba(255,255,255,0.55);font-weight:500;}',
 
       /* Status pill */
       '#cat-status{display:inline-flex;align-items:center;gap:5px;flex-shrink:0;',
-        'background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);',
+        'background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.35);',
         'border-radius:100px;padding:3px 9px 3px 7px;}',
       '#cat-status-text{font-size:10px;font-weight:700;color:#34d399;letter-spacing:.4px;}',
       '.cat-live-dot{width:6px;height:6px;border-radius:50%;background:#34d399;flex-shrink:0;',
@@ -199,22 +226,22 @@
       /* location + delivery */
       '#cat-store-location{display:none;}',
       '#cat-store-location.cat-store-location-line{display:contents;}',
-      '.cat-loc-text{font-size:11px;color:rgba(240,240,246,0.38);font-weight:500;}',
+      '.cat-loc-text{font-size:11px;color:rgba(255,255,255,0.55);font-weight:500;}',
       '.cat-delivery-badge{display:inline-flex;align-items:center;gap:4px;',
         'font-size:10px;font-weight:700;letter-spacing:.2px;',
         'padding:2px 8px;border-radius:100px;white-space:nowrap;}',
-      '.cat-delivery-yes{background:rgba(16,185,129,0.1);',
-        'border:1px solid rgba(16,185,129,0.22);color:#34d399;}',
-      '.cat-delivery-no{background:rgba(255,255,255,0.05);',
-        'border:1px solid rgba(255,255,255,0.1);color:rgba(240,240,246,0.38);}',
+      '.cat-delivery-yes{background:rgba(16,185,129,0.18);',
+        'border:1px solid rgba(16,185,129,0.35);color:#34d399;}',
+      '.cat-delivery-no{background:rgba(255,255,255,0.08);',
+        'border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.5);}',
 
       /* Tagline */
       '#cat-tagline{display:none;width:100%;',
         'padding:8px 14px;box-sizing:border-box;',
         'font-size:12px;font-style:italic;font-weight:400;text-align:center;',
-        'color:rgba(240,240,246,0.45);line-height:1.6;',
-        'background:rgba(255,255,255,0.03);',
-        'border:1px solid rgba(255,255,255,0.06);border-radius:10px;}',
+        'color:rgba(255,255,255,0.55);line-height:1.6;',
+        'background:rgba(0,0,0,0.2);',
+        'border:1px solid rgba(255,255,255,0.1);border-radius:10px;}',
       '#cat-tagline.visible{display:block;}',
 
       /* --- search --- */
@@ -618,6 +645,19 @@
     var hdr = document.createElement('header');
     hdr.id = 'cat-hdr';
     hdr.setAttribute('role', 'banner');
+
+    // Banner blur layer — background-image set by JS after avatar_url loads
+    var banner = document.createElement('div');
+    banner.id = 'cat-hdr-banner';
+    banner.className = 'no-image'; // fallback until image is known
+    banner.setAttribute('aria-hidden', 'true');
+    hdr.appendChild(banner);
+
+    // Scrim — gradient overlay for text legibility
+    var scrim = document.createElement('div');
+    scrim.id = 'cat-hdr-scrim';
+    scrim.setAttribute('aria-hidden', 'true');
+    hdr.appendChild(scrim);
 
     var avatar = document.createElement('div');
     avatar.id = 'cat-avatar';
@@ -2318,15 +2358,24 @@
     if (ssub) ssub.textContent = 'WhatsApp orders';
 
     var avatar = document.getElementById('cat-avatar');
+    var banner = document.getElementById('cat-hdr-banner');
     if (avatar) {
       if (profile && profile.avatar_url) {
+        var _src = safeImgSrc(profile.avatar_url);
+        // Sharp avatar
         var avImg = document.createElement('img');
-        avImg.src = safeImgSrc(profile.avatar_url);
+        avImg.src = _src;
         avImg.alt = storeName;
         avatar.innerHTML = '';
         avatar.appendChild(avImg);
+        // Blurred banner — same image, CSS does the work
+        if (banner) {
+          banner.style.backgroundImage = 'url(' + _src + ')';
+          banner.classList.remove('no-image');
+        }
       } else {
         avatar.textContent = mono(_rawName || storeName);
+        // banner stays as no-image fallback
       }
     }
 
