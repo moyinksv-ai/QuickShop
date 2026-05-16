@@ -1309,7 +1309,20 @@ function handleTouchEnd() {
     // SIGNED_IN always runs regardless (it represents a new login action).
     let _lastHandledUserId = null;
 
-    const { data: { session } } = await supabase.auth.getSession();
+    let session = null;
+    try {
+      const { data } = await supabase.auth.getSession();
+      session = data && data.session ? data.session : null;
+    } catch (e) {
+      errlog('getSession failed — booting in offline mode', e);
+      // Supabase unreachable on cold start. Boot the UI anyway so the vendor
+      // is not left on a blank screen. onAuthStateChange will fire when
+      // connectivity resumes and will complete the auth flow at that point.
+      document.body.classList.remove('qs-auth-pending');
+      initAppUI();
+      return;
+    }
+
     if (session && session.user) {
       _lastHandledUserId = session.user.id;
       handleAuthUser(session.user);
@@ -3485,14 +3498,17 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       _safeStr(product && product.description),
     ].join(' ').toLowerCase();
 
+    if (/perfume|fragrance|cologne|scent|edp|edt|eau de|roll.on|body.*mist|mist.*body/.test(blob)) {
+      return 'Film the spray, name the mood it creates, and show who it\'s for.';
+    }
     if (/shoe|sneaker|sandal|slipper|bag|dress|shirt|top|jean|wear|fashion|cap|jacket/.test(blob)) {
-      return 'Try-on clip, outfit pairing, and a close-up of the material or fit.';
+      return 'Try-on clip, outfit pairing, and a close-up of the fit.';
     }
-    if (/beauty|skin|hair|cream|soap|perfume|lotion|makeup|beard|body|oil/.test(blob)) {
-      return 'Show texture, before/after, and the problem it solves in 5 seconds.';
+    if (/beauty|skin|hair|cream|soap|lotion|makeup|beard|body.*oil|serum|toner/.test(blob)) {
+      return 'Show texture, a before/after result, and the problem it solves in 5 seconds.';
     }
-    if (/food|snack|drink|beverage|rice|spice|oil|chocolate|cereal|tea|coffee|bread/.test(blob)) {
-      return 'Show the pack open, the portion size, and a bundle or daily-use angle.';
+    if (/food|snack|drink|beverage|rice|spice|chocolate|cereal|tea|coffee|bread|chin/.test(blob)) {
+      return 'Show the portion size, open pack, and a daily-use or bundle angle.';
     }
     if (/phone|charger|cable|battery|earbud|headphone|power|electronic|tech|speaker/.test(blob)) {
       return 'Show a demo, the key feature, and compatibility in one fast clip.';
@@ -3998,21 +4014,6 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       wrap.appendChild(oc);
     }
 
-    // ── CARD: PROMOTE THESE NOW ───────────────────────────────────────────
-    if (growth.promote.length > 0) {
-      const prom = _insCard('rgba(16,185,129,0.28)', 'rgba(16,185,129,0.06)');
-      _insCardHead(prom, '\u{1F4E3}', 'Push These Products', 'In-stock items ready for content and storefront spotlight');
-      growth.promote.forEach(function(p, idx) {
-        _insRow(prom, p.name,
-          growth.contentHookForProduct(p) + ' · ' + p.qty + ' in stock',
-          idx === 0 ? 'Make hero' : 'Edit listing',
-          idx === 0 ? '#10b981' : '#0f766e',
-          { action: 'edit', productId: p.id, price: String(p.price || '') });
-      });
-      _insFootnote(prom, 'Pick one as the storefront cover. Post it. Then make the next one the follow-up.');
-      wrap.appendChild(prom);
-    }
-
     // ── CARD: LISTINGS TO FIX ─────────────────────────────────────────────
     if (growth.fixNow.length > 0) {
       const fc = _insCard('rgba(245,158,11,0.28)', 'rgba(245,158,11,0.06)');
@@ -4326,6 +4327,12 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       priceOpps.length ? priceOpps.length + ' fast movers can likely take a higher price test' : '',
     ].filter(Boolean).join('\n');
 
+    const promoteLines = promoted.slice(0, 3).map(function(p, i) {
+      return (i + 1) + '. ' + _safeStr(p.name) + ' | ' + p.qty + ' in stock' +
+        (p.price ? ' | ₦' + Number(p.price).toLocaleString() : '') +
+        ' | content angle: ' + growth.contentHookForProduct(p);
+    }).join('\n');
+
     const snapshot = [
       'QuickShop merchant in Nigeria. Currency: NGN.',
       products.length === 0
@@ -4334,9 +4341,9 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       'Sales trend: ' + (trendPct !== null ? (trendPct >= 0 ? '+' : '') + Number(trendPct).toFixed(0) + '%' : 'n/a') + ' vs previous 7 days.',
       products.length > 0 ? ('Operational context: ' + (restockAlerts.length ? restockAlerts.length + ' low-stock issue(s).' : 'No urgent stockouts.') + ' ' + (profitLeaks.length ? profitLeaks.length + ' margin issue(s).' : 'No serious margin leak.') +
         ' ' + (fixes.length ? fixes.length + ' listing issue(s) need attention.' : 'Listings are reasonably complete.')) : '',
-      products.length > 0 ? ('Best candidate to feature: ' + (_safeStr((promoted[0] || growth.bestSeller || {}).name, 'Choose a hero product')) + '.') : '',
       products.length > 0 ? ('Products to feature:\n' + topProducts) : '',
       products.length > 0 ? ('Products to fix:\n' + fixLines) : '',
+      products.length > 0 && promoteLines ? ('Products ready to promote (with suggested content angle):\n' + promoteLines) : '',
       products.length > 0 && alerts ? ('Alerts:\n' + alerts) : products.length > 0 ? 'Alerts: none.' : '',
     ].filter(Boolean).join('\n');
 
@@ -4806,38 +4813,32 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
 
     const prompt = [
       'You are QuickShop Growth Copilot.',
-      'You are NOT an analytics narrator.',
-      'The merchant already saw the metrics and operational engine.',
-      'Your job is to explain what the numbers MEAN and what deserves attention.',
-      'Sound like a sharp storefront strategist helping a real merchant grow.',
+      'You are NOT an analytics narrator. The merchant already sees the numbers in the insight panel.',
+      'Your job: read what the numbers mean, spot what they miss, and tell the merchant exactly what to do.',
+      'Sound like a sharp Nigerian commerce strategist — direct, practical, occasionally surprising.',
       '',
-      'IMPORTANT RULES:',
-      '- Never repeat metrics already implied by the engine.',
-      '- Never summarize revenue, stock, profit, or transaction totals unless absolutely necessary.',
-      '- Never sound like a dashboard report.',
-      '- Focus on hidden patterns, positioning, visibility, conversion, trust, and product presentation.',
-      '- Give a real business judgment, not a recap.',
-      '- Call out one hidden opportunity or risk the engine did not say out loud.',
-      '- Include one concrete viral or storefront move when relevant.',
-      '- Be concise and polished, but not too lean.',
-      '- Sound confident, observant, practical, and slightly surprising.',
+      'RULES:',
+      '- Never repeat raw metrics or restate what the insight panel already shows.',
+      '- No markdown bullets, tables, numbering, headers, or code fences.',
+      '- Mention product names only when strategically necessary.',
       '- Do not give generic marketing advice.',
-      '- No markdown bullets, tables, numbering, or code fences.',
-      '- Mention product names only when strategically useful.',
-      '- End with exactly one question the merchant should answer today.',
+      '- Be confident and specific. Generic = useless.',
       '',
-      'RESPONSE FORMAT \u2014 natural prose only, no section headers or labels:',
-      'Open with one sharp sentence: your verdict on what is actually happening in this store right now.',
-      'Follow with one sentence: the hidden pattern or risk the merchant has not noticed.',
-      'Follow with one sentence: the single highest-leverage move \u2014 name it specifically.',
-      'If genuinely relevant, one sentence on a storefront or social angle.',
-      'End with exactly one focused question on its own line. No preamble before it.',
-      'Total response: 4-5 sentences maximum. Do not add greetings or sign-offs.',
+      'RESPONSE FORMAT — natural prose, this exact structure:',
       '',
-      'GOOD EXAMPLES:',
-      '"Your store is getting sales but not enough identity. One product is carrying attention while the rest feel disconnected. I would turn the strongest item into the storefront hero and make the supporting products reinforce it. What should this store become known for?"',
+      'Paragraph 1 — Strategic read (2-3 sentences):',
+      'Open with one sharp sentence: your honest verdict on what is actually happening in this store.',
+      'Follow with the hidden pattern or risk the merchant has not noticed.',
+      'Then the single highest-leverage operational or positioning move they should make.',
       '',
-      '"Your products are sellable, but not yet memorable. The issue is not inventory depth; it is presentation and positioning. I would stop treating every item equally and build the storefront around the product most likely to be shared. Which product deserves to become the face of the store?"',
+      'Paragraph 2 — Promote these (2-3 sentences):',
+      'Based on the products ready to promote in the snapshot, tell the merchant which product to lead with and exactly how to present it — specific to what the product actually is.',
+      'Then name the follow-up product and the angle for it.',
+      'One sentence on where to post or how to sequence the content this week.',
+      '',
+      'Final line — one focused question the merchant should answer today. Nothing else on that line.',
+      '',
+      'Total response: 5-7 sentences. No greetings, no sign-offs, no encouragement padding.',
       '',
       'SNAPSHOT:',
       snapshot,
