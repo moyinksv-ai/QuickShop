@@ -80,14 +80,44 @@
     });
   }
 
-  /* ── 2. CART STATE — pure in-memory Map, intentionally not persisted ─── */
+  /* ── 2. CART STATE ────────────────────────────────────────────────────── */
   //  Map<productId: string, { product: Object, qty: number }>
+  //  Persisted to sessionStorage so cart survives accidental refreshes.
+  //  Restored after allProducts is loaded (needs product objects to re-hydrate).
 
   var cart = new Map();
+  var CART_KEY = 'qs_cart_v1';
+
+  function _saveCart() {
+    try {
+      var entries = [];
+      cart.forEach(function (e, pid) {
+        entries.push({ id: pid, qty: e.qty });
+      });
+      sessionStorage.setItem(CART_KEY, JSON.stringify(entries));
+    } catch (_) { /* sessionStorage unavailable — silent */ }
+  }
+
+  function _restoreCart(products) {
+    try {
+      var raw = sessionStorage.getItem(CART_KEY);
+      if (!raw) return;
+      var entries = JSON.parse(raw);
+      if (!Array.isArray(entries)) return;
+      entries.forEach(function (e) {
+        var product = products.find(function (p) { return p.id === e.id; });
+        if (!product) return; // product may have been removed
+        var maxStock = typeof product.qty === 'number' ? product.qty : Infinity;
+        var qty = Math.min(Math.max(1, Math.floor(Number(e.qty) || 1)), maxStock);
+        if (qty > 0) cart.set(e.id, { product: product, qty: qty });
+      });
+    } catch (_) { /* corrupt data — start fresh */ }
+  }
 
   function cartAdd(product) {
     if (!cart.has(product.id)) {
       cart.set(product.id, { product: product, qty: 1 });
+      _saveCart();
       refreshCartUI();
     }
   }
@@ -99,11 +129,13 @@
     var n = Math.min(Math.max(0, Math.floor(Number(qty) || 0)), maxStock);
     if (n === 0) { cart.delete(productId); }
     else         { entry.qty = n; }
+    _saveCart();
     refreshCartUI();
   }
 
   function cartRemove(productId) {
     cart.delete(productId);
+    _saveCart();
     refreshCartUI();
   }
 
@@ -246,11 +278,13 @@
         'border-bottom:1px solid rgba(255,255,255,0.0);',
         'transition:background .2s ease,border-color .2s ease;}',
 
-      /* Compact bar content */
+      /* Compact bar — hidden until hero scrolls away, fades in as one unit */
       '#cat-hdr-compact{',
         'position:absolute;inset:0;',
         'display:flex;align-items:center;',
-        'padding:0 16px;gap:10px;}',
+        'padding:0 16px;gap:10px;',
+        'opacity:0;pointer-events:none;',
+        'transition:opacity .22s ease;}',
 
       /* Small avatar */
       '#cat-avatar-sm{width:34px;height:34px;border-radius:10px;flex-shrink:0;',
@@ -262,24 +296,21 @@
 
       /* Name in compact */
       '#cat-name-sm{flex:1;font-size:15px;font-weight:700;color:#fff;',
-        'letter-spacing:-.3px;opacity:0;',
+        'letter-spacing:-.3px;',
         'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;',
-        'text-shadow:0 1px 4px rgba(0,0,0,0.5);',
-        'transition:opacity .2s ease;}',
+        'text-shadow:0 1px 4px rgba(0,0,0,0.5);}',
 
-      /* compact status pill */
+      /* Compact status pill */
       '.cat-status-pill{display:inline-flex;align-items:center;gap:4px;flex-shrink:0;',
         'background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);',
-        'border-radius:100px;padding:2px 8px 2px 6px;opacity:0;',
-        'font-size:9.5px;font-weight:700;color:#34d399;letter-spacing:.4px;',
-        'transition:opacity .2s ease;}',
+        'border-radius:100px;padding:2px 8px 2px 6px;',
+        'font-size:9.5px;font-weight:700;color:#34d399;letter-spacing:.4px;}',
 
-      /* ── SCROLLED STATE ── */
+      /* ── SCROLLED STATE — entire compact bar appears as one unit ── */
       '#cat-hdr.scrolled{',
         'background:rgba(11,11,16,0.97);',
         'border-bottom-color:rgba(255,255,255,0.08);}',
-      '#cat-hdr.scrolled #cat-name-sm{opacity:1;}',
-      '#cat-hdr.scrolled .cat-status-pill{opacity:1;}',
+      '#cat-hdr.scrolled #cat-hdr-compact{opacity:1;pointer-events:auto;}',
 
       /* --- search --- */
       '#cat-search-wrap{padding:10px 12px 4px;background:#0b0b10;}',
@@ -1764,7 +1795,56 @@
 
     if (filtered.length === 0) {
       grid.style.display = 'none';
-      if (empty) empty.classList.add('show');
+      if (empty) {
+        // Dynamic message based on whether search or filter is active
+        var et = empty.querySelector('.cat-state-title');
+        var es = empty.querySelector('.cat-state-sub');
+        var ec = empty.querySelector('.cat-empty-clear');
+        var hasSearch = searchQuery && searchQuery.length > 0;
+        var hasFilter = activeCategory && activeCategory !== 'All';
+
+        if (et) et.textContent = hasSearch
+          ? 'No results for \u201c' + searchQuery + '\u201d'
+          : 'No products in ' + activeCategory;
+
+        if (es) es.textContent = hasSearch
+          ? 'Try different keywords or clear the search.'
+          : 'Try a different category.';
+
+        // Add clear button if not already there
+        if (!ec && (hasSearch || hasFilter)) {
+          var clearBtn = document.createElement('button');
+          clearBtn.className = 'cat-empty-clear';
+          clearBtn.type = 'button';
+          clearBtn.textContent = 'Clear filters';
+          clearBtn.style.cssText = [
+            'margin-top:12px;padding:8px 20px;',
+            'background:rgba(124,58,237,0.18);',
+            'border:1px solid rgba(124,58,237,0.35);',
+            'border-radius:100px;color:#b79fff;',
+            'font-size:13px;font-weight:600;cursor:pointer;',
+            '-webkit-tap-highlight-color:transparent;',
+          ].join('');
+          clearBtn.addEventListener('click', function () {
+            searchQuery = '';
+            activeCategory = 'All';
+            var searchEl = document.getElementById('cat-search');
+            if (searchEl) searchEl.value = '';
+            var chipsEl = document.getElementById('cat-chips');
+            if (chipsEl) chipsEl.querySelectorAll('.cat-chip').forEach(function (c) {
+              var active = c.dataset.cat === 'All';
+              c.classList.toggle('active', active);
+              c.setAttribute('aria-pressed', active ? 'true' : 'false');
+            });
+            renderGrid();
+          });
+          empty.appendChild(clearBtn);
+        } else if (ec && !hasSearch && !hasFilter) {
+          ec.remove();
+        }
+
+        empty.classList.add('show');
+      }
     } else {
       grid.style.display = '';
       if (empty) empty.classList.remove('show');
@@ -2175,6 +2255,14 @@
           if (product) openDetailOverlay(product);
           return;
         }
+
+        // Tap anywhere on card (name, price, info area) — opens product detail
+        var card = target.closest('.cat-card');
+        if (card) {
+          var pid = card.dataset.id;
+          var product = allProducts.find(function (p) { return p.id === pid; });
+          if (product) openDetailOverlay(product);
+        }
       });
 
       grid.addEventListener('keydown', function (e) {
@@ -2197,6 +2285,8 @@
           c.setAttribute('aria-pressed', active ? 'true' : 'false');
         });
         renderGrid();
+        // Scroll to top so customer sees results from the beginning
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       });
     }
 
@@ -2205,11 +2295,19 @@
     if (search) {
       var searchTimer;
       search.addEventListener('input', function () {
+        var val = (search.value || '').trim();
+        // Instant clear — don't wait for debounce when field is emptied
+        if (!val) {
+          clearTimeout(searchTimer);
+          searchQuery = '';
+          renderGrid();
+          return;
+        }
         clearTimeout(searchTimer);
         searchTimer = setTimeout(function () {
-          searchQuery = (search.value || '').trim();
+          searchQuery = val;
           renderGrid();
-        }, 180);
+        }, 280);
       });
     }
 
@@ -2428,12 +2526,24 @@
 
     var storeName;
     if (_rawName) {
-      // Use the business name directly — no possessive suffix.
-      // "James Stores", "Moyinks", "Adaeze's Boutique" all read naturally as-is.
       storeName = _rawName.trim();
     } else {
       storeName = 'Our Store';
     }
+
+    // ── Page title and meta description ─────────────────────────────────────
+    // Makes browser tabs readable and WhatsApp/social link previews meaningful.
+    document.title = storeName + ' — QuickShop';
+    var _metaDesc = document.querySelector('meta[name="description"]');
+    if (!_metaDesc) {
+      _metaDesc = document.createElement('meta');
+      _metaDesc.name = 'description';
+      document.head.appendChild(_metaDesc);
+    }
+    var _tagline = (profile && profile.tagline && profile.tagline.trim()) || '';
+    _metaDesc.content = _tagline
+      ? storeName + '. ' + _tagline
+      : 'Browse ' + storeName + '\'s catalog and order via WhatsApp.';
 
     // Update header
     var sname = document.getElementById('cat-store-name');
@@ -2523,6 +2633,7 @@
 
     // Load product data
     allProducts = productsResult.data || [];
+    _restoreCart(allProducts); // re-hydrate cart from sessionStorage if present
     var _ssub = document.getElementById('cat-store-sub');
     if (_ssub) _ssub.textContent = allProducts.length + ' product' + (allProducts.length !== 1 ? 's' : '') + ' · WhatsApp orders';
 
