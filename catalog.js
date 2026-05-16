@@ -160,71 +160,62 @@
       '#qs-catalog{display:none;padding-bottom:140px;}',
       'body.qs-cat #qs-catalog{display:block;}',
 
-      /* --- header --- */
+      /* ── HEADER ── */
       '#cat-hdr{position:sticky;top:0;z-index:100;',
-        'background:rgba(11,11,16,0.97);backdrop-filter:blur(24px);',
-        '-webkit-backdrop-filter:blur(24px);',
-        'border-bottom:1px solid rgba(255,255,255,0.06);',
-        'padding:13px 16px 13px;display:flex;align-items:center;gap:13px;}',
+        'background:rgba(11,11,16,0.97);',
+        'border-bottom:1px solid rgba(255,255,255,0.07);',
+        'padding:16px 18px 14px;',
+        'display:flex;flex-direction:column;align-items:center;gap:10px;}',
 
-      /* avatar — circular, elevated */
-      '#cat-avatar{width:46px;height:46px;border-radius:50%;flex-shrink:0;',
-        'background:linear-gradient(135deg,rgba(124,58,237,0.25),rgba(109,40,217,0.12));',
-        'border:1.5px solid rgba(124,58,237,0.4);',
-        'box-shadow:0 0 0 3px rgba(124,58,237,0.08),0 2px 8px rgba(0,0,0,0.4);',
+      /* Avatar */
+      '#cat-avatar{width:64px;height:64px;border-radius:18px;flex-shrink:0;',
+        'background:linear-gradient(145deg,rgba(124,58,237,0.22),rgba(79,70,229,0.1));',
+        'border:1.5px solid rgba(124,58,237,0.28);',
+        'box-shadow:0 4px 20px rgba(124,58,237,0.15),0 1px 4px rgba(0,0,0,0.5);',
         'display:flex;align-items:center;justify-content:center;',
-        'font-size:16px;font-weight:900;color:#c4b5fd;overflow:hidden;}',
-      '#cat-avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%;}',
+        'font-size:22px;font-weight:900;color:#c4b5fd;overflow:hidden;}',
+      '#cat-avatar img{width:100%;height:100%;object-fit:cover;border-radius:16px;}',
 
-      /* store info */
-      '#cat-store-info{flex:1;min-width:0;}',
-      '#cat-store-name{font-size:16px;font-weight:800;color:#fff;',
-        'letter-spacing:-.35px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;',
-        'line-height:1.25;}',
-      '#cat-store-sub{font-size:11px;color:rgba(240,240,246,0.38);',
-        'margin-top:2px;font-weight:500;letter-spacing:.1px;}',
+      /* Store name */
+      '#cat-store-name{font-size:22px;font-weight:800;color:#fff;',
+        'letter-spacing:-.5px;line-height:1.15;text-align:center;',
+        'overflow:hidden;text-overflow:ellipsis;width:100%;',
+        'display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;}',
 
-      /* location + delivery — sits between sub and status pill */
-      '#cat-store-location{display:none;}',
-      '#cat-store-location.cat-store-location-line{',
-        'display:flex;align-items:center;flex-wrap:wrap;gap:5px;',
-        'margin-top:4px;}',
-      '.cat-store-location-line{font-size:11px;color:rgba(240,240,246,0.45);',
-        'font-weight:500;}',
-      '.cat-delivery-badge{',
-        'display:inline-flex;align-items:center;',
-        'font-size:9.5px;font-weight:700;letter-spacing:.3px;',
-        'padding:2px 7px;border-radius:100px;',
-        'white-space:nowrap;}',
-      '.cat-delivery-yes{',
-        'background:rgba(16,185,129,0.1);',
-        'border:1px solid rgba(16,185,129,0.22);',
-        'color:#34d399;}',
-      '.cat-delivery-no{',
-        'background:rgba(255,255,255,0.05);',
-        'border:1px solid rgba(255,255,255,0.1);',
-        'color:rgba(240,240,246,0.45);}',
+      /* Meta row */
+      '#cat-hdr-meta{display:flex;align-items:center;justify-content:center;',
+        'flex-wrap:wrap;gap:6px;width:100%;}',
+      '#cat-store-sub{font-size:11px;color:rgba(240,240,246,0.38);font-weight:500;}',
 
-      /* tagline strip — sits between search bar and category chips */
-      '#cat-tagline{',
-        'display:none;', /* hidden until tagline set */
-        'padding:7px 20px 5px;',
-        'text-align:center;',
-        'font-size:12.5px;font-style:italic;font-weight:400;',
-        'color:rgba(240,240,246,0.5);line-height:1.6;',
-        'border-bottom:1px solid rgba(255,255,255,0.04);',
-        'margin:0;',
-      '}',
-      '#cat-tagline.visible{display:block;}',
-
-      /* status pill */
-      '#cat-status{display:inline-flex;align-items:center;gap:5px;',
+      /* Status pill */
+      '#cat-status{display:inline-flex;align-items:center;gap:5px;flex-shrink:0;',
         'background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);',
-        'border-radius:100px;padding:3px 8px 3px 6px;margin-top:5px;}',
-      '#cat-status-text{font-size:9.5px;font-weight:700;color:#34d399;letter-spacing:.5px;}',
-      '.cat-live-dot{width:5px;height:5px;border-radius:50%;background:#34d399;flex-shrink:0;',
+        'border-radius:100px;padding:3px 9px 3px 7px;}',
+      '#cat-status-text{font-size:10px;font-weight:700;color:#34d399;letter-spacing:.4px;}',
+      '.cat-live-dot{width:6px;height:6px;border-radius:50%;background:#34d399;flex-shrink:0;',
         'animation:cat-pulse 2s ease-in-out infinite;}',
-      '@keyframes cat-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.65)}}',
+      '@keyframes cat-pulse{0%,100%{opacity:1}50%{opacity:.25}}',
+
+      /* location + delivery */
+      '#cat-store-location{display:none;}',
+      '#cat-store-location.cat-store-location-line{display:contents;}',
+      '.cat-loc-text{font-size:11px;color:rgba(240,240,246,0.38);font-weight:500;}',
+      '.cat-delivery-badge{display:inline-flex;align-items:center;gap:4px;',
+        'font-size:10px;font-weight:700;letter-spacing:.2px;',
+        'padding:2px 8px;border-radius:100px;white-space:nowrap;}',
+      '.cat-delivery-yes{background:rgba(16,185,129,0.1);',
+        'border:1px solid rgba(16,185,129,0.22);color:#34d399;}',
+      '.cat-delivery-no{background:rgba(255,255,255,0.05);',
+        'border:1px solid rgba(255,255,255,0.1);color:rgba(240,240,246,0.38);}',
+
+      /* Tagline */
+      '#cat-tagline{display:none;width:100%;',
+        'padding:8px 14px;box-sizing:border-box;',
+        'font-size:12px;font-style:italic;font-weight:400;text-align:center;',
+        'color:rgba(240,240,246,0.45);line-height:1.6;',
+        'background:rgba(255,255,255,0.03);',
+        'border:1px solid rgba(255,255,255,0.06);border-radius:10px;}',
+      '#cat-tagline.visible{display:block;}',
 
       /* --- search --- */
       '#cat-search-wrap{padding:10px 12px 4px;background:#0b0b10;}',
@@ -293,10 +284,9 @@
       /* --- stock badges --- */
       '.cat-badge{position:absolute;top:8px;right:8px;',
         'font-size:8.5px;font-weight:800;letter-spacing:.5px;',
-        'padding:3px 7px;border-radius:100px;text-transform:uppercase;',
-        'backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}',
-      '.cat-badge-oos{background:rgba(220,38,38,0.82);color:#fff;}',
-      '.cat-badge-low{background:rgba(217,119,6,0.85);color:#fff;}',
+        'padding:3px 7px;border-radius:100px;text-transform:uppercase;}',
+      '.cat-badge-oos{background:rgba(220,38,38,0.9);color:#fff;}',
+      '.cat-badge-low{background:rgba(217,119,6,0.92);color:#fff;}',
 
       /* --- stock count --- */
       '.cat-stock{font-size:10px;font-weight:600;color:#10b981;margin-top:3px;',
@@ -625,21 +615,28 @@
     var root = document.createElement('div');
     root.id = 'qs-catalog';
 
-    // Header
     var hdr = document.createElement('header');
     hdr.id = 'cat-hdr';
     hdr.setAttribute('role', 'banner');
+
     var avatar = document.createElement('div');
     avatar.id = 'cat-avatar';
     avatar.setAttribute('aria-hidden', 'true');
-    var sinfo = document.createElement('div');
-    sinfo.id = 'cat-store-info';
+
     var sname = document.createElement('div');
     sname.id = 'cat-store-name';
     sname.textContent = 'Loading…';
+
+    var hdrMeta = document.createElement('div');
+    hdrMeta.id = 'cat-hdr-meta';
+
     var ssub = document.createElement('div');
     ssub.id = 'cat-store-sub';
     ssub.textContent = 'WhatsApp catalog';
+
+    var sloc = document.createElement('div');
+    sloc.id = 'cat-store-location';
+
     var sstat = document.createElement('div');
     sstat.id = 'cat-status';
     var dot = document.createElement('span');
@@ -650,15 +647,19 @@
     stxt.textContent = 'OPEN NOW';
     sstat.appendChild(dot);
     sstat.appendChild(stxt);
-    sinfo.appendChild(sname);
-    sinfo.appendChild(ssub);
-    // Location line — hidden until populated
-    var sloc = document.createElement('div');
-    sloc.id = 'cat-store-location';
-    sinfo.appendChild(sloc);
-    sinfo.appendChild(sstat);
+
+    hdrMeta.appendChild(ssub);
+    hdrMeta.appendChild(sloc);
+    hdrMeta.appendChild(sstat);
+
+    var taglineEl = document.createElement('p');
+    taglineEl.id = 'cat-tagline';
+    taglineEl.setAttribute('aria-label', 'Store tagline');
+
     hdr.appendChild(avatar);
-    hdr.appendChild(sinfo);
+    hdr.appendChild(sname);
+    hdr.appendChild(hdrMeta);
+    hdr.appendChild(taglineEl);
     root.appendChild(hdr);
 
     // Search
@@ -673,12 +674,6 @@
     si.setAttribute('spellcheck', 'false');
     sw.appendChild(si);
     root.appendChild(sw);
-
-    // Tagline strip — hidden until populated
-    var taglineEl = document.createElement('p');
-    taglineEl.id = 'cat-tagline';
-    taglineEl.setAttribute('aria-label', 'Store tagline');
-    root.appendChild(taglineEl);
 
     // Category chips
     var chips = document.createElement('div');
@@ -2319,30 +2314,28 @@
     var sname = document.getElementById('cat-store-name');
     if (sname) sname.textContent = storeName;
 
-    // Render tagline if vendor has set one
-    var taglineDiv = document.getElementById('cat-tagline');
-    if (taglineDiv) {
-      var tagline = profile && profile.tagline && profile.tagline.trim();
-      if (tagline) {
-        taglineDiv.textContent = tagline; // textContent — safe, no XSS
-        taglineDiv.classList.add('visible');
-      }
-    }
-
     var ssub = document.getElementById('cat-store-sub');
     if (ssub) ssub.textContent = 'WhatsApp orders';
+
     var avatar = document.getElementById('cat-avatar');
     if (avatar) {
       if (profile && profile.avatar_url) {
-        // Show real logo/photo
         var avImg = document.createElement('img');
         avImg.src = safeImgSrc(profile.avatar_url);
         avImg.alt = storeName;
         avatar.innerHTML = '';
         avatar.appendChild(avImg);
       } else {
-        // Fallback to initials
         avatar.textContent = mono(_rawName || storeName);
+      }
+    }
+
+    var taglineDiv = document.getElementById('cat-tagline');
+    if (taglineDiv) {
+      var tagline = profile && profile.tagline && profile.tagline.trim();
+      if (tagline) {
+        taglineDiv.textContent = tagline;
+        taglineDiv.classList.add('visible');
       }
     }
 
@@ -2351,23 +2344,26 @@
     if (slocEl) {
       var _loc = profile && profile.location && profile.location.trim();
       var _delivery = profile && profile.delivery_available;
-      var _locParts = [];
+      var _hasContent = false;
       if (_loc) {
-        var _pin = document.createElement('span');
-        _pin.setAttribute('aria-hidden', 'true');
-        _pin.textContent = '📍 ';
-        var _locText = document.createTextNode(_loc);
-        slocEl.appendChild(_pin);
-        slocEl.appendChild(_locText);
-        slocEl.className = 'cat-store-location-line';
+        var _sep = document.createElement('span');
+        _sep.textContent = '·';
+        _sep.style.cssText = 'color:rgba(240,240,246,0.2);font-size:11px;';
+        slocEl.appendChild(_sep);
+        var _locSpan = document.createElement('span');
+        _locSpan.className = 'cat-loc-text';
+        _locSpan.textContent = '📍 ' + _loc;
+        slocEl.appendChild(_locSpan);
+        _hasContent = true;
       }
       if (typeof _delivery === 'boolean') {
         var _badge = document.createElement('span');
         _badge.className = _delivery ? 'cat-delivery-badge cat-delivery-yes' : 'cat-delivery-badge cat-delivery-no';
         _badge.textContent = _delivery ? '🚚 Delivers' : '🏪 Pickup only';
         slocEl.appendChild(_badge);
-        slocEl.className = (slocEl.className ? slocEl.className + ' ' : '') + 'cat-store-location-line';
+        _hasContent = true;
       }
+      if (_hasContent) slocEl.className = 'cat-store-location-line';
     }
 
     // SOFT GATE: header identity is now rendered — apply gate if inactive
