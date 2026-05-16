@@ -1,9 +1,39 @@
 /*
-* QuickShop - Complete Production Build with All Fixes
-* Fixed: Pull-to-refresh spinner, Report charts, AI insights, Modal close buttons, Keyboard flicker
-* Author: Claude (Anthropic)
-* Date: 2025-01-22
-*/
+ * QuickShop — appss.js
+ * ─────────────────────────────────────────────────────────────────────────────
+ * All logic lives inside initApp() to share a single closed scope.
+ * No globals are created. Sections are clearly marked for navigation.
+ *
+ * TABLE OF CONTENTS
+ * ─────────────────
+ *  §0  Bootstrap & Helpers     waitForSupabaseReady, initApp entry, Sentry
+ *  §1  Core Utilities          escapeHtml, uid, dates, toast, compressImage
+ *  §2  Pull-to-Refresh         initPullToRefresh, triggerRefresh
+ *  §3  Modal & UI Helpers      confirm, backdrop, showModal, loading, auth forms
+ *  §4  Data Layer              setUserProfile, getUserProfile, saveState,
+ *                               validateLoadedState, loadLocalData, syncCloudData
+ *  §5  Auth                    initAuthHandlers, initAuth, handleAuthUser,
+ *                               handleAuthLogout
+ *  §6  Scanner                 startScanner, handleScanResult, handlers
+ *  §7  Inventory — Products    renderChips, renderProducts, openModalFor,
+ *                               doAddStock, doSell, undoLastFor, removeProduct
+ *  §8  Inventory — Forms       imageUpload, clearAddForm, validateProduct,
+ *                               initAddProductHandler, CSV import
+ *  §9  Activity Log            addActivityLog, renderActivityLog, auditLog
+ * §10  Dashboard               renderDashboard
+ * §11  Notes                   renderNotes, initNotesHandlers
+ * §12  Settings & Demo         initDemoAndSettingsHandlers, renderCategoryEditor,
+ *                               renderSettingsPanel
+ * §13  Navigation              setActiveView, cleanupViewState, initNavigationHandlers
+ * §14  Reports                 createBuckets, renderReports, renderReportsChart,
+ *                               renderTop3Products, initReportsHandlers, generateCsv
+ * §15  Insights & Copilot      _computeSignals, _buildInsightDom, copilot session,
+ *                               merchant memory, Gemini AI, generateAdvancedInsights
+ * §16  Search & Theme          initSearchHandler, initThemeToggle, toggleTheme
+ * §17  App Bootstrap           initAppUI, boot sequence, back button, visibility
+ * §18  Inventory Bridge        window.__QS_APP — public API for inventory.js
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
 
 function waitForSupabaseReady(timeoutMs = 3000) {
   return new Promise((resolve) => {
@@ -26,6 +56,10 @@ function waitForSupabaseReady(timeoutMs = 3000) {
 function initApp() {
   'use strict';
 
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // §0  BOOTSTRAP & HELPERS
+  // ═══════════════════════════════════════════════════════════════════════════
   const IS_PROD = window.location.hostname !== 'localhost' && !window.location.hostname.includes('127.0.0.1');
   const log = IS_PROD ? () => {} : (...a) => console.log('[QS]', ...a);
 
@@ -96,6 +130,10 @@ function initApp() {
     }
   };
   
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // §1  CORE UTILITIES — escapeHtml, uid, dates, formatters, toast, compressImage
+  // ═══════════════════════════════════════════════════════════════════════════
   function escapeHtml(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
   // FIX 1: Use crypto.randomUUID() to prevent ID collisions — Math.random() is not cryptographically safe.
   function uid() {
@@ -308,6 +346,10 @@ function initApp() {
     state: 'IDLE'
   };
 
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // §2  PULL-TO-REFRESH
+  // ═══════════════════════════════════════════════════════════════════════════
   function initPullToRefresh() {
     const ptr = document.createElement('div');
     ptr.id = 'pullToRefreshIndicator';
@@ -431,6 +473,10 @@ function handleTouchEnd() {
     }, 300);
   }
 
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // §3  MODAL & UI HELPERS — backdrop, confirm, loading, auth forms, inventory insight
+  // ═══════════════════════════════════════════════════════════════════════════
   function createModalBackdrop(id, zIndex = 99998) {
     let backdrop = document.getElementById(id);
     if (backdrop) return backdrop;
@@ -692,6 +738,10 @@ function handleTouchEnd() {
     }, 230);
   }
 
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // §4  DATA LAYER — profile, saveState, validateState, loadLocalData, syncCloudData
+  // ═══════════════════════════════════════════════════════════════════════════
   async function setUserProfile(uid, profile) {
     const supabase = getClient();
     if (!supabase) return false;
@@ -935,6 +985,10 @@ function handleTouchEnd() {
     await saveState();
   }
 
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // §5  AUTH — mapAuthError, initAuthHandlers, initAuth, handleAuthUser, handleAuthLogout
+  // ═══════════════════════════════════════════════════════════════════════════
   function mapAuthError(e) {
     if (!e) return 'An error occurred';
     const msg = e.message || String(e);
@@ -1406,6 +1460,10 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     });
   }
 
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // §6  SCANNER — barcode, smart scan
+  // ═══════════════════════════════════════════════════════════════════════════
   function stopScanner() {
     if (window.__QS_INVENTORY) window.__QS_INVENTORY.stopScanner();
   }
@@ -1430,6 +1488,11 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     // Moved to inventory.js — called via initAll()
   }
 
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // §7  INVENTORY — PRODUCTS — chips, renderProducts, openModalFor, doAddStock,
+  //                            doSell, undoLastFor, activityLog, auditLog
+  // ═══════════════════════════════════════════════════════════════════════════
   function renderChips() {
     try {
     const chipsEl = $('chips');
@@ -1949,6 +2012,11 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     toast('No recent changes to undo for this product', 'error');
   }
 
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // §8  INVENTORY — FORMS — imageUpload, clearAddForm, validateProduct,
+  //                         initAddProductHandler, renderInventory, CSV import
+  // ═══════════════════════════════════════════════════════════════════════════
   function clearInvImage() {
     if (window.__QS_INVENTORY) { /* clearInvImage handled in inventory.js */ }
   }
@@ -2016,6 +2084,10 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     // Moved to inventory.js — called via initAll()
   }
 
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // §10  DASHBOARD
+  // ═══════════════════════════════════════════════════════════════════════════
   function renderDashboard() {
     try {
     const dashRevenueEl = $('dashRevenue'), dashProfitEl = $('dashProfit'), dashTopEl = $('dashTop');
@@ -2084,6 +2156,10 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     } catch(e) { errlog('renderDashboard', e); }
   }
 
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // §11  NOTES
+  // ═══════════════════════════════════════════════════════════════════════════
   function renderNotes() {
     try {
     const notesListEl = $('notesList');
@@ -2380,6 +2456,11 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     }
   }
 
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // §12  SETTINGS & DEMO — initDemoAndSettingsHandlers, renderCategoryEditor,
+  //                        renderSettingsPanel
+  // ═══════════════════════════════════════════════════════════════════════════
   function initDemoAndSettingsHandlers() {
     // ── Force sync button ──────────────────────────────────────────
     const btnSyncNow = $('btnSyncNow');
@@ -2630,6 +2711,10 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
   // They were dead code — unreachable because renderCategoryEditor uses inline closures
   // instead. Their presence caused "unexpected token" lint errors and confused tooling.
 
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // §13  NAVIGATION — cleanupViewState, setActiveView, initNavigationHandlers
+  // ═══════════════════════════════════════════════════════════════════════════
   function cleanupViewState() {
     // FIX 9: editingNoteId is intentionally NOT reset here. Resetting it on every tab
     // switch caused note edits to create a NEW note instead of updating the existing one
@@ -2762,6 +2847,11 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     if (btnSettings) btnSettings.addEventListener('click', function() { setActiveView('settings', true); });
   }
 
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // §14  REPORTS — createBuckets, aggregateSales, renderReportsChart,
+  //                renderTop3Products, renderReports, initReportsHandlers, generateCsv
+  // ═══════════════════════════════════════════════════════════════════════════
   function createBuckets(range) {
     const DAY = 24 * 60 * 60 * 1000, now = Date.now(), buckets = [];
     if (range === 'daily') {
@@ -3242,6 +3332,8 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     URL.revokeObjectURL(url);
   }
 
+
+  // ─── §14a  Report Utilities ───────────────────────────────────────────────
   function calculateStockoutPrediction(product) {
     const last30Days = Date.now() - (30 * 24 * 60 * 60 * 1000);
     const recentSales = state.sales.filter(s => s.productId === product.id && s.ts >= last30Days);
@@ -3286,6 +3378,11 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
   // ═══════════════════════════════════════════════════════════════════════════
 
   // ── DOM HELPERS (all pure DOM, no innerHTML with user data) ───────────────
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // §15  INSIGHTS & COPILOT — signals, insight DOM, copilot session,
+  //                           merchant memory, Gemini AI, generateAdvancedInsights
+  // ═══════════════════════════════════════════════════════════════════════════
   function _insCard(borderColor, bg) {
     const el = document.createElement('div');
     el.style.cssText = [
@@ -3967,6 +4064,8 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
   // Never fall back to a shared/generic key — if user is unknown, return null
   // and callers must treat null as "no storage available."
   // This prevents cross-account AI session leakage.
+
+  // ─── §15a  Copilot Session & Memory ──────────────────────────────────────
   function _copilotUserId() {
     // currentUser is the authoritative auth source set by handleAuthUser.
     // Do NOT fall back to localStorage or any cached value here.
@@ -4593,6 +4692,8 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
   // ── GEMINI LAYER (Layer 2) ────────────────────────────────────────────────
   // Builds a ~400-token business snapshot and calls Gemini 2.0 Flash.
   // Free tier: 15 req/min, 1M tokens/day. More than enough for this use case.
+
+  // ─── §15b  Gemini AI Layer ────────────────────────────────────────────────
   async function _runGeminiInsight(sig, narrativeZone, growth) {
     const key = window.__QS_GEMINI_KEY;
     if (!key || key === 'YOUR_GEMINI_API_KEY') {
@@ -4911,6 +5012,8 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
   }
 
 // ── PUBLIC ENTRY POINT ────────────────────────────────────────────────────
+
+  // ─── §15c  Public Entry Point ─────────────────────────────────────────────
   function generateAdvancedInsights(returnHtml) {
     try {
       const sig = _computeSignals();
@@ -4967,6 +5070,10 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     }
   }
 
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // §16  SEARCH & THEME
+  // ═══════════════════════════════════════════════════════════════════════════
   function initSearchHandler() {
     const headerSearch = $('headerSearchInput');
     if (headerSearch) {
@@ -6501,6 +6608,10 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
 
 
 
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // §17  APP BOOTSTRAP — initAppUI, boot sequence, visibility, back button
+  // ═══════════════════════════════════════════════════════════════════════════
   function initAppUI() {
     try {
       renderChips(); renderProducts(); renderInventory(); renderDashboard(); renderNotes();
@@ -6653,6 +6764,10 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
 
 
 
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // §18  INVENTORY BRIDGE — window.__QS_APP public API for inventory.js
+  // ═══════════════════════════════════════════════════════════════════════════
   // ── INVENTORY BRIDGE — exposes everything inventory.js needs ─────────────
   // inventory.js reads window.__QS_APP; appss.js delegates back via __QS_INVENTORY
   let _editingProductId = editingProductId; // mirror - kept in sync
