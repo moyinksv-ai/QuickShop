@@ -193,11 +193,10 @@
       'body.qs-cat #qs-catalog{display:block;}',
 
       /* ── STORE HERO — scrolls naturally, not sticky ─────────────────────────
-       * Lives above the sticky bar in normal document flow.
-       * When the user scrolls past it, the sticky compact bar takes over.
-       * No height transitions. No JS touching layout. No reflow. ── */
+       * height:auto — sizes to content so tagline never clips or overflows.
+       * min-height ensures the hero has presence even with no tagline. ── */
 
-      '#cat-hero{position:relative;overflow:hidden;height:180px;}',
+      '#cat-hero{position:relative;overflow:hidden;min-height:160px;}',
 
       /* Blurred banner — fills hero */
       '#cat-hdr-banner{',
@@ -213,11 +212,11 @@
       '#cat-hdr-scrim{position:absolute;inset:0;z-index:1;',
         'background:linear-gradient(180deg,rgba(0,0,0,0.08) 0%,rgba(0,0,0,0.58) 100%);}',
 
-      /* Expanded content — centred in hero */
+      /* Expanded content — in flow, not absolute, so it sets the hero height */
       '#cat-hdr-expanded{',
-        'position:absolute;inset:0;z-index:2;',
+        'position:relative;z-index:2;',
         'display:flex;flex-direction:column;align-items:center;justify-content:center;',
-        'padding:16px 18px 14px;gap:7px;}',
+        'padding:20px 18px 18px;gap:7px;}',
 
       /* Large avatar */
       '#cat-avatar{width:54px;height:54px;border-radius:15px;flex-shrink:0;',
@@ -270,18 +269,17 @@
         'border:1px solid rgba(255,255,255,0.08);border-radius:8px;}',
       '#cat-tagline.visible{display:block;}',
 
-      /* ── STICKY COMPACT BAR — always 56px, always at top ─────────────────
-       * This is the ONLY sticky element. Height never changes. Ever. ── */
+      /* ── STICKY COMPACT BAR ──────────────────────────────────────────────
+       * height:0 in flow — contributes no space between hero and search.
+       * The 56px bar is absolutely positioned inside this zero-height anchor.
+       * position:sticky;top:0 still works — the anchor sticks, content hangs. ── */
       '#cat-hdr{position:sticky;top:0;z-index:100;',
-        'height:56px;overflow:hidden;',
-        'background:rgba(11,11,16,0.0);', /* transparent until scrolled */
-        'border-bottom:1px solid rgba(255,255,255,0.0);',
-        'transition:background .2s ease,border-color .2s ease;}',
+        'height:0;overflow:visible;}',
 
-      /* Compact bar — hidden until hero scrolls away, fades in as one unit */
+      /* Compact bar — positioned relative to sticky anchor, not in flow */
       '#cat-hdr-compact{',
-        'position:absolute;inset:0;',
-        'display:flex;align-items:center;',
+        'position:absolute;top:0;left:0;right:0;',
+        'height:56px;display:flex;align-items:center;',
         'padding:0 16px;gap:10px;',
         'opacity:0;pointer-events:none;',
         'transition:opacity .22s ease;}',
@@ -306,11 +304,11 @@
         'border-radius:100px;padding:2px 8px 2px 6px;',
         'font-size:9.5px;font-weight:700;color:#34d399;letter-spacing:.4px;}',
 
-      /* ── SCROLLED STATE — entire compact bar appears as one unit ── */
-      '#cat-hdr.scrolled{',
+      /* ── SCROLLED STATE — compact bar fades in as one unit ── */
+      '#cat-hdr.scrolled #cat-hdr-compact{',
+        'opacity:1;pointer-events:auto;',
         'background:rgba(11,11,16,0.97);',
-        'border-bottom-color:rgba(255,255,255,0.08);}',
-      '#cat-hdr.scrolled #cat-hdr-compact{opacity:1;pointer-events:auto;}',
+        'border-bottom:1px solid rgba(255,255,255,0.08);}',
 
       /* --- search --- */
       '#cat-search-wrap{padding:10px 12px 4px;background:#0b0b10;}',
