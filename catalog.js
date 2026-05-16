@@ -247,10 +247,14 @@
         'border:1px solid rgba(255,255,255,0.08);border-radius:8px;}',
       '#cat-tagline.visible{display:block;}',
 
-      /* ── COMPACT layer ── */
+      /* ── COMPACT layer — pinned to bottom of header ──
+       * position:absolute;bottom:0 means the compact bar sits flush
+       * against the border. The 156px layout height is preserved above it
+       * but that space is above the viewport's top:0 line — invisible.
+       * Result: compact feels like a tight 56px bar with zero wasted space. */
       '#cat-hdr-compact{',
-        'position:absolute;inset:0;z-index:3;',
-        'display:flex;align-items:center;',
+        'position:absolute;bottom:0;left:0;right:0;z-index:3;',
+        'height:56px;display:flex;align-items:center;',
         'padding:0 16px;gap:10px;',
         'opacity:0;pointer-events:none;',
         'transition:opacity .22s ease;}',
@@ -278,6 +282,9 @@
       /* ── SCROLLED STATE — JS adds .scrolled to #cat-hdr ── */
       '#cat-hdr.scrolled #cat-hdr-expanded{opacity:0;pointer-events:none;}',
       '#cat-hdr.scrolled #cat-hdr-compact{opacity:1;pointer-events:auto;}',
+      /* Deepen the scrim bottom when compact is active so text stays legible */
+      '#cat-hdr.scrolled #cat-hdr-scrim{',
+        'background:linear-gradient(180deg,rgba(0,0,0,0.0) 0%,rgba(0,0,0,0.72) 100%);}',
 
       /* --- search --- */
       '#cat-search-wrap{padding:10px 12px 4px;background:#0b0b10;}',
