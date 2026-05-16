@@ -160,89 +160,126 @@
       '#qs-catalog{display:none;padding-bottom:140px;}',
       'body.qs-cat #qs-catalog{display:block;}',
 
-      /* ── HEADER ── */
-      '#cat-hdr{position:sticky;top:0;z-index:100;',
-        'overflow:hidden;', /* clips the scaled blur layer */
-        'border-bottom:1px solid rgba(255,255,255,0.08);',
-        'display:flex;flex-direction:column;align-items:center;',
-        'padding:20px 18px 16px;gap:10px;}',
+      /* ── STORE HERO — scrolls naturally, not sticky ─────────────────────────
+       * Lives above the sticky bar in normal document flow.
+       * When the user scrolls past it, the sticky compact bar takes over.
+       * No height transitions. No JS touching layout. No reflow. ── */
 
-      /* Banner blur layer — sits behind everything, fills the header.
-         background-image is set by JS once avatar_url is known.
-         scale(1.12) covers blur edge bleed without cutting content. */
+      '#cat-hero{position:relative;overflow:hidden;height:180px;}',
+
+      /* Blurred banner — fills hero */
       '#cat-hdr-banner{',
-        'position:absolute;inset:-10px;',
+        'position:absolute;inset:-14px;z-index:0;',
         'background-size:cover;background-position:center;',
-        'filter:blur(22px) brightness(0.28) saturate(1.4);',
-        'transform:scale(1.12);',
-        'z-index:0;}',
-
-      /* Solid fallback shown before/without an image */
+        'filter:blur(26px) brightness(0.28) saturate(1.4);',
+        'transform:scale(1.15);}',
       '#cat-hdr-banner.no-image{',
         'background:linear-gradient(160deg,#12101a 0%,#0d0b14 100%);',
         'filter:none;transform:none;}',
 
-      /* Scrim — ensures text legibility over any image colour */
-      '#cat-hdr-scrim{',
-        'position:absolute;inset:0;z-index:1;',
-        'background:linear-gradient(',
-          '180deg,',
-          'rgba(0,0,0,0.18) 0%,',
-          'rgba(0,0,0,0.52) 100%);}',
+      /* Scrim */
+      '#cat-hdr-scrim{position:absolute;inset:0;z-index:1;',
+        'background:linear-gradient(180deg,rgba(0,0,0,0.08) 0%,rgba(0,0,0,0.58) 100%);}',
 
-      /* All content sits above banner + scrim */
-      '#cat-avatar,#cat-store-name,#cat-hdr-meta,#cat-tagline{position:relative;z-index:2;}',
+      /* Expanded content — centred in hero */
+      '#cat-hdr-expanded{',
+        'position:absolute;inset:0;z-index:2;',
+        'display:flex;flex-direction:column;align-items:center;justify-content:center;',
+        'padding:16px 18px 14px;gap:7px;}',
 
-      /* Avatar — sharp, unblurred, sits on top */
-      '#cat-avatar{width:68px;height:68px;border-radius:18px;flex-shrink:0;',
+      /* Large avatar */
+      '#cat-avatar{width:54px;height:54px;border-radius:15px;flex-shrink:0;',
         'background:rgba(255,255,255,0.08);',
-        'border:2px solid rgba(255,255,255,0.18);',
-        'box-shadow:0 4px 24px rgba(0,0,0,0.5),0 1px 4px rgba(0,0,0,0.4);',
+        'border:1.5px solid rgba(255,255,255,0.22);',
+        'box-shadow:0 4px 18px rgba(0,0,0,0.5);',
         'display:flex;align-items:center;justify-content:center;',
-        'font-size:22px;font-weight:900;color:#fff;overflow:hidden;}',
-      '#cat-avatar img{width:100%;height:100%;object-fit:cover;border-radius:16px;}',
+        'font-size:19px;font-weight:900;color:#fff;overflow:hidden;}',
+      '#cat-avatar img{width:100%;height:100%;object-fit:cover;border-radius:13px;}',
 
       /* Store name */
-      '#cat-store-name{font-size:22px;font-weight:800;color:#fff;',
-        'letter-spacing:-.5px;line-height:1.15;text-align:center;',
-        'text-shadow:0 1px 8px rgba(0,0,0,0.5);',
-        'overflow:hidden;text-overflow:ellipsis;width:100%;',
+      '#cat-store-name{font-size:20px;font-weight:800;color:#fff;',
+        'letter-spacing:-.45px;line-height:1.1;text-align:center;',
+        'text-shadow:0 1px 8px rgba(0,0,0,0.6);',
+        'width:100%;overflow:hidden;text-overflow:ellipsis;',
         'display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;}',
 
       /* Meta row */
       '#cat-hdr-meta{display:flex;align-items:center;justify-content:center;',
-        'flex-wrap:wrap;gap:6px;width:100%;}',
-      '#cat-store-sub{font-size:11px;color:rgba(255,255,255,0.55);font-weight:500;}',
+        'flex-wrap:wrap;gap:5px;width:100%;}',
+      '#cat-store-sub{font-size:10.5px;color:rgba(255,255,255,0.5);font-weight:500;}',
 
-      /* Status pill */
-      '#cat-status{display:inline-flex;align-items:center;gap:5px;flex-shrink:0;',
-        'background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.35);',
-        'border-radius:100px;padding:3px 9px 3px 7px;}',
-      '#cat-status-text{font-size:10px;font-weight:700;color:#34d399;letter-spacing:.4px;}',
-      '.cat-live-dot{width:6px;height:6px;border-radius:50%;background:#34d399;flex-shrink:0;',
+      /* Status pill in hero */
+      '#cat-status{display:inline-flex;align-items:center;gap:4px;flex-shrink:0;',
+        'background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);',
+        'border-radius:100px;padding:2px 8px 2px 6px;}',
+      '#cat-status-text{font-size:9.5px;font-weight:700;color:#34d399;letter-spacing:.4px;}',
+      '.cat-live-dot{width:5px;height:5px;border-radius:50%;background:#34d399;flex-shrink:0;',
         'animation:cat-pulse 2s ease-in-out infinite;}',
       '@keyframes cat-pulse{0%,100%{opacity:1}50%{opacity:.25}}',
 
       /* location + delivery */
       '#cat-store-location{display:none;}',
       '#cat-store-location.cat-store-location-line{display:contents;}',
-      '.cat-loc-text{font-size:11px;color:rgba(255,255,255,0.55);font-weight:500;}',
-      '.cat-delivery-badge{display:inline-flex;align-items:center;gap:4px;',
-        'font-size:10px;font-weight:700;letter-spacing:.2px;',
-        'padding:2px 8px;border-radius:100px;white-space:nowrap;}',
-      '.cat-delivery-yes{background:rgba(16,185,129,0.18);',
-        'border:1px solid rgba(16,185,129,0.35);color:#34d399;}',
-      '.cat-delivery-no{background:rgba(255,255,255,0.08);',
-        'border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.5);}',
+      '.cat-loc-text{font-size:10.5px;color:rgba(255,255,255,0.5);font-weight:500;}',
+      '.cat-delivery-badge{display:inline-flex;align-items:center;gap:3px;',
+        'font-size:9.5px;font-weight:700;letter-spacing:.2px;',
+        'padding:2px 7px;border-radius:100px;white-space:nowrap;}',
+      '.cat-delivery-yes{background:rgba(16,185,129,0.15);',
+        'border:1px solid rgba(16,185,129,0.3);color:#34d399;}',
+      '.cat-delivery-no{background:rgba(255,255,255,0.07);',
+        'border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.45);}',
 
       /* Tagline */
       '#cat-tagline{display:none;width:100%;',
-        'padding:8px 14px;box-sizing:border-box;',
-        'font-size:12px;font-style:italic;font-weight:400;text-align:center;',
-        'color:rgba(255,255,255,0.55);line-height:1.6;',
-        'background:rgba(0,0,0,0.2);',
-        'border:1px solid rgba(255,255,255,0.1);border-radius:10px;}',
+        'padding:5px 12px;box-sizing:border-box;',
+        'font-size:11px;font-style:italic;font-weight:400;text-align:center;',
+        'color:rgba(255,255,255,0.5);line-height:1.5;',
+        'background:rgba(0,0,0,0.18);',
+        'border:1px solid rgba(255,255,255,0.08);border-radius:8px;}',
       '#cat-tagline.visible{display:block;}',
+
+      /* ── STICKY COMPACT BAR — always 56px, always at top ─────────────────
+       * This is the ONLY sticky element. Height never changes. Ever. ── */
+      '#cat-hdr{position:sticky;top:0;z-index:100;',
+        'height:56px;overflow:hidden;',
+        'background:rgba(11,11,16,0.0);', /* transparent until scrolled */
+        'border-bottom:1px solid rgba(255,255,255,0.0);',
+        'transition:background .2s ease,border-color .2s ease;}',
+
+      /* Compact bar content */
+      '#cat-hdr-compact{',
+        'position:absolute;inset:0;',
+        'display:flex;align-items:center;',
+        'padding:0 16px;gap:10px;}',
+
+      /* Small avatar */
+      '#cat-avatar-sm{width:34px;height:34px;border-radius:10px;flex-shrink:0;',
+        'background:rgba(255,255,255,0.08);',
+        'border:1.5px solid rgba(255,255,255,0.18);',
+        'display:flex;align-items:center;justify-content:center;',
+        'font-size:12px;font-weight:900;color:#fff;overflow:hidden;}',
+      '#cat-avatar-sm img{width:100%;height:100%;object-fit:cover;border-radius:8px;}',
+
+      /* Name in compact */
+      '#cat-name-sm{flex:1;font-size:15px;font-weight:700;color:#fff;',
+        'letter-spacing:-.3px;opacity:0;',
+        'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;',
+        'text-shadow:0 1px 4px rgba(0,0,0,0.5);',
+        'transition:opacity .2s ease;}',
+
+      /* compact status pill */
+      '.cat-status-pill{display:inline-flex;align-items:center;gap:4px;flex-shrink:0;',
+        'background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);',
+        'border-radius:100px;padding:2px 8px 2px 6px;opacity:0;',
+        'font-size:9.5px;font-weight:700;color:#34d399;letter-spacing:.4px;',
+        'transition:opacity .2s ease;}',
+
+      /* ── SCROLLED STATE ── */
+      '#cat-hdr.scrolled{',
+        'background:rgba(11,11,16,0.97);',
+        'border-bottom-color:rgba(255,255,255,0.08);}',
+      '#cat-hdr.scrolled #cat-name-sm{opacity:1;}',
+      '#cat-hdr.scrolled .cat-status-pill{opacity:1;}',
 
       /* --- search --- */
       '#cat-search-wrap{padding:10px 12px 4px;background:#0b0b10;}',
@@ -642,22 +679,23 @@
     var root = document.createElement('div');
     root.id = 'qs-catalog';
 
-    var hdr = document.createElement('header');
-    hdr.id = 'cat-hdr';
-    hdr.setAttribute('role', 'banner');
+    // ── HERO — scrolls away naturally, not sticky
+    var hero = document.createElement('div');
+    hero.id = 'cat-hero';
 
-    // Banner blur layer — background-image set by JS after avatar_url loads
     var banner = document.createElement('div');
     banner.id = 'cat-hdr-banner';
-    banner.className = 'no-image'; // fallback until image is known
+    banner.className = 'no-image';
     banner.setAttribute('aria-hidden', 'true');
-    hdr.appendChild(banner);
+    hero.appendChild(banner);
 
-    // Scrim — gradient overlay for text legibility
     var scrim = document.createElement('div');
     scrim.id = 'cat-hdr-scrim';
     scrim.setAttribute('aria-hidden', 'true');
-    hdr.appendChild(scrim);
+    hero.appendChild(scrim);
+
+    var expanded = document.createElement('div');
+    expanded.id = 'cat-hdr-expanded';
 
     var avatar = document.createElement('div');
     avatar.id = 'cat-avatar';
@@ -669,14 +707,11 @@
 
     var hdrMeta = document.createElement('div');
     hdrMeta.id = 'cat-hdr-meta';
-
     var ssub = document.createElement('div');
     ssub.id = 'cat-store-sub';
     ssub.textContent = 'WhatsApp catalog';
-
     var sloc = document.createElement('div');
     sloc.id = 'cat-store-location';
-
     var sstat = document.createElement('div');
     sstat.id = 'cat-status';
     var dot = document.createElement('span');
@@ -687,7 +722,6 @@
     stxt.textContent = 'OPEN NOW';
     sstat.appendChild(dot);
     sstat.appendChild(stxt);
-
     hdrMeta.appendChild(ssub);
     hdrMeta.appendChild(sloc);
     hdrMeta.appendChild(sstat);
@@ -696,10 +730,44 @@
     taglineEl.id = 'cat-tagline';
     taglineEl.setAttribute('aria-label', 'Store tagline');
 
-    hdr.appendChild(avatar);
-    hdr.appendChild(sname);
-    hdr.appendChild(hdrMeta);
-    hdr.appendChild(taglineEl);
+    expanded.appendChild(avatar);
+    expanded.appendChild(sname);
+    expanded.appendChild(hdrMeta);
+    expanded.appendChild(taglineEl);
+    hero.appendChild(expanded);
+    root.appendChild(hero);
+
+    // ── STICKY BAR — always 56px, transparent until scrolled past hero
+    var hdr = document.createElement('header');
+    hdr.id = 'cat-hdr';
+    hdr.setAttribute('role', 'banner');
+
+    var compact = document.createElement('div');
+    compact.id = 'cat-hdr-compact';
+
+    var avatarSm = document.createElement('div');
+    avatarSm.id = 'cat-avatar-sm';
+    avatarSm.setAttribute('aria-hidden', 'true');
+
+    var nameSm = document.createElement('div');
+    nameSm.id = 'cat-name-sm';
+    nameSm.textContent = 'Loading…';
+
+    var sstatSm = document.createElement('div');
+    sstatSm.id = 'cat-status-sm';
+    sstatSm.className = 'cat-status-pill';
+    var dotSm = document.createElement('span');
+    dotSm.className = 'cat-live-dot';
+    dotSm.setAttribute('aria-hidden', 'true');
+    var stxtSm = document.createElement('span');
+    stxtSm.textContent = 'OPEN NOW';
+    sstatSm.appendChild(dotSm);
+    sstatSm.appendChild(stxtSm);
+
+    compact.appendChild(avatarSm);
+    compact.appendChild(nameSm);
+    compact.appendChild(sstatSm);
+    hdr.appendChild(compact);
     root.appendChild(hdr);
 
     // Search
@@ -2228,6 +2296,23 @@
     if (lbprevEl) lbprevEl.addEventListener('click', function () { if (_lbIdx > 0) lbShow(_lbIdx - 1); });
     var lbnextEl = document.getElementById('cat-lb-next');
     if (lbnextEl) lbnextEl.addEventListener('click', function () { if (_lbIdx < _lbImages.length - 1) lbShow(_lbIdx + 1); });
+
+    /* ── Compact bar reveal on scroll ───────────────────────────────────────
+     * Watches the hero scrolling off the top of the viewport.
+     * IntersectionObserver is the correct tool — fires only when the hero
+     * crosses the viewport boundary, zero scroll event overhead. ── */
+    var _heroEl = document.getElementById('cat-hero');
+    var _hdrEl  = document.getElementById('cat-hdr');
+    if (_heroEl && _hdrEl) {
+      var _io = new IntersectionObserver(
+        function (entries) {
+          // isIntersecting=false → hero has scrolled off top → show compact
+          _hdrEl.classList.toggle('scrolled', !entries[0].isIntersecting);
+        },
+        { threshold: 0, rootMargin: '0px 0px 0px 0px' }
+      );
+      _io.observe(_heroEl);
+    }
   }
 
   /* ── 17. MAIN BOOTSTRAP ──────────────────────────────────────────────── */
@@ -2358,26 +2443,37 @@
     if (ssub) ssub.textContent = 'WhatsApp orders';
 
     var avatar = document.getElementById('cat-avatar');
+    var avatarSm = document.getElementById('cat-avatar-sm');
     var banner = document.getElementById('cat-hdr-banner');
-    if (avatar) {
-      if (profile && profile.avatar_url) {
-        var _src = safeImgSrc(profile.avatar_url);
-        // Sharp avatar
-        var avImg = document.createElement('img');
-        avImg.src = _src;
-        avImg.alt = storeName;
-        avatar.innerHTML = '';
-        avatar.appendChild(avImg);
-        // Blurred banner — same image, CSS does the work
-        if (banner) {
-          banner.style.backgroundImage = 'url(' + _src + ')';
-          banner.classList.remove('no-image');
-        }
+
+    function _setAvatar(el, src, name, isSmall) {
+      if (!el) return;
+      if (src) {
+        var img = document.createElement('img');
+        img.src = src;
+        img.alt = name;
+        el.innerHTML = '';
+        el.appendChild(img);
       } else {
-        avatar.textContent = mono(_rawName || storeName);
-        // banner stays as no-image fallback
+        el.textContent = mono(_rawName || name);
       }
     }
+
+    if (profile && profile.avatar_url) {
+      var _src = safeImgSrc(profile.avatar_url);
+      _setAvatar(avatar, _src, storeName, false);
+      _setAvatar(avatarSm, _src, storeName, true);
+      if (banner) {
+        banner.style.backgroundImage = 'url(' + _src + ')';
+        banner.classList.remove('no-image');
+      }
+    } else {
+      _setAvatar(avatar, null, storeName, false);
+      _setAvatar(avatarSm, null, storeName, true);
+    }
+
+    var nameSm = document.getElementById('cat-name-sm');
+    if (nameSm) nameSm.textContent = storeName;
 
     var taglineDiv = document.getElementById('cat-tagline');
     if (taglineDiv) {
