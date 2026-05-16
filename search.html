@@ -23,7 +23,7 @@
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self'
-               'sha256-2xSi12Z8B9FPgIh2/REptGn6Jb5UoWJb9yUNt0pciSU='
+               'sha256-3qGCuD5e0SnHl+RwkVhHaVl4+WVLIvE5faKtU00UIfI='
                https://cdn.jsdelivr.net;
     connect-src 'self'
                 https://*.supabase.co
@@ -790,7 +790,7 @@
     card.className = 'store-card';
     var storeName = (profile.business_name || profile.name) || 'QuickShop Vendor';
     var initial   = storeName.charAt(0).toUpperCase();
-    var catalogUrl = '/?ref=' + encodeURIComponent(profile.id);
+    var catalogUrl = '/?store=' + encodeURIComponent(profile.id);
     card.href = catalogUrl;
 
     var avatarEl = document.createElement('div');
