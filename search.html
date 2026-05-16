@@ -23,7 +23,7 @@
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self'
-               'sha256-k/sMIRrKpN2jgO+QdXxZUmhsqdnJopZm2fC0gC4IXHQ='
+               'sha256-2xSi12Z8B9FPgIh2/REptGn6Jb5UoWJb9yUNt0pciSU=='
                https://cdn.jsdelivr.net;
     connect-src 'self'
                 https://*.supabase.co
@@ -409,6 +409,53 @@
     .empty-state h3 { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
     .empty-state p { font-size: 13px; color: var(--muted); line-height: 1.6; }
 
+    /* ── Sector browse sections ────────────────────────────────────────── */
+    .sector-section-label {
+      font-size: 10px; font-weight: 700; letter-spacing: 1.6px;
+      text-transform: uppercase; color: var(--dim);
+      margin: 20px 0 12px;
+    }
+    .sector-section-label:first-child { margin-top: 0; }
+    .store-cards-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; }
+    .store-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px 18px;
+      display: flex; align-items: center; gap: 14px;
+      text-decoration: none; transition: border-color .12s;
+      cursor: pointer;
+    }
+    .store-card:hover { border-color: rgba(34,197,94,0.25); }
+    .sc-avatar {
+      width: 42px; height: 42px; background: var(--lift);
+      border: 1px solid var(--border); border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; font-weight: 800; color: var(--green);
+      flex-shrink: 0; text-transform: uppercase;
+    }
+    .sc-info { flex: 1; min-width: 0; }
+    .sc-name {
+      font-size: 14px; font-weight: 700; color: var(--text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .sc-tagline {
+      font-size: 12px; color: var(--muted); margin-top: 1px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .sc-meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+    .sc-location { font-size: 11px; color: var(--dim); }
+    .sc-delivery {
+      font-size: 10px; font-weight: 700; color: var(--green);
+      background: var(--green-bg); padding: 2px 7px; border-radius: 4px;
+    }
+    .sc-count { font-size: 11px; color: var(--dim); }
+    .sc-action {
+      font-size: 11px; font-weight: 700; color: var(--text);
+      background: var(--lift); border: 1px solid var(--border);
+      border-radius: 5px; padding: 5px 12px; white-space: nowrap;
+      flex-shrink: 0; text-decoration: none; transition: border-color .12s;
+    }
+    .sc-action:hover { border-color: var(--text); }
+
     /* ── Skeleton ─────────────────────────────────────────────────────────── */
     @keyframes skel-shimmer {
       0%   { background-position: 200% 0; }
@@ -521,7 +568,14 @@
   <!-- RESULTS STATE -->
   <div id="state-results" hidden>
     <p class="results-heading" id="results-heading"></p>
-    <div class="results-grid" id="results-grid"></div>
+    <div id="vendor-stores-section" hidden>
+      <div class="sector-section-label" id="vendor-stores-label"></div>
+      <div class="store-cards-list" id="store-cards-list"></div>
+    </div>
+    <div id="products-section">
+      <div class="sector-section-label" id="products-section-label" hidden></div>
+      <div class="results-grid" id="results-grid"></div>
+    </div>
   </div>
 
   <!-- PRODUCT DETAIL STATE -->
@@ -575,6 +629,11 @@
   var loadingLabel = document.getElementById('loading-label');
   var resultsGrid  = document.getElementById('results-grid');
   var resultsHead  = document.getElementById('results-heading');
+  var vendorStoresSection = document.getElementById('vendor-stores-section');
+  var vendorStoresLabel   = document.getElementById('vendor-stores-label');
+  var storeCardsList      = document.getElementById('store-cards-list');
+  var productsSectionEl   = document.getElementById('products-section');
+  var productsSectionLabel = document.getElementById('products-section-label');
   var vendorList   = document.getElementById('vendor-list');
   var detailBack   = document.getElementById('detail-back');
   var detailCat    = document.getElementById('detail-category');
@@ -725,6 +784,81 @@
     return card;
   }
 
+  // ── Render vendor store card (sector browse) ──────────────────────────────
+  function renderVendorStoreCard(profile, productCount) {
+    var card = document.createElement('a');
+    card.className = 'store-card';
+    var storeName = (profile.business_name || profile.name) || 'QuickShop Vendor';
+    var initial   = storeName.charAt(0).toUpperCase();
+    var catalogUrl = '/?ref=' + encodeURIComponent(profile.id);
+    card.href = catalogUrl;
+
+    var avatarEl = document.createElement('div');
+    avatarEl.className = 'sc-avatar';
+    if (profile.avatar_url &&
+        typeof profile.avatar_url === 'string' &&
+        profile.avatar_url.startsWith('https://')) {
+      var img = document.createElement('img');
+      img.src = profile.avatar_url;
+      img.alt = storeName;
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:inherit;';
+      avatarEl.appendChild(img);
+    } else {
+      avatarEl.textContent = initial;
+    }
+    card.appendChild(avatarEl);
+
+    var infoEl = document.createElement('div');
+    infoEl.className = 'sc-info';
+
+    var nameEl = document.createElement('div');
+    nameEl.className = 'sc-name';
+    nameEl.textContent = storeName;
+    infoEl.appendChild(nameEl);
+
+    if (profile.tagline) {
+      var taglineEl = document.createElement('div');
+      taglineEl.className = 'sc-tagline';
+      taglineEl.textContent = profile.tagline;
+      infoEl.appendChild(taglineEl);
+    }
+
+    var metaEl = document.createElement('div');
+    metaEl.className = 'sc-meta';
+
+    if (profile.location) {
+      var locEl = document.createElement('span');
+      locEl.className = 'sc-location';
+      locEl.textContent = '\uD83D\uDCCD ' + profile.location;
+      metaEl.appendChild(locEl);
+    }
+
+    if (profile.delivery_available === true) {
+      var delEl = document.createElement('span');
+      delEl.className = 'sc-delivery';
+      delEl.textContent = '\uD83D\uDE9A Delivers';
+      metaEl.appendChild(delEl);
+    }
+
+    if (typeof productCount === 'number' && productCount > 0) {
+      var cntEl = document.createElement('span');
+      cntEl.className = 'sc-count';
+      cntEl.textContent = productCount + ' product' + (productCount !== 1 ? 's' : '');
+      metaEl.appendChild(cntEl);
+    }
+
+    infoEl.appendChild(metaEl);
+    card.appendChild(infoEl);
+
+    var actionEl = document.createElement('span');
+    actionEl.className = 'sc-action';
+    actionEl.setAttribute('aria-hidden', 'true');
+    actionEl.textContent = 'Browse store \u2192';
+    card.appendChild(actionEl);
+
+    return card;
+  }
+
   // ── Empty state ───────────────────────────────────────────────────────────
   function renderEmpty(container, title, body) {
     container.innerHTML =
@@ -768,6 +902,9 @@
       _lastResults = data;
 
       showState('results');
+      // Hide sector sections — text search uses only the product grid
+      vendorStoresSection.hidden = true;
+      productsSectionLabel.hidden = true;
 
       if (data.length === 0) {
         resultsHead.innerHTML = 'No results for <strong>"' + escHtml(query) + '"</strong>';
@@ -807,50 +944,104 @@
     clearBtn.style.display = 'none';
 
     showState('loading');
-    loadingLabel.textContent = 'Loading ' + cat + '…';
+    loadingLabel.textContent = 'Loading ' + cat + '\u2026';
 
     try {
-      var res = await sb
+      // ── Path A: vendor stores by sector ──────────────────────────────
+      var storeRes = await sb
+        .from('public_catalog_profiles')
+        .select('id, business_name, name, tagline, avatar_url, location, delivery_available, slug')
+        .ilike('store_sector', cat)
+        .eq('is_active', true);
+
+      var stores = storeRes.data || [];
+
+      // Fetch product counts for each matched store
+      var storeProductCounts = {};
+      if (stores.length > 0) {
+        var storeIds = stores.map(function (s) { return s.id; });
+        var prodCountRes = await sb
+          .from('public_catalog_products')
+          .select('user_id')
+          .in('user_id', storeIds);
+        if (prodCountRes.data) {
+          prodCountRes.data.forEach(function (row) {
+            storeProductCounts[row.user_id] = (storeProductCounts[row.user_id] || 0) + 1;
+          });
+        }
+      }
+
+      // ── Path B: canonical products in this category ───────────────────
+      var canonRes = await sb
         .from('qs_canonical_products')
         .select('id, display_name, slug, category')
         .ilike('category', cat)
         .order('created_at', { ascending: false })
         .limit(40);
 
-      var data = res.data || [];
-      _lastResults = data;
+      var canonData = canonRes.data || [];
+      _lastResults = canonData;
 
+      // Fetch vendor counts for canonicals
+      if (canonData.length > 0) {
+        var ids = canonData.map(function (d) { return d.id; });
+        var countRes = await sb
+          .from('qs_vendor_listings')
+          .select('canonical_id')
+          .in('canonical_id', ids);
+        var countMap = {};
+        if (countRes.data) {
+          countRes.data.forEach(function (row) {
+            countMap[row.canonical_id] = (countMap[row.canonical_id] || 0) + 1;
+          });
+        }
+        canonData.forEach(function (d) { d.vendor_count = countMap[d.id] || 0; });
+      }
+
+      // ── Render ────────────────────────────────────────────────────────
       showState('results');
 
-      if (data.length === 0) {
-        resultsHead.innerHTML = '<strong>' + escHtml(cat) + '</strong> — no products yet';
+      // Reset section visibility
+      vendorStoresSection.hidden = true;
+      storeCardsList.innerHTML = '';
+      productsSectionLabel.hidden = true;
+      resultsGrid.innerHTML = '';
+
+      var hasStores   = stores.length > 0;
+      var hasProducts = canonData.length > 0;
+
+      if (!hasStores && !hasProducts) {
+        resultsHead.innerHTML = '<strong>' + escHtml(cat) + '</strong> \u2014 no products yet';
         renderEmpty(resultsGrid, 'Empty category', 'Be the first vendor to add products in this category.');
         return;
       }
 
-      // Fetch vendor counts for these canonicals
-      var ids = data.map(function (d) { return d.id; });
-      var countRes = await sb
-        .from('qs_vendor_listings')
-        .select('canonical_id')
-        .in('canonical_id', ids);
+      // Update main heading
+      var parts = [];
+      if (hasStores)   parts.push(stores.length + ' store' + (stores.length !== 1 ? 's' : ''));
+      if (hasProducts) parts.push(canonData.length + ' product' + (canonData.length !== 1 ? 's' : ''));
+      resultsHead.innerHTML = '<strong>' + escHtml(cat) + '</strong> \u2014 ' + parts.join(', ');
 
-      var countMap = {};
-      if (countRes.data) {
-        countRes.data.forEach(function (row) {
-          countMap[row.canonical_id] = (countMap[row.canonical_id] || 0) + 1;
+      // Section A: store cards
+      if (hasStores) {
+        vendorStoresLabel.textContent = 'Stores selling ' + cat;
+        stores.forEach(function (profile) {
+          var cnt = storeProductCounts[profile.id] || 0;
+          storeCardsList.appendChild(renderVendorStoreCard(profile, cnt));
         });
+        vendorStoresSection.hidden = false;
       }
 
-      data.forEach(function (d) { d.vendor_count = countMap[d.id] || 0; });
-
-      resultsHead.innerHTML =
-        '<strong>' + escHtml(cat) + '</strong> — ' + data.length + ' product' + (data.length !== 1 ? 's' : '');
-
-      resultsGrid.innerHTML = '';
-      data.forEach(function (item) {
-        resultsGrid.appendChild(renderProductCard(item));
-      });
+      // Section B: canonical product grid
+      if (hasProducts) {
+        if (hasStores) {
+          productsSectionLabel.textContent = 'Products in ' + cat;
+          productsSectionLabel.hidden = false;
+        }
+        canonData.forEach(function (item) {
+          resultsGrid.appendChild(renderProductCard(item));
+        });
+      }
 
     } catch (e) {
       console.error('[browse] error', e);

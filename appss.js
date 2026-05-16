@@ -5671,6 +5671,30 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
         transform: translateY(1px);
       }
 
+      /* ── Store sector pill selector ───────────────────────────────── */
+      .qs-sector-pill {
+        background: var(--bg-glass);
+        border: 1.5px solid var(--border-glass);
+        border-radius: 20px;
+        color: var(--text-secondary);
+        font-size: 12px;
+        font-weight: 600;
+        font-family: inherit;
+        padding: 6px 14px;
+        cursor: pointer;
+        transition: background 0.14s, border-color 0.14s, color 0.14s;
+        -webkit-tap-highlight-color: transparent;
+        white-space: nowrap;
+      }
+      .qs-sector-pill:active {
+        transform: translateY(1px);
+      }
+      .qs-sector-pill--active {
+        background: rgba(16,185,129,0.14);
+        border-color: rgba(16,185,129,0.5);
+        color: #10b981;
+      }
+
       /* ── Sign out section spacer ─────────────────────────────────── */
       .qs-signout-wrap {
         padding: 4px 0 8px;
@@ -5746,6 +5770,20 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
         const radioId = profile.delivery_available ? '#qs-delivery-yes' : '#qs-delivery-no';
         const radio = settingsPanel.querySelector(radioId);
         if (radio) radio.checked = true;
+      }
+      // Pre-fill store sector pill selector
+      if (profile.store_sector) {
+        const activePill = settingsPanel.querySelector(
+          '.qs-sector-pill[data-sector="' + escapeHtml(profile.store_sector) + '"]'
+        );
+        if (activePill) {
+          settingsPanel.querySelectorAll('.qs-sector-pill').forEach(function(p) {
+            p.classList.remove('qs-sector-pill--active');
+            p.setAttribute('aria-pressed', 'false');
+          });
+          activePill.classList.add('qs-sector-pill--active');
+          activePill.setAttribute('aria-pressed', 'true');
+        }
       }
     }).catch(function() {});
 
@@ -5874,6 +5912,22 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
                       </div>
                     </div>
                     <button id="qs-store-info-save" class="qs-save-btn" style="margin-top:16px;">Save Location &amp; Delivery</button>
+                    <div class="qs-drawer-divider"></div>
+                    <div>
+                      <div class="qs-field-label" style="margin-bottom:4px;">Store Sector</div>
+                      <div class="qs-field-sub">This tells buyers what kind of store you run. It shows you in the right section of the QuickShop marketplace.</div>
+                      <div id="qs-sector-pills" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;" role="group" aria-label="Store sector">
+                        <button type="button" class="qs-sector-pill" data-sector="Fragrance" aria-pressed="false">Fragrance</button>
+                        <button type="button" class="qs-sector-pill" data-sector="Fashion" aria-pressed="false">Fashion</button>
+                        <button type="button" class="qs-sector-pill" data-sector="Shoes" aria-pressed="false">Shoes</button>
+                        <button type="button" class="qs-sector-pill" data-sector="Bags" aria-pressed="false">Bags</button>
+                        <button type="button" class="qs-sector-pill" data-sector="Beauty" aria-pressed="false">Beauty</button>
+                        <button type="button" class="qs-sector-pill" data-sector="Electronics" aria-pressed="false">Electronics</button>
+                        <button type="button" class="qs-sector-pill" data-sector="Food" aria-pressed="false">Food</button>
+                        <button type="button" class="qs-sector-pill" data-sector="Home" aria-pressed="false">Home</button>
+                      </div>
+                      <button id="qs-sector-save" class="qs-save-btn" style="margin-top:14px;">Save Sector</button>
+                    </div>
                     <div class="qs-drawer-divider"></div>
                     <div>
                       <div class="qs-field-label" style="margin-bottom:10px;">Categories</div>
@@ -6167,6 +6221,51 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
         } finally {
           storeInfoSaveBtn.disabled = false;
           storeInfoSaveBtn.textContent = 'Save Location & Delivery';
+        }
+      });
+    }
+
+    // Wire sector pill toggle
+    const sectorPillsContainer = settingsPanel.querySelector('#qs-sector-pills');
+    if (sectorPillsContainer) {
+      sectorPillsContainer.addEventListener('click', function (e) {
+        const pill = e.target.closest('.qs-sector-pill');
+        if (!pill) return;
+        const alreadyActive = pill.classList.contains('qs-sector-pill--active');
+        settingsPanel.querySelectorAll('.qs-sector-pill').forEach(function (p) {
+          p.classList.remove('qs-sector-pill--active');
+          p.setAttribute('aria-pressed', 'false');
+        });
+        if (!alreadyActive) {
+          pill.classList.add('qs-sector-pill--active');
+          pill.setAttribute('aria-pressed', 'true');
+        }
+      });
+    }
+
+    // Wire sector save
+    const sectorSaveBtn = settingsPanel.querySelector('#qs-sector-save');
+    if (sectorSaveBtn) {
+      sectorSaveBtn.addEventListener('click', async function () {
+        const activePill = settingsPanel.querySelector('.qs-sector-pill--active');
+        const sector = activePill ? activePill.dataset.sector : null;
+        const u  = getUser();
+        const sb = getClient();
+        if (!u || !sb) { toast('Not logged in', 'error'); return; }
+        sectorSaveBtn.disabled = true;
+        sectorSaveBtn.textContent = 'Saving…';
+        try {
+          const { error } = await sb.from('profiles')
+            .update({ store_sector: sector || null })
+            .eq('id', u.id);
+          if (error) throw error;
+          toast('Store sector saved ✓');
+        } catch (e) {
+          errlog('sector save', e);
+          toast('Failed to save sector: ' + (e.message || 'unknown error'), 'error');
+        } finally {
+          sectorSaveBtn.disabled = false;
+          sectorSaveBtn.textContent = 'Save Sector';
         }
       });
     }
