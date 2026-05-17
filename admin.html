@@ -4,11 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>QS Admin</title>
-  <meta name="robots" content="noindex, nofollow, noarchive" />
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet" />
   <meta http-equiv="X-Content-Type-Options" content="nosniff" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
       --bg:        #0a0a0f;
       --surface:   #111118;
@@ -32,305 +31,103 @@
       --violet-bd: rgba(167,139,250,0.25);
       --radius:    14px;
     }
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
 
-    html, body {
-      height: 100%;
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      font-size: 14px;
-      line-height: 1.5;
-      -webkit-font-smoothing: antialiased;
-    }
-
-    /* ── GATE ────────────────────────────────────────────────────────── */
-    #gate {
-      position: fixed; inset: 0;
-      display: flex; align-items: center; justify-content: center;
-      background: var(--bg);
-      z-index: 9999;
-      padding: 24px;
-    }
-    #gate-card {
-      width: 100%; max-width: 360px;
-      background: var(--surface);
-      border: 1px solid var(--border-hi);
-      border-radius: 20px;
-      padding: 36px 32px;
-      box-shadow: 0 32px 64px rgba(0,0,0,0.6);
-    }
-    #gate-logo {
-      font-size: 28px; font-weight: 900;
-      letter-spacing: -0.04em;
-      color: var(--text);
-      margin-bottom: 4px;
-    }
+    /* GATE */
+    #gate { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--bg); z-index: 9999; padding: 24px; }
+    #gate-card { width: 100%; max-width: 360px; background: var(--surface); border: 1px solid var(--border-hi); border-radius: 20px; padding: 36px 32px; box-shadow: 0 32px 64px rgba(0,0,0,0.6); }
+    #gate-logo { font-size: 28px; font-weight: 900; letter-spacing: -0.04em; color: var(--text); margin-bottom: 4px; }
     #gate-logo span { color: var(--green); }
-    #gate-sub {
-      font-size: 12px; color: var(--muted);
-      font-weight: 600; letter-spacing: 0.05em;
-      text-transform: uppercase;
-      margin-bottom: 28px;
-    }
-    #gate-input {
-      width: 100%;
-      background: var(--lift);
-      border: 1.5px solid var(--border-hi);
-      border-radius: 10px;
-      color: var(--text);
-      font-size: 15px;
-      font-family: 'SF Mono', 'Fira Code', monospace;
-      padding: 13px 15px;
-      outline: none;
-      letter-spacing: 0.08em;
-      transition: border-color 0.15s;
-      margin-bottom: 12px;
-      -webkit-text-security: disc;
-      text-security: disc;
-    }
+    #gate-sub { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 28px; }
+    #gate-input { width: 100%; background: var(--lift); border: 1.5px solid var(--border-hi); border-radius: 10px; color: var(--text); font-size: 15px; font-family: monospace; padding: 13px 15px; outline: none; letter-spacing: 0.08em; transition: border-color 0.15s; margin-bottom: 12px; }
+    #gate-input[type="password"] { -webkit-text-security: disc; }
     #gate-input:focus { border-color: var(--green); }
     #gate-input.error { border-color: var(--red); animation: shake 0.3s ease; }
-    #gate-btn {
-      width: 100%;
-      background: var(--green);
-      border: 0; border-radius: 10px;
-      color: #fff; font-size: 14px; font-weight: 700;
-      padding: 13px; cursor: pointer;
-      transition: opacity 0.15s, transform 0.1s;
-    }
-    #gate-btn:active { opacity: 0.85; transform: translateY(1px); }
-    #gate-err {
-      font-size: 12px; color: var(--red);
-      text-align: center; margin-top: 10px;
-      min-height: 18px;
-    }
-    #gate-attempts {
-      font-size: 11px; color: var(--dim);
-      text-align: center; margin-top: 8px;
-    }
+    #gate-btn { width: 100%; background: var(--green); border: 0; border-radius: 10px; color: #fff; font-size: 14px; font-weight: 700; padding: 13px; cursor: pointer; font-family: inherit; }
+    #gate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    #gate-err { font-size: 12px; color: var(--red); text-align: center; margin-top: 10px; min-height: 18px; line-height: 1.5; }
+    #gate-attempts { font-size: 11px; color: var(--dim); text-align: center; margin-top: 8px; }
 
-    /* ── APP SHELL ────────────────────────────────────────────────────── */
+    /* APP */
     #app { display: none; min-height: 100vh; }
     #app.visible { display: block; }
 
-    /* ── HEADER ──────────────────────────────────────────────────────── */
-    #header {
-      position: sticky; top: 0; z-index: 100;
-      background: rgba(10,10,15,0.85);
-      backdrop-filter: blur(20px);
-      border-bottom: 1px solid var(--border);
-      padding: 14px 20px;
-      display: flex; align-items: center; justify-content: space-between;
-    }
-    #header-brand {
-      font-size: 15px; font-weight: 800;
-      letter-spacing: -0.02em;
-    }
+    /* HEADER */
+    #header { position: sticky; top: 0; z-index: 100; background: rgba(10,10,15,0.9); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; }
+    #header-brand { font-size: 15px; font-weight: 800; letter-spacing: -0.02em; }
     #header-brand span { color: var(--green); }
-    #header-meta {
-      font-size: 11px; color: var(--muted);
-      font-weight: 600; letter-spacing: 0.03em;
-    }
+    #header-meta { font-size: 11px; color: var(--muted); font-weight: 600; }
     #header-actions { display: flex; align-items: center; gap: 8px; }
-    #refresh-btn {
-      background: var(--lift); border: 1px solid var(--border-hi);
-      border-radius: 8px; color: var(--text);
-      font-size: 12px; font-weight: 600;
-      padding: 7px 12px; cursor: pointer;
-      transition: background 0.12s;
-    }
-    #refresh-btn:hover { background: #22222f; }
-    #signout-btn {
-      background: var(--red-bg); border: 1px solid var(--red-bd);
-      border-radius: 8px; color: var(--red);
-      font-size: 12px; font-weight: 600;
-      padding: 7px 12px; cursor: pointer;
-      transition: background 0.12s;
-    }
-    #signout-btn:hover { background: rgba(239,68,68,0.18); }
+    #refresh-btn { background: var(--lift); border: 1px solid var(--border-hi); border-radius: 8px; color: var(--text); font-size: 12px; font-weight: 600; padding: 7px 12px; cursor: pointer; font-family: inherit; }
+    #signout-btn { background: var(--red-bg); border: 1px solid var(--red-bd); border-radius: 8px; color: var(--red); font-size: 12px; font-weight: 600; padding: 7px 12px; cursor: pointer; font-family: inherit; }
 
-    /* ── STATS BAR ───────────────────────────────────────────────────── */
-    #stats {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 10px;
-      padding: 16px 20px;
-      border-bottom: 1px solid var(--border);
-    }
-    .stat-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 14px 16px;
-    }
-    .stat-val {
-      font-size: 24px; font-weight: 900;
-      letter-spacing: -0.04em;
-      line-height: 1; margin-bottom: 4px;
-    }
-    .stat-lbl {
-      font-size: 10px; font-weight: 700;
-      text-transform: uppercase; letter-spacing: 0.06em;
-      color: var(--muted);
-    }
-    .stat-green .stat-val { color: var(--green); }
-    .stat-red .stat-val   { color: var(--red); }
-    .stat-amber .stat-val { color: var(--amber); }
-    .stat-violet .stat-val{ color: var(--violet); }
+    /* STATS */
+    #stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+    .stat-val { font-size: 24px; font-weight: 900; letter-spacing: -0.04em; line-height: 1; margin-bottom: 4px; }
+    .stat-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+    .stat-green  .stat-val { color: var(--green); }
+    .stat-red    .stat-val { color: var(--red); }
+    .stat-amber  .stat-val { color: var(--amber); }
+    .stat-violet .stat-val { color: var(--violet); }
 
-    /* ── VENDOR LIST ─────────────────────────────────────────────────── */
+    /* VENDOR LIST */
     #vendor-list { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
-
-    .vendor-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-      transition: border-color 0.15s;
-    }
-    .vendor-card:hover { border-color: var(--border-hi); }
+    .vendor-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
     .vendor-card.is-founder { border-color: rgba(167,139,250,0.25); }
-
-    .vendor-top {
-      display: flex; align-items: center;
-      gap: 14px; padding: 16px;
-    }
-    .vendor-avatar {
-      width: 44px; height: 44px;
-      border-radius: 11px;
-      background: var(--lift);
-      border: 1px solid var(--border-hi);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 16px; font-weight: 800;
-      color: var(--green); flex-shrink: 0;
-      text-transform: uppercase; overflow: hidden;
-    }
-    .vendor-avatar img {
-      width: 100%; height: 100%; object-fit: cover;
-      border-radius: inherit;
-    }
+    .vendor-top { display: flex; align-items: center; gap: 14px; padding: 16px; }
+    .vendor-avatar { width: 44px; height: 44px; border-radius: 11px; background: var(--lift); border: 1px solid var(--border-hi); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 800; color: var(--green); flex-shrink: 0; text-transform: uppercase; overflow: hidden; }
+    .vendor-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
     .vendor-info { flex: 1; min-width: 0; }
-    .vendor-name {
-      font-size: 14px; font-weight: 700;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .vendor-email {
-      font-size: 11px; color: var(--muted);
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      margin-top: 2px;
-    }
+    .vendor-name  { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .vendor-email { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
     .vendor-badges { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
-    .badge {
-      font-size: 10px; font-weight: 700;
-      padding: 2px 8px; border-radius: 99px;
-      letter-spacing: 0.03em; white-space: nowrap;
-    }
+    .badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
     .badge-active  { background: var(--green-bg);  color: var(--green);  border: 1px solid var(--green-bd); }
     .badge-lapsed  { background: var(--red-bg);    color: var(--red);    border: 1px solid var(--red-bd); }
     .badge-pending { background: var(--amber-bg);  color: var(--amber);  border: 1px solid var(--amber-bd); }
     .badge-founder { background: var(--violet-bg); color: var(--violet); border: 1px solid var(--violet-bd); }
-
-    .vendor-meta {
-      padding: 0 16px 14px;
-      display: flex; flex-wrap: wrap; gap: 6px;
-      font-size: 11px; color: var(--muted);
-    }
-    .vendor-meta-item {
-      background: var(--lift);
-      border: 1px solid var(--border);
-      border-radius: 6px; padding: 3px 8px;
-    }
+    .vendor-meta { padding: 0 16px 14px; display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; color: var(--muted); }
+    .vendor-meta-item { background: var(--lift); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; }
     .vendor-meta-item.expiry-soon { color: var(--amber); border-color: var(--amber-bd); }
     .vendor-meta-item.expiry-ok   { color: var(--green); border-color: var(--green-bd); }
     .vendor-meta-item.expiry-gone { color: var(--red);   border-color: var(--red-bd); }
-
-    /* ── ACTIONS ─────────────────────────────────────────────────────── */
-    .vendor-actions {
-      border-top: 1px solid var(--border);
-      padding: 10px 16px;
-      display: flex; gap: 8px; flex-wrap: wrap;
-      align-items: center;
-    }
-    .btn {
-      font-size: 12px; font-weight: 700;
-      padding: 7px 14px; border-radius: 8px;
-      border: 0; cursor: pointer;
-      transition: opacity 0.15s, transform 0.1s;
-      white-space: nowrap;
-    }
-    .btn:active { opacity: 0.8; transform: translateY(1px); }
-    .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
-    .btn-activate  { background: var(--green);  color: #fff; }
-    .btn-revoke    { background: var(--red-bg);    color: var(--red);    border: 1px solid var(--red-bd); }
+    .vendor-actions { border-top: 1px solid var(--border); padding: 10px 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .btn { font-size: 12px; font-weight: 700; padding: 7px 14px; border-radius: 8px; border: 0; cursor: pointer; white-space: nowrap; font-family: inherit; transition: opacity 0.15s; }
+    .btn:active { opacity: 0.8; }
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .btn-activate    { background: var(--green); color: #fff; }
+    .btn-revoke      { background: var(--red-bg);    color: var(--red);    border: 1px solid var(--red-bd); }
     .btn-founder-on  { background: var(--violet-bg); color: var(--violet); border: 1px solid var(--violet-bd); }
     .btn-founder-off { background: var(--lift);      color: var(--muted);  border: 1px solid var(--border-hi); }
-    .btn-loading { opacity: 0.5; cursor: not-allowed; }
-    .action-result {
-      font-size: 11px; color: var(--green);
-      font-weight: 600; margin-left: auto;
-      opacity: 0; transition: opacity 0.3s;
-    }
+    .action-result { font-size: 11px; font-weight: 600; margin-left: auto; opacity: 0; transition: opacity 0.3s; color: var(--green); }
     .action-result.visible { opacity: 1; }
     .action-result.error { color: var(--red); }
 
-    /* ── LOADING / EMPTY ─────────────────────────────────────────────── */
-    #loading-state, #empty-state, #error-state {
-      padding: 60px 20px; text-align: center; color: var(--muted);
-    }
-    .spinner {
-      width: 28px; height: 28px;
-      border: 2.5px solid var(--border-hi);
-      border-top-color: var(--green);
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-      margin: 0 auto 12px;
-    }
+    /* STATES */
+    #loading-state, #empty-state, #error-state { padding: 60px 20px; text-align: center; color: var(--muted); line-height: 1.7; }
+    .spinner { width: 28px; height: 28px; border: 2.5px solid var(--border-hi); border-top-color: var(--green); border-radius: 50%; animation: spin 0.7s linear infinite; margin: 0 auto 12px; }
 
-    /* ── TOAST ───────────────────────────────────────────────────────── */
-    #toast {
-      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
-      background: var(--surface); border: 1px solid var(--border-hi);
-      border-radius: 10px; padding: 11px 18px;
-      font-size: 13px; font-weight: 600; color: var(--text);
-      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-      transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1), opacity 0.28s;
-      opacity: 0; z-index: 9999; white-space: nowrap;
-      pointer-events: none;
-    }
+    /* TOAST */
+    #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--surface); border: 1px solid var(--border-hi); border-radius: 10px; padding: 11px 18px; font-size: 13px; font-weight: 600; color: var(--text); box-shadow: 0 8px 32px rgba(0,0,0,0.5); transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1), opacity 0.28s; opacity: 0; z-index: 9999; white-space: nowrap; pointer-events: none; }
     #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
     #toast.success { border-color: var(--green-bd); color: var(--green); }
     #toast.error   { border-color: var(--red-bd);   color: var(--red); }
 
-    /* ── CONFIRM MODAL ───────────────────────────────────────────────── */
-    #confirm-overlay {
-      position: fixed; inset: 0;
-      background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
-      display: none; align-items: center; justify-content: center;
-      z-index: 9998; padding: 24px;
-    }
+    /* CONFIRM */
+    #confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 9998; padding: 24px; }
     #confirm-overlay.open { display: flex; }
-    #confirm-card {
-      background: var(--surface); border: 1px solid var(--border-hi);
-      border-radius: 18px; padding: 28px 24px;
-      max-width: 340px; width: 100%;
-      box-shadow: 0 24px 48px rgba(0,0,0,0.6);
-    }
+    #confirm-card { background: var(--surface); border: 1px solid var(--border-hi); border-radius: 18px; padding: 28px 24px; max-width: 340px; width: 100%; box-shadow: 0 24px 48px rgba(0,0,0,0.6); }
     #confirm-title { font-size: 16px; font-weight: 800; margin-bottom: 8px; }
     #confirm-body  { font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 20px; }
     #confirm-actions { display: flex; gap: 10px; }
-    #confirm-ok     { flex: 1; padding: 11px; border-radius: 10px; border: 0; font-size: 13px; font-weight: 700; cursor: pointer; background: var(--red); color: #fff; }
-    #confirm-cancel { flex: 1; padding: 11px; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer; background: var(--lift); color: var(--text); border: 1px solid var(--border-hi); }
+    #confirm-ok     { flex: 1; padding: 11px; border-radius: 10px; border: 0; font-size: 13px; font-weight: 700; cursor: pointer; background: var(--red); color: #fff; font-family: inherit; }
+    #confirm-cancel { flex: 1; padding: 11px; border-radius: 10px; border: 1px solid var(--border-hi); font-size: 13px; font-weight: 700; cursor: pointer; background: var(--lift); color: var(--text); font-family: inherit; }
 
-    /* ── LOCK SCREEN (brute force) ───────────────────────────────────── */
-    #lockscreen {
-      position: fixed; inset: 0;
-      background: var(--bg);
-      display: none; align-items: center; justify-content: center;
-      z-index: 99999; flex-direction: column; gap: 12px;
-      text-align: center; padding: 24px;
-    }
+    /* LOCKSCREEN */
+    #lockscreen { position: fixed; inset: 0; background: var(--bg); display: none; align-items: center; justify-content: center; z-index: 99999; flex-direction: column; gap: 12px; text-align: center; padding: 24px; }
     #lockscreen.visible { display: flex; }
-    #lock-icon { font-size: 40px; margin-bottom: 4px; }
+    #lock-icon  { font-size: 40px; margin-bottom: 4px; }
     #lock-title { font-size: 18px; font-weight: 800; }
     #lock-body  { font-size: 13px; color: var(--muted); line-height: 1.6; }
     #lock-timer { font-size: 24px; font-weight: 900; color: var(--red); font-variant-numeric: tabular-nums; }
@@ -341,7 +138,6 @@
 </head>
 <body>
 
-<!-- ── LOCK SCREEN (brute force protection) ──────────────────────────── -->
 <div id="lockscreen">
   <div id="lock-icon">🔒</div>
   <div id="lock-title">Too many attempts</div>
@@ -349,35 +145,30 @@
   <div id="lock-timer">15:00</div>
 </div>
 
-<!-- ── PASSWORD GATE ──────────────────────────────────────────────────── -->
 <div id="gate">
   <div id="gate-card">
     <div id="gate-logo">Quick<span>Shop</span></div>
     <div id="gate-sub">Admin Console</div>
-    <input id="gate-input" type="password" placeholder="Admin password"
-           autocomplete="current-password" autofocus />
-    <button id="gate-btn">Enter</button>
+    <input id="gate-input" type="password" placeholder="Admin password" autocomplete="current-password" autofocus />
+    <button id="gate-btn" type="button">Enter</button>
     <div id="gate-err"></div>
     <div id="gate-attempts"></div>
   </div>
 </div>
 
-<!-- ── CONFIRM MODAL ──────────────────────────────────────────────────── -->
 <div id="confirm-overlay">
   <div id="confirm-card">
     <div id="confirm-title"></div>
     <div id="confirm-body"></div>
     <div id="confirm-actions">
-      <button id="confirm-cancel">Cancel</button>
-      <button id="confirm-ok">Confirm</button>
+      <button id="confirm-cancel" type="button">Cancel</button>
+      <button id="confirm-ok"     type="button">Confirm</button>
     </div>
   </div>
 </div>
 
-<!-- ── TOAST ──────────────────────────────────────────────────────────── -->
 <div id="toast"></div>
 
-<!-- ── APP ───────────────────────────────────────────────────────────── -->
 <div id="app">
   <div id="header">
     <div>
@@ -385,32 +176,20 @@
       <div id="header-meta">Vendor management console</div>
     </div>
     <div id="header-actions">
-      <button id="refresh-btn">↻ Refresh</button>
-      <button id="signout-btn">Lock</button>
+      <button id="refresh-btn" type="button">&#8635; Refresh</button>
+      <button id="signout-btn" type="button">Lock</button>
     </div>
   </div>
 
   <div id="stats">
-    <div class="stat-card stat-violet">
-      <div class="stat-val" id="s-total">—</div>
-      <div class="stat-lbl">Total</div>
-    </div>
-    <div class="stat-card stat-green">
-      <div class="stat-val" id="s-active">—</div>
-      <div class="stat-lbl">Active</div>
-    </div>
-    <div class="stat-card stat-red">
-      <div class="stat-val" id="s-lapsed">—</div>
-      <div class="stat-lbl">Lapsed</div>
-    </div>
-    <div class="stat-card stat-amber">
-      <div class="stat-val" id="s-expiring">—</div>
-      <div class="stat-lbl">Expiring ≤7d</div>
-    </div>
+    <div class="stat-card stat-violet"><div class="stat-val" id="s-total">&#8212;</div><div class="stat-lbl">Total</div></div>
+    <div class="stat-card stat-green"> <div class="stat-val" id="s-active">&#8212;</div><div class="stat-lbl">Active</div></div>
+    <div class="stat-card stat-red">   <div class="stat-val" id="s-lapsed">&#8212;</div><div class="stat-lbl">Lapsed</div></div>
+    <div class="stat-card stat-amber"> <div class="stat-val" id="s-expiring">&#8212;</div><div class="stat-lbl">Expiring &le;7d</div></div>
   </div>
 
   <div id="vendor-list">
-    <div id="loading-state"><div class="spinner"></div>Loading vendors…</div>
+    <div id="loading-state"><div class="spinner"></div>Loading vendors&hellip;</div>
   </div>
 </div>
 
@@ -418,48 +197,36 @@
 (function () {
   'use strict';
 
-  // ── CONFIG (injected at build time) ────────────────────────────────────
-  // NEVER put real keys in source. These placeholders are replaced by build.sh.
-  const SUPABASE_URL         = '%%SUPABASE_URL%%';
-  const SUPABASE_SERVICE_KEY = '%%SUPABASE_SERVICE_KEY%%';
-  // Admin password hash — SHA-256 hex of your chosen password.
-  // Set ADMIN_PASSWORD_HASH in Vercel env vars.
-  // Generate: https://emn178.github.io/online-tools/sha256.html
-  const ADMIN_PASSWORD_HASH  = '%%ADMIN_PASSWORD_HASH%%';
-
   // ── BRUTE-FORCE PROTECTION ─────────────────────────────────────────────
-  // 5 attempts max. Lockout for 15 minutes. Persisted in sessionStorage
-  // so a page refresh does NOT reset the counter.
-  const MAX_ATTEMPTS   = 5;
-  const LOCKOUT_MS     = 15 * 60 * 1000;
-  const ATTEMPT_KEY    = 'qs_admin_attempts';
-  const LOCKOUT_KEY    = 'qs_admin_lockout_until';
+  var MAX_ATTEMPTS = 5;
+  var LOCKOUT_MS   = 15 * 60 * 1000;
+  var ATTEMPT_KEY  = 'qs_admin_attempts';
+  var LOCKOUT_KEY  = 'qs_admin_lockout_until';
 
-  function getAttempts()    { return parseInt(sessionStorage.getItem(ATTEMPT_KEY)  || '0', 10); }
-  function getLockoutUntil(){ return parseInt(sessionStorage.getItem(LOCKOUT_KEY) || '0', 10); }
-  function setAttempts(n)   { sessionStorage.setItem(ATTEMPT_KEY, String(n)); }
+  function getAttempts()     { return parseInt(sessionStorage.getItem(ATTEMPT_KEY)  || '0', 10); }
+  function getLockoutUntil() { return parseInt(sessionStorage.getItem(LOCKOUT_KEY) || '0', 10); }
+  function setAttempts(n)    { sessionStorage.setItem(ATTEMPT_KEY, String(n)); }
   function setLockoutUntil(t){ sessionStorage.setItem(LOCKOUT_KEY, String(t)); }
-  function clearAttempts()  { sessionStorage.removeItem(ATTEMPT_KEY); sessionStorage.removeItem(LOCKOUT_KEY); }
+  function clearAttempts()   { sessionStorage.removeItem(ATTEMPT_KEY); sessionStorage.removeItem(LOCKOUT_KEY); }
 
   // ── LOCKSCREEN ─────────────────────────────────────────────────────────
-  let _lockInterval = null;
+  var _lockInterval = null;
   function showLockscreen() {
-    const ls = document.getElementById('lockscreen');
-    ls.classList.add('visible');
+    document.getElementById('lockscreen').classList.add('visible');
     document.getElementById('gate').style.display = 'none';
     function tick() {
-      const remaining = Math.max(0, getLockoutUntil() - Date.now());
+      var remaining = Math.max(0, getLockoutUntil() - Date.now());
       if (remaining <= 0) {
         clearAttempts();
-        ls.classList.remove('visible');
+        document.getElementById('lockscreen').classList.remove('visible');
         document.getElementById('gate').style.display = 'flex';
         document.getElementById('gate-err').textContent = '';
         document.getElementById('gate-attempts').textContent = '';
         clearInterval(_lockInterval);
         return;
       }
-      const m = Math.floor(remaining / 60000);
-      const s = Math.floor((remaining % 60000) / 1000);
+      var m = Math.floor(remaining / 60000);
+      var s = Math.floor((remaining % 60000) / 1000);
       document.getElementById('lock-timer').textContent =
         String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
     }
@@ -467,134 +234,198 @@
     clearInterval(_lockInterval);
     _lockInterval = setInterval(tick, 500);
   }
+  if (getLockoutUntil() > Date.now()) showLockscreen();
 
-  // Check lockout on page load
-  if (getLockoutUntil() > Date.now()) {
-    showLockscreen();
+  // ── SHA-256 via Web Crypto (no external deps) ──────────────────────────
+  function sha256hex(str) {
+    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(str))
+      .then(function(buf) {
+        return Array.from(new Uint8Array(buf))
+          .map(function(b) { return b.toString(16).padStart(2,'0'); })
+          .join('');
+      });
   }
 
-  // ── SHA-256 (Web Crypto, no external deps) ─────────────────────────────
-  async function sha256hex(str) {
-    const buf = await crypto.subtle.digest(
-      'SHA-256',
-      new TextEncoder().encode(str)
-    );
-    return Array.from(new Uint8Array(buf))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
+  // ── SESSION TOKEN (memory only — never localStorage) ───────────────────
+  // The SHA-256 of the password is used as the X-Admin-Token header.
+  // The server compares it to ADMIN_PASSWORD_HASH (same value, stored as env var).
+  // The service key lives ONLY in api/admin.js on the server — never here.
+  var _adminToken = null;
+
+  // ── API CALL ───────────────────────────────────────────────────────────
+  function apiCall(action, extra) {
+    if (!_adminToken) {
+      toast('Session expired — re-enter password', 'error');
+      return Promise.reject(new Error('No session'));
+    }
+    return fetch('/api/admin', {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'X-Admin-Token': _adminToken,
+      },
+      body: JSON.stringify(Object.assign({ action: action }, extra || {})),
+    }).then(function(res) {
+      return res.json().then(function(data) {
+        if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+        return data;
+      });
+    });
   }
 
-  // ── PASSWORD GATE ──────────────────────────────────────────────────────
-  const gateInput = document.getElementById('gate-input');
-  const gateBtn   = document.getElementById('gate-btn');
-  const gateErr   = document.getElementById('gate-err');
-  const gateAtt   = document.getElementById('gate-attempts');
+  // ── GATE ───────────────────────────────────────────────────────────────
+  var gateInput = document.getElementById('gate-input');
+  var gateBtn   = document.getElementById('gate-btn');
+  var gateErr   = document.getElementById('gate-err');
+  var gateAtt   = document.getElementById('gate-attempts');
 
   function updateAttemptDisplay() {
-    const n = getAttempts();
-    if (n > 0) {
-      gateAtt.textContent = (MAX_ATTEMPTS - n) + ' attempt' +
-        ((MAX_ATTEMPTS - n) === 1 ? '' : 's') + ' remaining';
-    } else {
-      gateAtt.textContent = '';
-    }
+    var n = getAttempts();
+    gateAtt.textContent = n > 0
+      ? (MAX_ATTEMPTS - n) + ' attempt' + ((MAX_ATTEMPTS - n) === 1 ? '' : 's') + ' remaining'
+      : '';
   }
   updateAttemptDisplay();
 
-  // Constant-time string comparison to prevent timing attacks
-  function safeEqual(a, b) {
-    if (a.length !== b.length) return false;
-    let diff = 0;
-    for (let i = 0; i < a.length; i++) {
-      diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-    }
-    return diff === 0;
-  }
-
-  async function tryGate() {
-    // Check lockout
+  function tryGate() {
     if (getLockoutUntil() > Date.now()) { showLockscreen(); return; }
-
-    const pass = gateInput.value;
+    var pass = (gateInput.value || '').trim();
     if (!pass) return;
-
     gateBtn.disabled = true;
-    gateBtn.textContent = 'Checking…';
+    gateBtn.textContent = 'Checking\u2026';
+    gateErr.textContent = '';
 
-    const hash = await sha256hex(pass);
-
-    // Validate config was injected
-    var missingVars = validateConfig();
-    if (missingVars.length > 0) {
-      gateErr.textContent = 'Not configured: ' + missingVars.join(', ') + '. Set Vercel env vars and redeploy.';
-      gateBtn.disabled = false;
-      gateBtn.textContent = 'Enter';
-      return;
-    }
-
-    const ok   = safeEqual(hash, ADMIN_PASSWORD_HASH.toLowerCase());
-
-    if (ok) {
-      clearAttempts();
-      document.getElementById('gate').style.display = 'none';
-      document.getElementById('app').classList.add('visible');
-      initApp();
-    } else {
-      const attempts = getAttempts() + 1;
-      setAttempts(attempts);
-      gateInput.value = '';
-      gateInput.classList.add('error');
-      setTimeout(() => gateInput.classList.remove('error'), 400);
-
-      if (attempts >= MAX_ATTEMPTS) {
-        setLockoutUntil(Date.now() + LOCKOUT_MS);
-        showLockscreen();
+    sha256hex(pass).then(function(hash) {
+      // Send the hash as our auth token. Server validates it and
+      // returns vendor data on success — saving a round-trip.
+      return fetch('/api/admin', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Token': hash },
+        body:    JSON.stringify({ action: 'get_vendors' }),
+      });
+    }).then(function(res) {
+      return res.json().then(function(data) { return { status: res.status, data: data }; });
+    }).then(function(result) {
+      if (result.status === 401) {
+        var attempts = getAttempts() + 1;
+        setAttempts(attempts);
+        gateInput.value = '';
+        gateInput.classList.add('error');
+        setTimeout(function() { gateInput.classList.remove('error'); }, 400);
+        if (attempts >= MAX_ATTEMPTS) {
+          setLockoutUntil(Date.now() + LOCKOUT_MS);
+          showLockscreen();
+        } else {
+          gateErr.textContent = 'Wrong password.';
+          updateAttemptDisplay();
+          gateInput.focus();
+        }
+      } else if (!result.data || result.data.error) {
+        gateErr.textContent = result.data.error || 'Server error. Check Vercel env vars.';
       } else {
-        gateErr.textContent = 'Wrong password.';
-        updateAttemptDisplay();
-        gateInput.focus();
+        // Auth passed — store token, show app with already-fetched vendor data
+        clearAttempts();
+        _adminToken = sha256hex.__lastHash;
+        // Re-derive from input since sha256hex is async; store from closure
+        gateInput.value = '';
+        document.getElementById('gate').style.display = 'none';
+        document.getElementById('app').classList.add('visible');
+        renderVendors(result.data.vendors || []);
       }
-
+    }).catch(function(err) {
+      gateErr.textContent = 'Error: ' + (err.message || 'unknown');
+    }).finally(function() {
       gateBtn.disabled = false;
       gateBtn.textContent = 'Enter';
-    }
+    });
   }
 
-  gateBtn.addEventListener('click', tryGate);
-  gateInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') tryGate();
-  });
+  // Re-implement tryGate cleanly to avoid the closure issue with _adminToken
+  function tryGateClean() {
+    if (getLockoutUntil() > Date.now()) { showLockscreen(); return; }
+    var pass = (gateInput.value || '').trim();
+    if (!pass) return;
+    gateBtn.disabled = true;
+    gateBtn.textContent = 'Checking\u2026';
+    gateErr.textContent = '';
 
-  // ── LOCK BUTTON (re-gate without reload) ──────────────────────────────
+    var _hash = null;
+    sha256hex(pass).then(function(hash) {
+      _hash = hash;
+      return fetch('/api/admin', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Token': hash },
+        body:    JSON.stringify({ action: 'get_vendors' }),
+      });
+    }).then(function(res) {
+      return res.json().then(function(data) { return { status: res.status, data: data }; });
+    }).then(function(result) {
+      if (result.status === 401) {
+        var attempts = getAttempts() + 1;
+        setAttempts(attempts);
+        gateInput.value = '';
+        gateInput.classList.add('error');
+        setTimeout(function() { gateInput.classList.remove('error'); }, 400);
+        if (attempts >= MAX_ATTEMPTS) {
+          setLockoutUntil(Date.now() + LOCKOUT_MS);
+          showLockscreen();
+        } else {
+          gateErr.textContent = 'Wrong password.';
+          updateAttemptDisplay();
+          gateInput.focus();
+        }
+      } else if (!result.data || result.data.error) {
+        gateErr.textContent = result.data.error || 'Server error. Check Vercel env vars.';
+      } else {
+        clearAttempts();
+        _adminToken = _hash;
+        gateInput.value = '';
+        document.getElementById('gate').style.display = 'none';
+        document.getElementById('app').classList.add('visible');
+        renderVendors(result.data.vendors || []);
+      }
+    }).catch(function(err) {
+      gateErr.textContent = 'Error: ' + (err.message || 'Check connection and try again.');
+    }).finally(function() {
+      gateBtn.disabled = false;
+      gateBtn.textContent = 'Enter';
+    });
+  }
+
+  gateBtn.addEventListener('click', tryGateClean);
+  gateInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') tryGateClean(); });
+
+  // ── LOCK ───────────────────────────────────────────────────────────────
   document.getElementById('signout-btn').addEventListener('click', function() {
+    _adminToken = null;
+    _vendors    = [];
     document.getElementById('app').classList.remove('visible');
+    document.getElementById('vendor-list').innerHTML =
+      '<div id="loading-state"><div class="spinner"></div>Loading vendors\u2026</div>';
     document.getElementById('gate').style.display = 'flex';
     gateInput.value = '';
+    gateErr.textContent = '';
     gateInput.focus();
-    _vendors = [];
   });
 
   // ── TOAST ──────────────────────────────────────────────────────────────
-  let _toastTimer = null;
+  var _toastTimer = null;
   function toast(msg, type) {
-    const el = document.getElementById('toast');
+    var el = document.getElementById('toast');
     el.textContent = msg;
     el.className = 'show' + (type ? ' ' + type : '');
     clearTimeout(_toastTimer);
-    _toastTimer = setTimeout(function() {
-      el.classList.remove('show');
-    }, 3000);
+    _toastTimer = setTimeout(function() { el.className = ''; }, 3200);
   }
 
-  // ── CONFIRM MODAL ──────────────────────────────────────────────────────
-  let _confirmResolve = null;
-  function confirm(title, body, danger) {
+  // ── CONFIRM ────────────────────────────────────────────────────────────
+  var _confirmResolve = null;
+  function showConfirm(title, body, danger) {
     return new Promise(function(resolve) {
       _confirmResolve = resolve;
       document.getElementById('confirm-title').textContent = title;
       document.getElementById('confirm-body').textContent  = body;
-      const ok = document.getElementById('confirm-ok');
-      ok.style.background = danger ? 'var(--red)' : 'var(--green)';
+      document.getElementById('confirm-ok').style.background = danger ? 'var(--red)' : 'var(--green)';
       document.getElementById('confirm-overlay').classList.add('open');
     });
   }
@@ -607,41 +438,8 @@
     if (_confirmResolve) { _confirmResolve(false); _confirmResolve = null; }
   });
 
-  // ── SUPABASE (service role — bypasses RLS) ─────────────────────────────
-  // The service key is NEVER sent to the anon public. It lives only in:
-  //   1. Vercel env vars (server-side build injection)
-  //   2. This compiled admin.html (served at a non-indexed, hard-to-guess URL)
-  // All Supabase calls below go directly to the REST API, same as the SDK.
-  // Normalise base URL once — strip trailing slash so paths always join cleanly
-  var _baseUrl = (SUPABASE_URL || '').replace(/\/+$/, '');
-
-  function sbFetch(path, opts) {
-    // Deep-merge headers so callers can add extra headers without
-    // losing the auth headers. Object.assign at top level would replace
-    // the entire headers object if opts contained a headers key.
-    var defaultHeaders = {
-      'apikey':        SUPABASE_SERVICE_KEY,
-      'Authorization': 'Bearer ' + SUPABASE_SERVICE_KEY,
-      'Content-Type':  'application/json',
-      'Prefer':        'return=representation',
-    };
-    var merged = Object.assign({}, opts || {});
-    merged.headers = Object.assign({}, defaultHeaders, (opts && opts.headers) || {});
-    var url = _baseUrl + path;
-    return fetch(url, merged);
-  }
-
-  // ── CONFIG VALIDATION ──────────────────────────────────────────────────
-  function validateConfig() {
-    var missing = [];
-    if (!SUPABASE_URL || SUPABASE_URL.includes('%%'))          missing.push('SUPABASE_URL');
-    if (!SUPABASE_SERVICE_KEY || SUPABASE_SERVICE_KEY.includes('%%')) missing.push('SUPABASE_SERVICE_KEY');
-    if (!ADMIN_PASSWORD_HASH || ADMIN_PASSWORD_HASH.includes('%%'))   missing.push('ADMIN_PASSWORD_HASH');
-    return missing;
-  }
-
   // ── STATE ──────────────────────────────────────────────────────────────
-  let _vendors = [];
+  var _vendors = [];
 
   // ── HELPERS ────────────────────────────────────────────────────────────
   function daysFromNow(isoStr) {
@@ -650,35 +448,22 @@
   }
 
   function expiryLabel(v) {
-    if (v.is_founder) return null; // founders never shown an expiry
+    if (v.is_founder) return null;
     if (!v.subscription_expires) return { text: 'Never activated', cls: '' };
-    const d = daysFromNow(v.subscription_expires);
-    if (d < 0)  return { text: 'Expired ' + Math.abs(d) + 'd ago', cls: 'expiry-gone' };
-    if (d === 0) return { text: 'Expires today', cls: 'expiry-soon' };
-    if (d <= 7)  return { text: 'Expires in ' + d + 'd', cls: 'expiry-soon' };
-    return { text: 'Expires in ' + d + 'd', cls: 'expiry-ok' };
+    var d = daysFromNow(v.subscription_expires);
+    if (d < 0)   return { text: 'Expired ' + Math.abs(d) + 'd ago', cls: 'expiry-gone' };
+    if (d === 0) return { text: 'Expires today',                     cls: 'expiry-soon' };
+    if (d <= 7)  return { text: 'Expires in ' + d + 'd',            cls: 'expiry-soon' };
+    return              { text: 'Expires in ' + d + 'd',             cls: 'expiry-ok'   };
   }
 
-  function statusBadge(v) {
-    if (v.is_founder)  return '<span class="badge badge-founder">⭐ Founder</span>';
-    if (v.is_active)   return '<span class="badge badge-active">● Active</span>';
-    const exp = v.subscription_expires;
-    if (!exp)          return '<span class="badge badge-pending">○ Never paid</span>';
-    return               '<span class="badge badge-lapsed">● Lapsed</span>';
-  }
-
-  function escHtml(s) {
-    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-
-  // ── UPDATE STATS BAR ───────────────────────────────────────────────────
   function updateStats() {
-    const total    = _vendors.length;
-    const active   = _vendors.filter(v => v.is_active).length;
-    const lapsed   = _vendors.filter(v => !v.is_active && v.subscription_expires).length;
-    const expiring = _vendors.filter(v => {
+    var total    = _vendors.length;
+    var active   = _vendors.filter(function(v) { return v.is_active; }).length;
+    var lapsed   = _vendors.filter(function(v) { return !v.is_active && v.subscription_expires; }).length;
+    var expiring = _vendors.filter(function(v) {
       if (!v.is_active || v.is_founder || !v.subscription_expires) return false;
-      const d = daysFromNow(v.subscription_expires);
+      var d = daysFromNow(v.subscription_expires);
       return d !== null && d >= 0 && d <= 7;
     }).length;
     document.getElementById('s-total').textContent    = total;
@@ -687,236 +472,178 @@
     document.getElementById('s-expiring').textContent = expiring;
   }
 
-  // ── RENDER VENDOR CARD ─────────────────────────────────────────────────
+  // ── RENDER CARD ────────────────────────────────────────────────────────
   function renderCard(v) {
-    const card = document.createElement('div');
+    var card = document.createElement('div');
     card.className = 'vendor-card' + (v.is_founder ? ' is-founder' : '');
     card.dataset.id = v.id;
 
-    const storeName = v.business_name || v.name || 'Unnamed vendor';
-    const initial   = storeName.charAt(0).toUpperCase();
+    var storeName = v.business_name || v.name || 'Unnamed vendor';
+    var initial   = storeName.charAt(0).toUpperCase();
 
     // Avatar
-    let avatarHtml = '';
-    if (v.avatar_url && v.avatar_url.startsWith('https://')) {
-      avatarHtml = '<img src="' + escHtml(v.avatar_url) + '" alt="' + escHtml(storeName) + '" ' +
-        'onerror="this.parentNode.textContent=\'' + escHtml(initial) + '\'">';
+    var avatarEl = document.createElement('div');
+    avatarEl.className = 'vendor-avatar';
+    if (v.avatar_url && typeof v.avatar_url === 'string' && v.avatar_url.startsWith('https://')) {
+      var img = document.createElement('img');
+      img.src = v.avatar_url;
+      img.alt = storeName;
+      img.onerror = function() { avatarEl.textContent = initial; };
+      avatarEl.appendChild(img);
+    } else {
+      avatarEl.textContent = initial;
     }
 
-    // Expiry
-    const expInfo = expiryLabel(v);
-    let metaHtml  = '';
-    if (v.location)              metaHtml += '<span class="vendor-meta-item">📍 ' + escHtml(v.location) + '</span>';
-    if (v.store_sector)          metaHtml += '<span class="vendor-meta-item">🏪 ' + escHtml(v.store_sector) + '</span>';
-    if (v.subscription_expires && !v.is_founder) {
-      metaHtml += '<span class="vendor-meta-item ' + (expInfo ? expInfo.cls : '') + '">' +
-        '🗓 ' + escHtml(expInfo ? expInfo.text : '') + '</span>';
+    // Info
+    var infoEl = document.createElement('div');
+    infoEl.className = 'vendor-info';
+    var nameEl = document.createElement('div');
+    nameEl.className = 'vendor-name';
+    nameEl.textContent = storeName;
+    var emailEl = document.createElement('div');
+    emailEl.className = 'vendor-email';
+    emailEl.textContent = v.email || v.id;
+    var badgesEl = document.createElement('div');
+    badgesEl.className = 'vendor-badges';
+
+    function mkBadge(text, cls) {
+      var b = document.createElement('span');
+      b.className = 'badge ' + cls;
+      b.textContent = text;
+      return b;
     }
+    if (v.is_founder)             badgesEl.appendChild(mkBadge('\u2B50 Founder', 'badge-founder'));
+    if (v.is_active)              badgesEl.appendChild(mkBadge('\u25CF Active',  'badge-active'));
+    else if (v.subscription_expires) badgesEl.appendChild(mkBadge('\u25CF Lapsed',  'badge-lapsed'));
+    else                          badgesEl.appendChild(mkBadge('\u25CB Never paid','badge-pending'));
+
+    infoEl.appendChild(nameEl);
+    infoEl.appendChild(emailEl);
+    infoEl.appendChild(badgesEl);
+
+    var topEl = document.createElement('div');
+    topEl.className = 'vendor-top';
+    topEl.appendChild(avatarEl);
+    topEl.appendChild(infoEl);
+    card.appendChild(topEl);
+
+    // Meta
+    var metaEl = document.createElement('div');
+    metaEl.className = 'vendor-meta';
+    var hasMeta = false;
+    function addMeta(text, cls) {
+      var s = document.createElement('span');
+      s.className = 'vendor-meta-item' + (cls ? ' ' + cls : '');
+      s.textContent = text;
+      metaEl.appendChild(s);
+      hasMeta = true;
+    }
+    if (v.location)     addMeta('\uD83D\uDCCD ' + v.location, '');
+    if (v.store_sector) addMeta('\uD83C\uDFEA ' + v.store_sector, '');
     if (v.is_founder) {
-      metaHtml += '<span class="vendor-meta-item" style="color:var(--violet);border-color:var(--violet-bd)">🔒 Permanent access</span>';
+      addMeta('\uD83D\uDD12 Permanent access', 'expiry-ok');
+    } else {
+      var exp = expiryLabel(v);
+      if (exp && exp.text) addMeta('\uD83D\uDCC5 ' + exp.text, exp.cls);
+    }
+    if (hasMeta) card.appendChild(metaEl);
+
+    // Actions
+    var actionsEl = document.createElement('div');
+    actionsEl.className = 'vendor-actions';
+
+    function mkBtn(text, cls, action) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'btn ' + cls;
+      b.textContent = text; b.dataset.action = action;
+      return b;
     }
 
-    card.innerHTML =
-      '<div class="vendor-top">' +
-        '<div class="vendor-avatar">' + avatarHtml + (avatarHtml ? '' : escHtml(initial)) + '</div>' +
-        '<div class="vendor-info">' +
-          '<div class="vendor-name">' + escHtml(storeName) + '</div>' +
-          '<div class="vendor-email">' + escHtml(v.email || v.id) + '</div>' +
-          '<div class="vendor-badges">' + statusBadge(v) + '</div>' +
-        '</div>' +
-      '</div>' +
-      (metaHtml ? '<div class="vendor-meta">' + metaHtml + '</div>' : '') +
-      '<div class="vendor-actions">' +
-        '<button class="btn btn-activate" data-action="activate">✓ Activate 30d</button>' +
-        (v.is_active && !v.is_founder
-          ? '<button class="btn btn-revoke" data-action="revoke">Revoke</button>'
-          : '') +
-        (v.is_founder
-          ? '<button class="btn btn-founder-off" data-action="unfounder">Remove founder</button>'
-          : '<button class="btn btn-founder-on"  data-action="founder">Make founder</button>') +
-        '<span class="action-result" id="res-' + escHtml(v.id) + '"></span>' +
-      '</div>';
+    actionsEl.appendChild(mkBtn('\u2713 Activate 30d', 'btn-activate', 'activate'));
+    if (v.is_active && !v.is_founder)
+      actionsEl.appendChild(mkBtn('Revoke', 'btn-revoke', 'revoke'));
+    actionsEl.appendChild(v.is_founder
+      ? mkBtn('Remove founder', 'btn-founder-off', 'unfounder')
+      : mkBtn('Make founder',   'btn-founder-on',  'founder'));
 
-    // Wire actions via delegation on the card
-    card.addEventListener('click', async function(e) {
-      const btn = e.target.closest('[data-action]');
-      if (!btn) return;
-      const action = btn.dataset.action;
-      const vendor = _vendors.find(x => x.id === v.id);
-      if (!vendor) return;
-      await handleAction(action, vendor, card);
+    var resultEl = document.createElement('span');
+    resultEl.className = 'action-result';
+    resultEl.id = 'res-' + v.id;
+    actionsEl.appendChild(resultEl);
+    card.appendChild(actionsEl);
+
+    card.addEventListener('click', function(e) {
+      var btn = e.target.closest('[data-action]');
+      if (btn) handleAction(btn.dataset.action, v, card);
     });
 
     return card;
   }
 
   // ── HANDLE ACTION ──────────────────────────────────────────────────────
-  async function handleAction(action, vendor, card) {
-    const storeName = vendor.business_name || vendor.name || vendor.id;
-    let confirmed   = false;
+  function handleAction(action, vendor, card) {
+    var storeName = vendor.business_name || vendor.name || vendor.id;
+    var msgs = {
+      activate:  [storeName + ' — Activate 30 days?', 'is_active = true, expires = now + 30d', false],
+      revoke:    [storeName + ' — Revoke access?',     'is_active = false immediately.',         true],
+      founder:   [storeName + ' — Make Founder?',      'Permanent access. Never auto-lapsed.',   false],
+      unfounder: [storeName + ' — Remove Founder?',    'Subject to normal subscription rules.',  true],
+    };
+    var m = msgs[action];
+    if (!m) return;
 
-    if (action === 'activate') {
-      confirmed = await confirm(
-        'Activate ' + storeName + '?',
-        'Sets is_active = true and subscription_expires = now + 30 days.',
-        false
-      );
-    } else if (action === 'revoke') {
-      confirmed = await confirm(
-        'Revoke ' + storeName + '?',
-        'Sets is_active = false immediately. Their store will go dark.',
-        true
-      );
-    } else if (action === 'founder') {
-      confirmed = await confirm(
-        'Make ' + storeName + ' a Founder?',
-        'Grants permanent access. They will never be auto-lapsed.',
-        false
-      );
-    } else if (action === 'unfounder') {
-      confirmed = await confirm(
-        'Remove Founder status from ' + storeName + '?',
-        'They will be subject to normal subscription rules from now on.',
-        true
-      );
+    showConfirm(m[0], m[1], m[2]).then(function(ok) {
+      if (!ok) return;
+      card.querySelectorAll('.btn').forEach(function(b) { b.disabled = true; });
+      var resultEl = document.getElementById('res-' + vendor.id);
+
+      var apiAction = (action === 'founder' || action === 'unfounder') ? 'set_founder' : action;
+      var extra = { vendorId: vendor.id };
+      if (action === 'founder')   extra.founderVal = true;
+      if (action === 'unfounder') extra.founderVal = false;
+
+      apiCall(apiAction, extra).then(function(data) {
+        Object.assign(vendor, data.patch || {});
+        if (resultEl) { resultEl.textContent = '\u2713 Saved'; resultEl.className = 'action-result visible'; setTimeout(function() { resultEl.classList.remove('visible'); }, 2500); }
+        toast(storeName + ' updated \u2713', 'success');
+        card.parentNode.replaceChild(renderCard(vendor), card);
+        updateStats();
+      }).catch(function(err) {
+        if (resultEl) { resultEl.textContent = '\u2717 ' + (err.message || 'Failed'); resultEl.className = 'action-result visible error'; setTimeout(function() { resultEl.classList.remove('visible'); }, 4000); }
+        toast('Failed: ' + (err.message || 'unknown'), 'error');
+        card.querySelectorAll('.btn').forEach(function(b) { b.disabled = false; });
+      });
+    });
+  }
+
+  // ── RENDER VENDOR LIST ─────────────────────────────────────────────────
+  function renderVendors(vendors) {
+    _vendors = vendors;
+    var listEl = document.getElementById('vendor-list');
+    listEl.innerHTML = '';
+    if (!vendors || vendors.length === 0) {
+      listEl.innerHTML = '<div id="empty-state">No vendors found.</div>';
+    } else {
+      vendors.forEach(function(v) { listEl.appendChild(renderCard(v)); });
     }
-
-    if (!confirmed) return;
-
-    // Disable all buttons on this card
-    card.querySelectorAll('.btn').forEach(b => b.disabled = true);
-    const resEl = card.querySelector('#res-' + vendor.id);
-
-    try {
-      let patch = {};
-      let rpcName = '';
-      let rpcBody = {};
-
-      if (action === 'activate') {
-        const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-        patch    = { is_active: true, subscription_expires: expires };
-        rpcName  = 'admin_activate_vendor';
-        rpcBody  = { vendor_id: vendor.id, days_count: 30 };
-      } else if (action === 'revoke') {
-        patch    = { is_active: false };
-        rpcName  = 'admin_revoke_vendor';
-        rpcBody  = { vendor_id: vendor.id };
-      } else if (action === 'founder') {
-        patch    = { is_founder: true, is_active: true };
-        rpcName  = 'admin_set_founder';
-        rpcBody  = { vendor_id: vendor.id, founder_val: true };
-      } else if (action === 'unfounder') {
-        patch    = { is_founder: false };
-        rpcName  = 'admin_set_founder';
-        rpcBody  = { vendor_id: vendor.id, founder_val: false };
-      }
-
-      const res = await sbFetch(
-        '/rest/v1/rpc/' + rpcName,
-        { method: 'POST', body: JSON.stringify(rpcBody) }
-      );
-
-      if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        throw new Error('Supabase error ' + res.status + ': ' + errText.slice(0, 200));
-      }
-
-      // Update local state
-      Object.assign(vendor, patch);
-
-      if (resEl) {
-        resEl.textContent = '✓ Saved';
-        resEl.className = 'action-result visible';
-        setTimeout(() => resEl.classList.remove('visible'), 2500);
-      }
-
-      toast(storeName + ' updated ✓', 'success');
-
-      // Re-render just this card in place
-      const newCard = renderCard(vendor);
-      card.parentNode.replaceChild(newCard, card);
-      updateStats();
-
-    } catch (err) {
-      console.error('[QS Admin]', err);
-      if (resEl) {
-        resEl.textContent = '✗ ' + (err.message || 'Failed');
-        resEl.className = 'action-result visible error';
-        setTimeout(() => resEl.classList.remove('visible'), 4000);
-      }
-      toast('Failed: ' + (err.message || 'unknown'), 'error');
-      card.querySelectorAll('.btn').forEach(b => b.disabled = false);
-    }
+    updateStats();
   }
 
   // ── LOAD VENDORS ───────────────────────────────────────────────────────
-  async function loadVendors() {
-    const listEl = document.getElementById('vendor-list');
-    listEl.innerHTML = '<div id="loading-state"><div class="spinner"></div>Loading vendors…</div>';
-
-    // Guard: fail fast with a clear message if env vars weren't injected
-    var missing = validateConfig();
-    if (missing.length > 0) {
-      listEl.innerHTML = '<div id="error-state">' +
-        '⚠️ Admin not configured.<br>' +
-        '<small>Missing Vercel env vars: <strong>' + missing.join(', ') + '</strong><br>' +
-        'Add them in Vercel → Project Settings → Environment Variables, then redeploy.</small>' +
-        '</div>';
-      return;
-    }
-
-    try {
-      // Use RPC functions (SECURITY DEFINER) — bypasses RLS entirely.
-      // Direct /rest/v1/profiles returns 401 even with service key when
-      // RLS policies don't explicitly allow the service role.
-      const [profilesRes, usersRes] = await Promise.all([
-        sbFetch('/rest/v1/rpc/admin_get_vendors', { method: 'POST', body: '{}' }),
-        sbFetch('/auth/v1/admin/users?per_page=1000', { method: 'GET' })
-      ]);
-
-      if (!profilesRes.ok) {
-        const errText = await profilesRes.text().catch(() => '');
-        throw new Error('Profiles fetch failed: ' + profilesRes.status + ' — ' + errText.slice(0, 200));
-      }
-
-      const profiles = await profilesRes.json();
-
-      // Build email map from auth users if available
-      const emailMap = {};
-      if (usersRes.ok) {
-        const usersData = await usersRes.json();
-        const users = usersData.users || [];
-        users.forEach(u => { emailMap[u.id] = u.email; });
-      }
-
-      // Merge emails into profiles
-      _vendors = profiles.map(p => Object.assign({}, p, {
-        email: emailMap[p.id] || p.email || ''
-      }));
-
-      listEl.innerHTML = '';
-
-      if (_vendors.length === 0) {
-        listEl.innerHTML = '<div id="empty-state">No vendors found.</div>';
-        return;
-      }
-
-      _vendors.forEach(v => listEl.appendChild(renderCard(v)));
-      updateStats();
-
-    } catch (err) {
-      console.error('[QS Admin] load failed:', err);
+  function loadVendors() {
+    var listEl = document.getElementById('vendor-list');
+    listEl.innerHTML = '<div id="loading-state"><div class="spinner"></div>Loading vendors\u2026</div>';
+    apiCall('get_vendors').then(function(data) {
+      renderVendors(data.vendors || []);
+    }).catch(function(err) {
       listEl.innerHTML = '<div id="error-state">Failed to load vendors.<br><small>' +
-        escHtml(err.message || '') + '</small></div>';
-      toast('Load failed: ' + (err.message || 'check connection'), 'error');
-    }
+        String(err.message || 'Unknown error').replace(/&/g,'&amp;').replace(/</g,'&lt;') +
+        '</small></div>';
+      toast('Load failed: ' + (err.message || ''), 'error');
+    });
   }
 
-  // ── INIT APP ───────────────────────────────────────────────────────────
-  function initApp() {
-    loadVendors();
-    document.getElementById('refresh-btn').addEventListener('click', loadVendors);
-  }
+  document.getElementById('refresh-btn').addEventListener('click', loadVendors);
 
 })();
 </script>
