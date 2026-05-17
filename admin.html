@@ -521,17 +521,17 @@
     gateBtn.disabled = true;
     gateBtn.textContent = 'Checking…';
 
+    const hash = await sha256hex(pass);
+
     // Validate config was injected
-    if (ADMIN_PASSWORD_HASH.includes('%%') ||
-        SUPABASE_URL.includes('%%') ||
-        SUPABASE_SERVICE_KEY.includes('%%')) {
-      gateErr.textContent = 'Admin not configured. Set env vars and redeploy.';
+    var missingVars = validateConfig();
+    if (missingVars.length > 0) {
+      gateErr.textContent = 'Not configured: ' + missingVars.join(', ') + '. Set Vercel env vars and redeploy.';
       gateBtn.disabled = false;
       gateBtn.textContent = 'Enter';
       return;
     }
 
-    const hash = await sha256hex(pass);
     const ok   = safeEqual(hash, ADMIN_PASSWORD_HASH.toLowerCase());
 
     if (ok) {
@@ -613,14 +613,27 @@
   //   2. This compiled admin.html (served at a non-indexed, hard-to-guess URL)
   // All Supabase calls below go directly to the REST API, same as the SDK.
   function sbFetch(path, opts) {
-    return fetch(SUPABASE_URL + path, Object.assign({
-      headers: {
-        'apikey':        SUPABASE_SERVICE_KEY,
-        'Authorization': 'Bearer ' + SUPABASE_SERVICE_KEY,
-        'Content-Type':  'application/json',
-        'Prefer':        'return=representation',
-      }
-    }, opts));
+    // Deep-merge headers so callers can add extra headers without
+    // losing the auth headers. Object.assign at top level would replace
+    // the entire headers object if opts contained a headers key.
+    var defaultHeaders = {
+      'apikey':        SUPABASE_SERVICE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_SERVICE_KEY,
+      'Content-Type':  'application/json',
+      'Prefer':        'return=representation',
+    };
+    var merged = Object.assign({}, opts || {});
+    merged.headers = Object.assign({}, defaultHeaders, (opts && opts.headers) || {});
+    return fetch(SUPABASE_URL + path, merged);
+  }
+
+  // ── CONFIG VALIDATION ──────────────────────────────────────────────────
+  function validateConfig() {
+    var missing = [];
+    if (!SUPABASE_URL || SUPABASE_URL.includes('%%'))          missing.push('SUPABASE_URL');
+    if (!SUPABASE_SERVICE_KEY || SUPABASE_SERVICE_KEY.includes('%%')) missing.push('SUPABASE_SERVICE_KEY');
+    if (!ADMIN_PASSWORD_HASH || ADMIN_PASSWORD_HASH.includes('%%'))   missing.push('ADMIN_PASSWORD_HASH');
+    return missing;
   }
 
   // ── STATE ──────────────────────────────────────────────────────────────
@@ -825,6 +838,17 @@
   async function loadVendors() {
     const listEl = document.getElementById('vendor-list');
     listEl.innerHTML = '<div id="loading-state"><div class="spinner"></div>Loading vendors…</div>';
+
+    // Guard: fail fast with a clear message if env vars weren't injected
+    var missing = validateConfig();
+    if (missing.length > 0) {
+      listEl.innerHTML = '<div id="error-state">' +
+        '⚠️ Admin not configured.<br>' +
+        '<small>Missing Vercel env vars: <strong>' + missing.join(', ') + '</strong><br>' +
+        'Add them in Vercel → Project Settings → Environment Variables, then redeploy.</small>' +
+        '</div>';
+      return;
+    }
 
     try {
       // Fetch profiles joined with auth.users email via the admin API
