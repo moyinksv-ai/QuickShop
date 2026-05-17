@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QS Admin</title>
+  <meta name="robots" content="noindex, nofollow, noarchive" />
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0a0f;
+      --surface:   #111118;
+      --lift:      #1a1a24;
+      --border:    rgba(255,255,255,0.07);
+      --border-hi: rgba(255,255,255,0.13);
+      --text:      #e8e8f0;
+      --muted:     rgba(232,232,240,0.45);
+      --dim:       rgba(232,232,240,0.25);
+      --green:     #10b981;
+      --green-bg:  rgba(16,185,129,0.12);
+      --green-bd:  rgba(16,185,129,0.3);
+      --red:       #ef4444;
+      --red-bg:    rgba(239,68,68,0.10);
+      --red-bd:    rgba(239,68,68,0.25);
+      --amber:     #f59e0b;
+      --amber-bg:  rgba(245,158,11,0.10);
+      --amber-bd:  rgba(245,158,11,0.25);
+      --violet:    #a78bfa;
+      --violet-bg: rgba(167,139,250,0.10);
+      --violet-bd: rgba(167,139,250,0.25);
+      --radius:    14px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── GATE ────────────────────────────────────────────────────────── */
+    #gate {
+      position: fixed; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg);
+      z-index: 9999;
+      padding: 24px;
+    }
+    #gate-card {
+      width: 100%; max-width: 360px;
+      background: var(--surface);
+      border: 1px solid var(--border-hi);
+      border-radius: 20px;
+      padding: 36px 32px;
+      box-shadow: 0 32px 64px rgba(0,0,0,0.6);
+    }
+    #gate-logo {
+      font-size: 28px; font-weight: 900;
+      letter-spacing: -0.04em;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    #gate-logo span { color: var(--green); }
+    #gate-sub {
+      font-size: 12px; color: var(--muted);
+      font-weight: 600; letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 28px;
+    }
+    #gate-input {
+      width: 100%;
+      background: var(--lift);
+      border: 1.5px solid var(--border-hi);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 15px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      padding: 13px 15px;
+      outline: none;
+      letter-spacing: 0.08em;
+      transition: border-color 0.15s;
+      margin-bottom: 12px;
+      -webkit-text-security: disc;
+      text-security: disc;
+    }
+    #gate-input:focus { border-color: var(--green); }
+    #gate-input.error { border-color: var(--red); animation: shake 0.3s ease; }
+    #gate-btn {
+      width: 100%;
+      background: var(--green);
+      border: 0; border-radius: 10px;
+      color: #fff; font-size: 14px; font-weight: 700;
+      padding: 13px; cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    #gate-btn:active { opacity: 0.85; transform: translateY(1px); }
+    #gate-err {
+      font-size: 12px; color: var(--red);
+      text-align: center; margin-top: 10px;
+      min-height: 18px;
+    }
+    #gate-attempts {
+      font-size: 11px; color: var(--dim);
+      text-align: center; margin-top: 8px;
+    }
+
+    /* ── APP SHELL ────────────────────────────────────────────────────── */
+    #app { display: none; min-height: 100vh; }
+    #app.visible { display: block; }
+
+    /* ── HEADER ──────────────────────────────────────────────────────── */
+    #header {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(10,10,15,0.85);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 20px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    #header-brand {
+      font-size: 15px; font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+    #header-brand span { color: var(--green); }
+    #header-meta {
+      font-size: 11px; color: var(--muted);
+      font-weight: 600; letter-spacing: 0.03em;
+    }
+    #header-actions { display: flex; align-items: center; gap: 8px; }
+    #refresh-btn {
+      background: var(--lift); border: 1px solid var(--border-hi);
+      border-radius: 8px; color: var(--text);
+      font-size: 12px; font-weight: 600;
+      padding: 7px 12px; cursor: pointer;
+      transition: background 0.12s;
+    }
+    #refresh-btn:hover { background: #22222f; }
+    #signout-btn {
+      background: var(--red-bg); border: 1px solid var(--red-bd);
+      border-radius: 8px; color: var(--red);
+      font-size: 12px; font-weight: 600;
+      padding: 7px 12px; cursor: pointer;
+      transition: background 0.12s;
+    }
+    #signout-btn:hover { background: rgba(239,68,68,0.18); }
+
+    /* ── STATS BAR ───────────────────────────────────────────────────── */
+    #stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+    }
+    .stat-val {
+      font-size: 24px; font-weight: 900;
+      letter-spacing: -0.04em;
+      line-height: 1; margin-bottom: 4px;
+    }
+    .stat-lbl {
+      font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+    .stat-green .stat-val { color: var(--green); }
+    .stat-red .stat-val   { color: var(--red); }
+    .stat-amber .stat-val { color: var(--amber); }
+    .stat-violet .stat-val{ color: var(--violet); }
+
+    /* ── VENDOR LIST ─────────────────────────────────────────────────── */
+    #vendor-list { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+
+    .vendor-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      transition: border-color 0.15s;
+    }
+    .vendor-card:hover { border-color: var(--border-hi); }
+    .vendor-card.is-founder { border-color: rgba(167,139,250,0.25); }
+
+    .vendor-top {
+      display: flex; align-items: center;
+      gap: 14px; padding: 16px;
+    }
+    .vendor-avatar {
+      width: 44px; height: 44px;
+      border-radius: 11px;
+      background: var(--lift);
+      border: 1px solid var(--border-hi);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; font-weight: 800;
+      color: var(--green); flex-shrink: 0;
+      text-transform: uppercase; overflow: hidden;
+    }
+    .vendor-avatar img {
+      width: 100%; height: 100%; object-fit: cover;
+      border-radius: inherit;
+    }
+    .vendor-info { flex: 1; min-width: 0; }
+    .vendor-name {
+      font-size: 14px; font-weight: 700;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .vendor-email {
+      font-size: 11px; color: var(--muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      margin-top: 2px;
+    }
+    .vendor-badges { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
+    .badge {
+      font-size: 10px; font-weight: 700;
+      padding: 2px 8px; border-radius: 99px;
+      letter-spacing: 0.03em; white-space: nowrap;
+    }
+    .badge-active  { background: var(--green-bg);  color: var(--green);  border: 1px solid var(--green-bd); }
+    .badge-lapsed  { background: var(--red-bg);    color: var(--red);    border: 1px solid var(--red-bd); }
+    .badge-pending { background: var(--amber-bg);  color: var(--amber);  border: 1px solid var(--amber-bd); }
+    .badge-founder { background: var(--violet-bg); color: var(--violet); border: 1px solid var(--violet-bd); }
+
+    .vendor-meta {
+      padding: 0 16px 14px;
+      display: flex; flex-wrap: wrap; gap: 6px;
+      font-size: 11px; color: var(--muted);
+    }
+    .vendor-meta-item {
+      background: var(--lift);
+      border: 1px solid var(--border);
+      border-radius: 6px; padding: 3px 8px;
+    }
+    .vendor-meta-item.expiry-soon { color: var(--amber); border-color: var(--amber-bd); }
+    .vendor-meta-item.expiry-ok   { color: var(--green); border-color: var(--green-bd); }
+    .vendor-meta-item.expiry-gone { color: var(--red);   border-color: var(--red-bd); }
+
+    /* ── ACTIONS ─────────────────────────────────────────────────────── */
+    .vendor-actions {
+      border-top: 1px solid var(--border);
+      padding: 10px 16px;
+      display: flex; gap: 8px; flex-wrap: wrap;
+      align-items: center;
+    }
+    .btn {
+      font-size: 12px; font-weight: 700;
+      padding: 7px 14px; border-radius: 8px;
+      border: 0; cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      white-space: nowrap;
+    }
+    .btn:active { opacity: 0.8; transform: translateY(1px); }
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+    .btn-activate  { background: var(--green);  color: #fff; }
+    .btn-revoke    { background: var(--red-bg);    color: var(--red);    border: 1px solid var(--red-bd); }
+    .btn-founder-on  { background: var(--violet-bg); color: var(--violet); border: 1px solid var(--violet-bd); }
+    .btn-founder-off { background: var(--lift);      color: var(--muted);  border: 1px solid var(--border-hi); }
+    .btn-loading { opacity: 0.5; cursor: not-allowed; }
+    .action-result {
+      font-size: 11px; color: var(--green);
+      font-weight: 600; margin-left: auto;
+      opacity: 0; transition: opacity 0.3s;
+    }
+    .action-result.visible { opacity: 1; }
+    .action-result.error { color: var(--red); }
+
+    /* ── LOADING / EMPTY ─────────────────────────────────────────────── */
+    #loading-state, #empty-state, #error-state {
+      padding: 60px 20px; text-align: center; color: var(--muted);
+    }
+    .spinner {
+      width: 28px; height: 28px;
+      border: 2.5px solid var(--border-hi);
+      border-top-color: var(--green);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 12px;
+    }
+
+    /* ── TOAST ───────────────────────────────────────────────────────── */
+    #toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+      background: var(--surface); border: 1px solid var(--border-hi);
+      border-radius: 10px; padding: 11px 18px;
+      font-size: 13px; font-weight: 600; color: var(--text);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1), opacity 0.28s;
+      opacity: 0; z-index: 9999; white-space: nowrap;
+      pointer-events: none;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+    #toast.success { border-color: var(--green-bd); color: var(--green); }
+    #toast.error   { border-color: var(--red-bd);   color: var(--red); }
+
+    /* ── CONFIRM MODAL ───────────────────────────────────────────────── */
+    #confirm-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
+      display: none; align-items: center; justify-content: center;
+      z-index: 9998; padding: 24px;
+    }
+    #confirm-overlay.open { display: flex; }
+    #confirm-card {
+      background: var(--surface); border: 1px solid var(--border-hi);
+      border-radius: 18px; padding: 28px 24px;
+      max-width: 340px; width: 100%;
+      box-shadow: 0 24px 48px rgba(0,0,0,0.6);
+    }
+    #confirm-title { font-size: 16px; font-weight: 800; margin-bottom: 8px; }
+    #confirm-body  { font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 20px; }
+    #confirm-actions { display: flex; gap: 10px; }
+    #confirm-ok     { flex: 1; padding: 11px; border-radius: 10px; border: 0; font-size: 13px; font-weight: 700; cursor: pointer; background: var(--red); color: #fff; }
+    #confirm-cancel { flex: 1; padding: 11px; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer; background: var(--lift); color: var(--text); border: 1px solid var(--border-hi); }
+
+    /* ── LOCK SCREEN (brute force) ───────────────────────────────────── */
+    #lockscreen {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      display: none; align-items: center; justify-content: center;
+      z-index: 99999; flex-direction: column; gap: 12px;
+      text-align: center; padding: 24px;
+    }
+    #lockscreen.visible { display: flex; }
+    #lock-icon { font-size: 40px; margin-bottom: 4px; }
+    #lock-title { font-size: 18px; font-weight: 800; }
+    #lock-body  { font-size: 13px; color: var(--muted); line-height: 1.6; }
+    #lock-timer { font-size: 24px; font-weight: 900; color: var(--red); font-variant-numeric: tabular-nums; }
+
+    @keyframes spin  { to { transform: rotate(360deg); } }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-6px)} 40%,80%{transform:translateX(6px)} }
+  </style>
+</head>
+<body>
+
+<!-- ── LOCK SCREEN (brute force protection) ──────────────────────────── -->
+<div id="lockscreen">
+  <div id="lock-icon">🔒</div>
+  <div id="lock-title">Too many attempts</div>
+  <div id="lock-body">Admin access locked. Try again in:</div>
+  <div id="lock-timer">15:00</div>
+</div>
+
+<!-- ── PASSWORD GATE ──────────────────────────────────────────────────── -->
+<div id="gate">
+  <div id="gate-card">
+    <div id="gate-logo">Quick<span>Shop</span></div>
+    <div id="gate-sub">Admin Console</div>
+    <input id="gate-input" type="password" placeholder="Admin password"
+           autocomplete="current-password" autofocus />
+    <button id="gate-btn">Enter</button>
+    <div id="gate-err"></div>
+    <div id="gate-attempts"></div>
+  </div>
+</div>
+
+<!-- ── CONFIRM MODAL ──────────────────────────────────────────────────── -->
+<div id="confirm-overlay">
+  <div id="confirm-card">
+    <div id="confirm-title"></div>
+    <div id="confirm-body"></div>
+    <div id="confirm-actions">
+      <button id="confirm-cancel">Cancel</button>
+      <button id="confirm-ok">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOAST ──────────────────────────────────────────────────────────── -->
+<div id="toast"></div>
+
+<!-- ── APP ───────────────────────────────────────────────────────────── -->
+<div id="app">
+  <div id="header">
+    <div>
+      <div id="header-brand">Quick<span>Shop</span> Admin</div>
+      <div id="header-meta">Vendor management console</div>
+    </div>
+    <div id="header-actions">
+      <button id="refresh-btn">↻ Refresh</button>
+      <button id="signout-btn">Lock</button>
+    </div>
+  </div>
+
+  <div id="stats">
+    <div class="stat-card stat-violet">
+      <div class="stat-val" id="s-total">—</div>
+      <div class="stat-lbl">Total</div>
+    </div>
+    <div class="stat-card stat-green">
+      <div class="stat-val" id="s-active">—</div>
+      <div class="stat-lbl">Active</div>
+    </div>
+    <div class="stat-card stat-red">
+      <div class="stat-val" id="s-lapsed">—</div>
+      <div class="stat-lbl">Lapsed</div>
+    </div>
+    <div class="stat-card stat-amber">
+      <div class="stat-val" id="s-expiring">—</div>
+      <div class="stat-lbl">Expiring ≤7d</div>
+    </div>
+  </div>
+
+  <div id="vendor-list">
+    <div id="loading-state"><div class="spinner"></div>Loading vendors…</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── CONFIG (injected at build time) ────────────────────────────────────
+  // NEVER put real keys in source. These placeholders are replaced by build.sh.
+  const SUPABASE_URL         = '%%SUPABASE_URL%%';
+  const SUPABASE_SERVICE_KEY = '%%SUPABASE_SERVICE_KEY%%';
+  // Admin password hash — SHA-256 hex of your chosen password.
+  // Set ADMIN_PASSWORD_HASH in Vercel env vars.
+  // Generate: https://emn178.github.io/online-tools/sha256.html
+  const ADMIN_PASSWORD_HASH  = '%%ADMIN_PASSWORD_HASH%%';
+
+  // ── BRUTE-FORCE PROTECTION ─────────────────────────────────────────────
+  // 5 attempts max. Lockout for 15 minutes. Persisted in sessionStorage
+  // so a page refresh does NOT reset the counter.
+  const MAX_ATTEMPTS   = 5;
+  const LOCKOUT_MS     = 15 * 60 * 1000;
+  const ATTEMPT_KEY    = 'qs_admin_attempts';
+  const LOCKOUT_KEY    = 'qs_admin_lockout_until';
+
+  function getAttempts()    { return parseInt(sessionStorage.getItem(ATTEMPT_KEY)  || '0', 10); }
+  function getLockoutUntil(){ return parseInt(sessionStorage.getItem(LOCKOUT_KEY) || '0', 10); }
+  function setAttempts(n)   { sessionStorage.setItem(ATTEMPT_KEY, String(n)); }
+  function setLockoutUntil(t){ sessionStorage.setItem(LOCKOUT_KEY, String(t)); }
+  function clearAttempts()  { sessionStorage.removeItem(ATTEMPT_KEY); sessionStorage.removeItem(LOCKOUT_KEY); }
+
+  // ── LOCKSCREEN ─────────────────────────────────────────────────────────
+  let _lockInterval = null;
+  function showLockscreen() {
+    const ls = document.getElementById('lockscreen');
+    ls.classList.add('visible');
+    document.getElementById('gate').style.display = 'none';
+    function tick() {
+      const remaining = Math.max(0, getLockoutUntil() - Date.now());
+      if (remaining <= 0) {
+        clearAttempts();
+        ls.classList.remove('visible');
+        document.getElementById('gate').style.display = 'flex';
+        document.getElementById('gate-err').textContent = '';
+        document.getElementById('gate-attempts').textContent = '';
+        clearInterval(_lockInterval);
+        return;
+      }
+      const m = Math.floor(remaining / 60000);
+      const s = Math.floor((remaining % 60000) / 1000);
+      document.getElementById('lock-timer').textContent =
+        String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+    }
+    tick();
+    clearInterval(_lockInterval);
+    _lockInterval = setInterval(tick, 500);
+  }
+
+  // Check lockout on page load
+  if (getLockoutUntil() > Date.now()) {
+    showLockscreen();
+  }
+
+  // ── SHA-256 (Web Crypto, no external deps) ─────────────────────────────
+  async function sha256hex(str) {
+    const buf = await crypto.subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(str)
+    );
+    return Array.from(new Uint8Array(buf))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+
+  // ── PASSWORD GATE ──────────────────────────────────────────────────────
+  const gateInput = document.getElementById('gate-input');
+  const gateBtn   = document.getElementById('gate-btn');
+  const gateErr   = document.getElementById('gate-err');
+  const gateAtt   = document.getElementById('gate-attempts');
+
+  function updateAttemptDisplay() {
+    const n = getAttempts();
+    if (n > 0) {
+      gateAtt.textContent = (MAX_ATTEMPTS - n) + ' attempt' +
+        ((MAX_ATTEMPTS - n) === 1 ? '' : 's') + ' remaining';
+    } else {
+      gateAtt.textContent = '';
+    }
+  }
+  updateAttemptDisplay();
+
+  // Constant-time string comparison to prevent timing attacks
+  function safeEqual(a, b) {
+    if (a.length !== b.length) return false;
+    let diff = 0;
+    for (let i = 0; i < a.length; i++) {
+      diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    }
+    return diff === 0;
+  }
+
+  async function tryGate() {
+    // Check lockout
+    if (getLockoutUntil() > Date.now()) { showLockscreen(); return; }
+
+    const pass = gateInput.value;
+    if (!pass) return;
+
+    gateBtn.disabled = true;
+    gateBtn.textContent = 'Checking…';
+
+    // Validate config was injected
+    if (ADMIN_PASSWORD_HASH.includes('%%') ||
+        SUPABASE_URL.includes('%%') ||
+        SUPABASE_SERVICE_KEY.includes('%%')) {
+      gateErr.textContent = 'Admin not configured. Set env vars and redeploy.';
+      gateBtn.disabled = false;
+      gateBtn.textContent = 'Enter';
+      return;
+    }
+
+    const hash = await sha256hex(pass);
+    const ok   = safeEqual(hash, ADMIN_PASSWORD_HASH.toLowerCase());
+
+    if (ok) {
+      clearAttempts();
+      document.getElementById('gate').style.display = 'none';
+      document.getElementById('app').classList.add('visible');
+      initApp();
+    } else {
+      const attempts = getAttempts() + 1;
+      setAttempts(attempts);
+      gateInput.value = '';
+      gateInput.classList.add('error');
+      setTimeout(() => gateInput.classList.remove('error'), 400);
+
+      if (attempts >= MAX_ATTEMPTS) {
+        setLockoutUntil(Date.now() + LOCKOUT_MS);
+        showLockscreen();
+      } else {
+        gateErr.textContent = 'Wrong password.';
+        updateAttemptDisplay();
+        gateInput.focus();
+      }
+
+      gateBtn.disabled = false;
+      gateBtn.textContent = 'Enter';
+    }
+  }
+
+  gateBtn.addEventListener('click', tryGate);
+  gateInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') tryGate();
+  });
+
+  // ── LOCK BUTTON (re-gate without reload) ──────────────────────────────
+  document.getElementById('signout-btn').addEventListener('click', function() {
+    document.getElementById('app').classList.remove('visible');
+    document.getElementById('gate').style.display = 'flex';
+    gateInput.value = '';
+    gateInput.focus();
+    _vendors = [];
+  });
+
+  // ── TOAST ──────────────────────────────────────────────────────────────
+  let _toastTimer = null;
+  function toast(msg, type) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'show' + (type ? ' ' + type : '');
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(function() {
+      el.classList.remove('show');
+    }, 3000);
+  }
+
+  // ── CONFIRM MODAL ──────────────────────────────────────────────────────
+  let _confirmResolve = null;
+  function confirm(title, body, danger) {
+    return new Promise(function(resolve) {
+      _confirmResolve = resolve;
+      document.getElementById('confirm-title').textContent = title;
+      document.getElementById('confirm-body').textContent  = body;
+      const ok = document.getElementById('confirm-ok');
+      ok.style.background = danger ? 'var(--red)' : 'var(--green)';
+      document.getElementById('confirm-overlay').classList.add('open');
+    });
+  }
+  document.getElementById('confirm-ok').addEventListener('click', function() {
+    document.getElementById('confirm-overlay').classList.remove('open');
+    if (_confirmResolve) { _confirmResolve(true); _confirmResolve = null; }
+  });
+  document.getElementById('confirm-cancel').addEventListener('click', function() {
+    document.getElementById('confirm-overlay').classList.remove('open');
+    if (_confirmResolve) { _confirmResolve(false); _confirmResolve = null; }
+  });
+
+  // ── SUPABASE (service role — bypasses RLS) ─────────────────────────────
+  // The service key is NEVER sent to the anon public. It lives only in:
+  //   1. Vercel env vars (server-side build injection)
+  //   2. This compiled admin.html (served at a non-indexed, hard-to-guess URL)
+  // All Supabase calls below go directly to the REST API, same as the SDK.
+  function sbFetch(path, opts) {
+    return fetch(SUPABASE_URL + path, Object.assign({
+      headers: {
+        'apikey':        SUPABASE_SERVICE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_SERVICE_KEY,
+        'Content-Type':  'application/json',
+        'Prefer':        'return=representation',
+      }
+    }, opts));
+  }
+
+  // ── STATE ──────────────────────────────────────────────────────────────
+  let _vendors = [];
+
+  // ── HELPERS ────────────────────────────────────────────────────────────
+  function daysFromNow(isoStr) {
+    if (!isoStr) return null;
+    return Math.ceil((new Date(isoStr) - Date.now()) / 86400000);
+  }
+
+  function expiryLabel(v) {
+    if (v.is_founder) return null; // founders never shown an expiry
+    if (!v.subscription_expires) return { text: 'Never activated', cls: '' };
+    const d = daysFromNow(v.subscription_expires);
+    if (d < 0)  return { text: 'Expired ' + Math.abs(d) + 'd ago', cls: 'expiry-gone' };
+    if (d === 0) return { text: 'Expires today', cls: 'expiry-soon' };
+    if (d <= 7)  return { text: 'Expires in ' + d + 'd', cls: 'expiry-soon' };
+    return { text: 'Expires in ' + d + 'd', cls: 'expiry-ok' };
+  }
+
+  function statusBadge(v) {
+    if (v.is_founder)  return '<span class="badge badge-founder">⭐ Founder</span>';
+    if (v.is_active)   return '<span class="badge badge-active">● Active</span>';
+    const exp = v.subscription_expires;
+    if (!exp)          return '<span class="badge badge-pending">○ Never paid</span>';
+    return               '<span class="badge badge-lapsed">● Lapsed</span>';
+  }
+
+  function escHtml(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── UPDATE STATS BAR ───────────────────────────────────────────────────
+  function updateStats() {
+    const total    = _vendors.length;
+    const active   = _vendors.filter(v => v.is_active).length;
+    const lapsed   = _vendors.filter(v => !v.is_active && v.subscription_expires).length;
+    const expiring = _vendors.filter(v => {
+      if (!v.is_active || v.is_founder || !v.subscription_expires) return false;
+      const d = daysFromNow(v.subscription_expires);
+      return d !== null && d >= 0 && d <= 7;
+    }).length;
+    document.getElementById('s-total').textContent    = total;
+    document.getElementById('s-active').textContent   = active;
+    document.getElementById('s-lapsed').textContent   = lapsed;
+    document.getElementById('s-expiring').textContent = expiring;
+  }
+
+  // ── RENDER VENDOR CARD ─────────────────────────────────────────────────
+  function renderCard(v) {
+    const card = document.createElement('div');
+    card.className = 'vendor-card' + (v.is_founder ? ' is-founder' : '');
+    card.dataset.id = v.id;
+
+    const storeName = v.business_name || v.name || 'Unnamed vendor';
+    const initial   = storeName.charAt(0).toUpperCase();
+
+    // Avatar
+    let avatarHtml = '';
+    if (v.avatar_url && v.avatar_url.startsWith('https://')) {
+      avatarHtml = '<img src="' + escHtml(v.avatar_url) + '" alt="' + escHtml(storeName) + '" ' +
+        'onerror="this.parentNode.textContent=\'' + escHtml(initial) + '\'">';
+    }
+
+    // Expiry
+    const expInfo = expiryLabel(v);
+    let metaHtml  = '';
+    if (v.location)              metaHtml += '<span class="vendor-meta-item">📍 ' + escHtml(v.location) + '</span>';
+    if (v.store_sector)          metaHtml += '<span class="vendor-meta-item">🏪 ' + escHtml(v.store_sector) + '</span>';
+    if (v.subscription_expires && !v.is_founder) {
+      metaHtml += '<span class="vendor-meta-item ' + (expInfo ? expInfo.cls : '') + '">' +
+        '🗓 ' + escHtml(expInfo ? expInfo.text : '') + '</span>';
+    }
+    if (v.is_founder) {
+      metaHtml += '<span class="vendor-meta-item" style="color:var(--violet);border-color:var(--violet-bd)">🔒 Permanent access</span>';
+    }
+
+    card.innerHTML =
+      '<div class="vendor-top">' +
+        '<div class="vendor-avatar">' + avatarHtml + (avatarHtml ? '' : escHtml(initial)) + '</div>' +
+        '<div class="vendor-info">' +
+          '<div class="vendor-name">' + escHtml(storeName) + '</div>' +
+          '<div class="vendor-email">' + escHtml(v.email || v.id) + '</div>' +
+          '<div class="vendor-badges">' + statusBadge(v) + '</div>' +
+        '</div>' +
+      '</div>' +
+      (metaHtml ? '<div class="vendor-meta">' + metaHtml + '</div>' : '') +
+      '<div class="vendor-actions">' +
+        '<button class="btn btn-activate" data-action="activate">✓ Activate 30d</button>' +
+        (v.is_active && !v.is_founder
+          ? '<button class="btn btn-revoke" data-action="revoke">Revoke</button>'
+          : '') +
+        (v.is_founder
+          ? '<button class="btn btn-founder-off" data-action="unfounder">Remove founder</button>'
+          : '<button class="btn btn-founder-on"  data-action="founder">Make founder</button>') +
+        '<span class="action-result" id="res-' + escHtml(v.id) + '"></span>' +
+      '</div>';
+
+    // Wire actions via delegation on the card
+    card.addEventListener('click', async function(e) {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      const action = btn.dataset.action;
+      const vendor = _vendors.find(x => x.id === v.id);
+      if (!vendor) return;
+      await handleAction(action, vendor, card);
+    });
+
+    return card;
+  }
+
+  // ── HANDLE ACTION ──────────────────────────────────────────────────────
+  async function handleAction(action, vendor, card) {
+    const storeName = vendor.business_name || vendor.name || vendor.id;
+    let confirmed   = false;
+
+    if (action === 'activate') {
+      confirmed = await confirm(
+        'Activate ' + storeName + '?',
+        'Sets is_active = true and subscription_expires = now + 30 days.',
+        false
+      );
+    } else if (action === 'revoke') {
+      confirmed = await confirm(
+        'Revoke ' + storeName + '?',
+        'Sets is_active = false immediately. Their store will go dark.',
+        true
+      );
+    } else if (action === 'founder') {
+      confirmed = await confirm(
+        'Make ' + storeName + ' a Founder?',
+        'Grants permanent access. They will never be auto-lapsed.',
+        false
+      );
+    } else if (action === 'unfounder') {
+      confirmed = await confirm(
+        'Remove Founder status from ' + storeName + '?',
+        'They will be subject to normal subscription rules from now on.',
+        true
+      );
+    }
+
+    if (!confirmed) return;
+
+    // Disable all buttons on this card
+    card.querySelectorAll('.btn').forEach(b => b.disabled = true);
+    const resEl = card.querySelector('#res-' + vendor.id);
+
+    try {
+      let patch = {};
+      if (action === 'activate') {
+        const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        patch = { is_active: true, subscription_expires: expires };
+      } else if (action === 'revoke') {
+        patch = { is_active: false };
+      } else if (action === 'founder') {
+        patch = { is_founder: true, is_active: true };
+      } else if (action === 'unfounder') {
+        patch = { is_founder: false };
+      }
+
+      const res = await sbFetch(
+        '/rest/v1/profiles?id=eq.' + encodeURIComponent(vendor.id),
+        { method: 'PATCH', body: JSON.stringify(patch) }
+      );
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        throw new Error('Supabase error ' + res.status + ': ' + errText.slice(0, 120));
+      }
+
+      // Update local state
+      Object.assign(vendor, patch);
+
+      if (resEl) {
+        resEl.textContent = '✓ Saved';
+        resEl.className = 'action-result visible';
+        setTimeout(() => resEl.classList.remove('visible'), 2500);
+      }
+
+      toast(storeName + ' updated ✓', 'success');
+
+      // Re-render just this card in place
+      const newCard = renderCard(vendor);
+      card.parentNode.replaceChild(newCard, card);
+      updateStats();
+
+    } catch (err) {
+      console.error('[QS Admin]', err);
+      if (resEl) {
+        resEl.textContent = '✗ ' + (err.message || 'Failed');
+        resEl.className = 'action-result visible error';
+        setTimeout(() => resEl.classList.remove('visible'), 4000);
+      }
+      toast('Failed: ' + (err.message || 'unknown'), 'error');
+      card.querySelectorAll('.btn').forEach(b => b.disabled = false);
+    }
+  }
+
+  // ── LOAD VENDORS ───────────────────────────────────────────────────────
+  async function loadVendors() {
+    const listEl = document.getElementById('vendor-list');
+    listEl.innerHTML = '<div id="loading-state"><div class="spinner"></div>Loading vendors…</div>';
+
+    try {
+      // Fetch profiles joined with auth.users email via the admin API
+      // We select all needed columns from profiles then fetch emails separately
+      const [profilesRes, usersRes] = await Promise.all([
+        sbFetch('/rest/v1/profiles?select=id,business_name,name,email,is_active,is_founder,avatar_url,location,store_sector,subscription_expires&order=is_active.desc,is_founder.desc,business_name.asc'),
+        sbFetch('/auth/v1/admin/users?per_page=1000', { method: 'GET' })
+      ]);
+
+      if (!profilesRes.ok) throw new Error('Profiles fetch failed: ' + profilesRes.status);
+
+      const profiles = await profilesRes.json();
+
+      // Build email map from auth users if available
+      const emailMap = {};
+      if (usersRes.ok) {
+        const usersData = await usersRes.json();
+        const users = usersData.users || [];
+        users.forEach(u => { emailMap[u.id] = u.email; });
+      }
+
+      // Merge emails into profiles
+      _vendors = profiles.map(p => Object.assign({}, p, {
+        email: emailMap[p.id] || p.email || ''
+      }));
+
+      listEl.innerHTML = '';
+
+      if (_vendors.length === 0) {
+        listEl.innerHTML = '<div id="empty-state">No vendors found.</div>';
+        return;
+      }
+
+      _vendors.forEach(v => listEl.appendChild(renderCard(v)));
+      updateStats();
+
+    } catch (err) {
+      console.error('[QS Admin] load failed:', err);
+      listEl.innerHTML = '<div id="error-state">Failed to load vendors.<br><small>' +
+        escHtml(err.message || '') + '</small></div>';
+      toast('Load failed: ' + (err.message || 'check connection'), 'error');
+    }
+  }
+
+  // ── INIT APP ───────────────────────────────────────────────────────────
+  function initApp() {
+    loadVendors();
+    document.getElementById('refresh-btn').addEventListener('click', loadVendors);
+  }
+
+})();
+</script>
+</body>
+</html>

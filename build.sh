@@ -50,6 +50,16 @@ if [[ -n "${GEMINI_API_KEY:-}" && "${GEMINI_API_KEY}" == *"|"* ]]; then
   exit 1
 fi
 
+if [[ -n "${SUPABASE_SERVICE_KEY:-}" && "${SUPABASE_SERVICE_KEY}" == *"|"* ]]; then
+  echo "[build] ERROR: SUPABASE_SERVICE_KEY contains a pipe character, which is incompatible with the sed delimiter." >&2
+  exit 1
+fi
+
+if [[ -n "${ADMIN_PASSWORD_HASH:-}" && "${ADMIN_PASSWORD_HASH}" == *"|"* ]]; then
+  echo "[build] ERROR: ADMIN_PASSWORD_HASH contains a pipe character, which is incompatible with the sed delimiter." >&2
+  exit 1
+fi
+
 # ── Copy template ─────────────────────────────────────────────────────────────
 echo "[build] Copying config template..."
 cp supabase-config.example.js supabase-config.js
@@ -83,4 +93,35 @@ if grep -qE '%%[A-Z_]+%%' supabase-config.js; then
 fi
 
 echo "[build] Verification passed — no unreplaced placeholders."
+
+# ── Build admin.html ──────────────────────────────────────────────────────
+# admin.html is always copied from source and gets its own placeholder injection.
+# SUPABASE_SERVICE_KEY and ADMIN_PASSWORD_HASH are optional — if absent the
+# admin page will show a "not configured" error on the gate screen, which is
+# safe (no data is exposed without valid credentials).
+echo "[build] Building admin.html..."
+cp admin.html admin.html.tmp
+
+sed -i "s|%%SUPABASE_URL%%|${SUPABASE_URL}|g"               admin.html.tmp
+sed -i "s|%%SUPABASE_ANON_KEY%%|${SUPABASE_ANON_KEY}|g"     admin.html.tmp
+
+if [[ -n "${SUPABASE_SERVICE_KEY:-}" ]]; then
+  echo "[build] Injecting SUPABASE_SERVICE_KEY into admin.html..."
+  sed -i "s|%%SUPABASE_SERVICE_KEY%%|${SUPABASE_SERVICE_KEY}|g" admin.html.tmp
+else
+  echo "[build] WARNING: SUPABASE_SERVICE_KEY not set — admin panel will not function."
+  sed -i "s|%%SUPABASE_SERVICE_KEY%%||g" admin.html.tmp
+fi
+
+if [[ -n "${ADMIN_PASSWORD_HASH:-}" ]]; then
+  echo "[build] Injecting ADMIN_PASSWORD_HASH into admin.html..."
+  sed -i "s|%%ADMIN_PASSWORD_HASH%%|${ADMIN_PASSWORD_HASH}|g" admin.html.tmp
+else
+  echo "[build] WARNING: ADMIN_PASSWORD_HASH not set — admin panel gate will block all access."
+  sed -i "s|%%ADMIN_PASSWORD_HASH%%||g" admin.html.tmp
+fi
+
+mv admin.html.tmp admin.html
+echo "[build] admin.html built."
+
 echo "[build] Done."
