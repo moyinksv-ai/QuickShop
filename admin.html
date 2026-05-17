@@ -612,6 +612,9 @@
   //   1. Vercel env vars (server-side build injection)
   //   2. This compiled admin.html (served at a non-indexed, hard-to-guess URL)
   // All Supabase calls below go directly to the REST API, same as the SDK.
+  // Normalise base URL once — strip trailing slash so paths always join cleanly
+  var _baseUrl = (SUPABASE_URL || '').replace(/\/+$/, '');
+
   function sbFetch(path, opts) {
     // Deep-merge headers so callers can add extra headers without
     // losing the auth headers. Object.assign at top level would replace
@@ -624,7 +627,8 @@
     };
     var merged = Object.assign({}, opts || {});
     merged.headers = Object.assign({}, defaultHeaders, (opts && opts.headers) || {});
-    return fetch(SUPABASE_URL + path, merged);
+    var url = _baseUrl + path;
+    return fetch(url, merged);
   }
 
   // ── CONFIG VALIDATION ──────────────────────────────────────────────────
@@ -785,25 +789,36 @@
 
     try {
       let patch = {};
+      let rpcName = '';
+      let rpcBody = {};
+
       if (action === 'activate') {
         const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-        patch = { is_active: true, subscription_expires: expires };
+        patch    = { is_active: true, subscription_expires: expires };
+        rpcName  = 'admin_activate_vendor';
+        rpcBody  = { vendor_id: vendor.id, days_count: 30 };
       } else if (action === 'revoke') {
-        patch = { is_active: false };
+        patch    = { is_active: false };
+        rpcName  = 'admin_revoke_vendor';
+        rpcBody  = { vendor_id: vendor.id };
       } else if (action === 'founder') {
-        patch = { is_founder: true, is_active: true };
+        patch    = { is_founder: true, is_active: true };
+        rpcName  = 'admin_set_founder';
+        rpcBody  = { vendor_id: vendor.id, founder_val: true };
       } else if (action === 'unfounder') {
-        patch = { is_founder: false };
+        patch    = { is_founder: false };
+        rpcName  = 'admin_set_founder';
+        rpcBody  = { vendor_id: vendor.id, founder_val: false };
       }
 
       const res = await sbFetch(
-        '/rest/v1/profiles?id=eq.' + encodeURIComponent(vendor.id),
-        { method: 'PATCH', body: JSON.stringify(patch) }
+        '/rest/v1/rpc/' + rpcName,
+        { method: 'POST', body: JSON.stringify(rpcBody) }
       );
 
       if (!res.ok) {
         const errText = await res.text().catch(() => '');
-        throw new Error('Supabase error ' + res.status + ': ' + errText.slice(0, 120));
+        throw new Error('Supabase error ' + res.status + ': ' + errText.slice(0, 200));
       }
 
       // Update local state
@@ -851,14 +866,18 @@
     }
 
     try {
-      // Fetch profiles joined with auth.users email via the admin API
-      // We select all needed columns from profiles then fetch emails separately
+      // Use RPC functions (SECURITY DEFINER) — bypasses RLS entirely.
+      // Direct /rest/v1/profiles returns 401 even with service key when
+      // RLS policies don't explicitly allow the service role.
       const [profilesRes, usersRes] = await Promise.all([
-        sbFetch('/rest/v1/profiles?select=id,business_name,name,email,is_active,is_founder,avatar_url,location,store_sector,subscription_expires&order=is_active.desc,is_founder.desc,business_name.asc'),
+        sbFetch('/rest/v1/rpc/admin_get_vendors', { method: 'POST', body: '{}' }),
         sbFetch('/auth/v1/admin/users?per_page=1000', { method: 'GET' })
       ]);
 
-      if (!profilesRes.ok) throw new Error('Profiles fetch failed: ' + profilesRes.status);
+      if (!profilesRes.ok) {
+        const errText = await profilesRes.text().catch(() => '');
+        throw new Error('Profiles fetch failed: ' + profilesRes.status + ' — ' + errText.slice(0, 200));
+      }
 
       const profiles = await profilesRes.json();
 
