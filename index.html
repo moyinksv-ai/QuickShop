@@ -977,7 +977,7 @@
     <input id="signupEmail" placeholder="Email address" type="email" class="auth-input" autocomplete="email" />
     <input id="signupPass" placeholder="Password (min 6 characters)" type="password" class="auth-input" autocomplete="new-password" />
     <input id="signupPassConfirm" placeholder="Confirm password" type="password" class="auth-input" autocomplete="new-password" />
-    <div class="auth-notice">📧 A verification link will be sent to your email. Please verify before signing in.</div>
+    <div class="auth-notice">📧 A 6-digit verification code will be sent to your email.</div>
     <button id="btnSignup" type="button">Create Account</button>
     <div class="auth-divider">
       <div class="auth-divider-line"></div>
@@ -989,25 +989,36 @@
 
   <div id="resetForm" style="display:none;flex-direction:column;">
     <div class="auth-form-title">Reset password</div>
-    <div class="auth-form-sub">We'll send a reset link to your email address</div>
+    <div class="auth-form-sub">We'll send a 6-digit code to your email</div>
     <input id="resetEmail" placeholder="Email address" type="email" class="auth-input" autocomplete="email" />
-    <button id="btnSendReset" type="button">Send Reset Link</button>
+    <button id="btnSendReset" type="button">Send Code</button>
     <button id="btnBackToLoginFromReset" type="button">← Back to sign in</button>
   </div>
 
+  <div id="resetVerifyForm" style="display:none;flex-direction:column;">
+    <div class="auth-form-title">Reset password</div>
+    <div class="auth-form-sub">Enter the code from your email and choose a new password</div>
+    <input id="resetCode" placeholder="000000" type="text" inputmode="numeric" maxlength="6" class="auth-input" autocomplete="one-time-code" style="text-align:center;letter-spacing:8px;font-size:22px;font-weight:700;" />
+    <input id="resetNewPass" placeholder="New password (min 6 characters)" type="password" class="auth-input" autocomplete="new-password" />
+    <input id="resetNewPassConfirm" placeholder="Confirm new password" type="password" class="auth-input" autocomplete="new-password" />
+    <button id="btnVerifyReset" type="button">Reset Password</button>
+    <button id="btnBackToResetEmail" type="button">← Try a different email</button>
+  </div>
+
   <div id="verificationNotice" style="display:none;flex-direction:column;">
-    <div class="auth-form-title">Check your inbox</div>
-    <div class="auth-form-sub">One last step before you get started</div>
+    <div class="auth-form-title">Check your email</div>
+    <div class="auth-form-sub">Enter the 6-digit code we sent you</div>
     <div class="auth-verify-box">
       <p style="color:rgba(244,244,245,0.85);font-size:14px;line-height:1.65;margin-bottom:6px;">
-        We sent a verification link to<br><strong id="verificationEmail" style="color:#fff;"></strong>
+        We sent a 6-digit code to<br><strong id="verificationEmail" style="color:#fff;"></strong>
       </p>
       <p style="color:rgba(244,244,245,0.52);font-size:12.5px;line-height:1.55;">
-        Click the link in the email, then tap the button below to continue.
+        Enter the code below to verify your account. Check your spam folder if you don't see it.
       </p>
     </div>
-    <button id="btnCheckVerification" type="button">I've verified — Sign me in</button>
-    <button id="btnResendVerification" type="button">Resend verification email</button>
+    <input id="verificationCode" placeholder="000000" type="text" inputmode="numeric" maxlength="6" class="auth-input" autocomplete="one-time-code" style="text-align:center;letter-spacing:8px;font-size:22px;font-weight:700;" />
+    <button id="btnCheckVerification" type="button">Verify Code</button>
+    <button id="btnResendVerification" type="button">Resend code</button>
     <button id="btnLogoutFromVerification" type="button">Use a different account</button>
   </div>
 

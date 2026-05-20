@@ -331,6 +331,7 @@ function initApp() {
   let isSaveStateSyncing = false;
   let editingNoteId = null;
   let editingProductId = null;
+  let _pendingResetEmail = '';
   const DEFAULT_CATEGORIES = ['Drinks', 'Snacks', 'Groceries', 'Clothing', 'Others'];
   let activeCategory = 'All';
 
@@ -651,11 +652,12 @@ function handleTouchEnd() {
 
   function setBottomNavVisible(v) { const bn = document.querySelector('.bottom-nav'); if (bn) bn.style.display = v ? 'flex' : 'none'; }
   function hideAllAuthForms() {
-    ['loginForm','signupForm','resetForm','verificationNotice','authLoading'].forEach(id => { const el = $(id); if (el) el.style.display = 'none'; });
+    ['loginForm','signupForm','resetForm','resetVerifyForm','verificationNotice','authLoading'].forEach(id => { const el = $(id); if (el) el.style.display = 'none'; });
   }
   function showLoginForm() { hideAllAuthForms(); const el = $('loginForm'); if (el) el.style.display = 'flex'; clearAuths(); }
   function showSignupForm() { hideAllAuthForms(); const el = $('signupForm'); if (el) el.style.display = 'flex'; clearAuths(); }
   function showResetForm() { hideAllAuthForms(); const el = $('resetForm'); if (el) el.style.display = 'flex'; clearAuths(); }
+  function showResetVerifyForm(email) { hideAllAuthForms(); _pendingResetEmail = email || ''; const el = $('resetVerifyForm'); if (el) el.style.display = 'flex'; }
   function showVerificationNotice(email) {
     hideAllAuthForms();
     const el = $('verificationNotice');
@@ -665,7 +667,7 @@ function handleTouchEnd() {
   }
   function showAuthLoading() { hideAllAuthForms(); const el = $('authLoading'); if (el) el.style.display = 'flex'; }
   function clearAuths() {
-    ['loginEmail','loginPass','signupName','signupBusiness','signupEmail','signupPass','signupPassConfirm','resetEmail'].forEach(id => {
+    ['loginEmail','loginPass','signupName','signupBusiness','signupEmail','signupPass','signupPassConfirm','resetEmail','verificationCode','resetCode','resetNewPass','resetNewPassConfirm'].forEach(id => {
       const el = $(id);
       if (el) { el.value = ''; el.classList.remove('error'); }
     });
@@ -1032,6 +1034,8 @@ function handleTouchEnd() {
     createPasswordToggle('loginPass');
     createPasswordToggle('signupPass');
     createPasswordToggle('signupPassConfirm');
+    createPasswordToggle('resetNewPass');
+    createPasswordToggle('resetNewPassConfirm');
 
     const loginForm = $('loginForm');
     if (loginForm) {
@@ -1203,10 +1207,10 @@ function handleTouchEnd() {
           showAuthLoading(); disableBtn(btnSendReset, true);
           const supabase = getClient();
           if (!supabase) throw new Error('Supabase not initialized');
-          const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+          const { error } = await supabase.auth.resetPasswordForEmail(email);
           if (error) throw error;
-          toast('Password reset email sent. Check your inbox.');
-          showLoginForm();
+          showResetVerifyForm(email);
+          toast('6-digit code sent. Check your inbox.');
         } catch (e) {
           errlog('reset error', e);
           showResetForm();
@@ -1228,7 +1232,7 @@ function handleTouchEnd() {
           if (!user) { toast('You need to be signed in to resend verification', 'error'); return; }
           const { error } = await supabase.auth.resend({ type: 'signup', email: user.email });
           if (error) throw error;
-          toast('Verification email resent. Check your inbox.');
+          toast('New 6-digit code sent. Check your inbox.');
         } catch (e) { errlog('resend verification error', e); toast('Failed to resend verification. Try again later.', 'error'); }
       });
     }
@@ -1236,23 +1240,26 @@ function handleTouchEnd() {
     const btnCheckVerification = $('btnCheckVerification');
     if (btnCheckVerification) {
       btnCheckVerification.addEventListener('click', async function () {
+        const codeEl = $('verificationCode');
+        const emailEl = $('verificationEmail');
+        const code = (codeEl && codeEl.value || '').replace(/\s/g, '');
+        const email = (emailEl && emailEl.textContent || '').trim();
+        if (!code || code.length !== 6 || !/^\d{6}$/.test(code)) { toast('Enter the 6-digit code from your email', 'error'); if (codeEl) codeEl.classList.add('error'); return; }
         try {
-          showAuthLoading();
+          showAuthLoading(); disableBtn(btnCheckVerification, true);
           const supabase = getClient();
-          const { data, error } = await supabase.auth.getUser();
+          if (!supabase) throw new Error('Supabase not initialized');
+          const { error } = await supabase.auth.verifyOtp({ email, token: code, type: 'signup' });
           if (error) throw error;
-          if (data.user && data.user.email_confirmed_at) {
-            toast('Email verified! Loading your account...');
-          } else {
-            toast('Email not verified yet. Please check your inbox.', 'error');
-            showVerificationNotice(data.user.email);
-          }
+          localStorage.setItem('qs_session_active', 'true');
+          document.body.classList.add('mode-app');
+          toast('Email verified! Welcome to QuickShop.');
         } catch (e) {
-          errlog('check verification error', e);
-          toast('Error checking verification status', 'error');
-          const user = getUser();
-          showVerificationNotice(user && user.email);
+          errlog('verify OTP error', e);
+          toast(mapAuthError(e) || 'Invalid or expired code. Try again.', 'error');
+          showVerificationNotice(email);
         } finally {
+          disableBtn(btnCheckVerification, false);
           const authLoading = $('authLoading');
           if (authLoading) authLoading.style.display = 'none';
         }
@@ -1270,6 +1277,46 @@ function handleTouchEnd() {
         } catch (e) { errlog('logout error', e); toast('Logout failed', 'error'); }
       });
     }
+
+    const btnVerifyReset = $('btnVerifyReset');
+    if (btnVerifyReset) {
+      btnVerifyReset.addEventListener('click', async function () {
+        const codeEl = $('resetCode');
+        const newPassEl = $('resetNewPass');
+        const newPassConfirmEl = $('resetNewPassConfirm');
+        const code = (codeEl && codeEl.value || '').replace(/\s/g, '');
+        const newPass = (newPassEl && newPassEl.value) || '';
+        const newPassConfirm = (newPassConfirmEl && newPassConfirmEl.value) || '';
+        const email = _pendingResetEmail;
+        if (!email) { toast('Session expired. Please start over.', 'error'); showResetForm(); return; }
+        if (!code || code.length !== 6 || !/^\d{6}$/.test(code)) { toast('Enter the 6-digit code from your email', 'error'); if (codeEl) codeEl.classList.add('error'); return; }
+        if (!newPass || newPass.length < 6) { toast('Password must be at least 6 characters', 'error'); if (newPassEl) newPassEl.classList.add('error'); return; }
+        if (newPass !== newPassConfirm) { toast('Passwords do not match', 'error'); if (newPassConfirmEl) newPassConfirmEl.classList.add('error'); return; }
+        try {
+          showAuthLoading(); disableBtn(btnVerifyReset, true);
+          const supabase = getClient();
+          if (!supabase) throw new Error('Supabase not initialized');
+          const { error: otpError } = await supabase.auth.verifyOtp({ email, token: code, type: 'recovery' });
+          if (otpError) throw otpError;
+          const { error: updateError } = await supabase.auth.updateUser({ password: newPass });
+          if (updateError) throw updateError;
+          await supabase.auth.signOut();
+          _pendingResetEmail = '';
+          toast('Password reset! Please sign in with your new password.');
+          showLoginForm();
+        } catch (e) {
+          errlog('reset verify error', e);
+          toast(mapAuthError(e) || 'Invalid or expired code. Try again.', 'error');
+        } finally {
+          disableBtn(btnVerifyReset, false);
+          const authLoading = $('authLoading');
+          if (authLoading) authLoading.style.display = 'none';
+        }
+      });
+    }
+
+    const btnBackToResetEmail = $('btnBackToResetEmail');
+    if (btnBackToResetEmail) btnBackToResetEmail.addEventListener('click', showResetForm);
 
     const btnLogout = $('btnLogout');
     if (btnLogout) {
