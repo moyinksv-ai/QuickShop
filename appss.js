@@ -3530,9 +3530,8 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
   function _completenessScore(product) {
     let score = 0;
     if (product && (product.image || product.image2)) score += 35;
-    if (_safeStr(product && product.description).length >= 24) score += 25;
+    if (_safeStr(product && product.description).length >= 24) score += 35;
     if (_safeStr(product && product.category)) score += 15;
-    if (_safeStr(product && product.barcode)) score += 10;
     if (product && Number(product.price) > 0) score += 10;
     if (product && Number(product.qty) > 0) score += 5;
     return score;
@@ -3582,12 +3581,11 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     };
 
     const visibilityScore = Math.max(0, Math.min(100, Math.round(
-      (counts.image / total) * 30 +
-      (counts.description / total) * 25 +
+      (counts.image / total) * 35 +
+      (counts.description / total) * 35 +
       (counts.category / total) * 15 +
-      (counts.barcode / total) * 10 +
       (counts.price / total) * 10 +
-      (counts.stock / total) * 10
+      (counts.stock / total) * 5
     )));
 
     const ranked = products.map(function(p) {
@@ -3595,7 +3593,6 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       if (!(p.image || p.image2)) missing.push('image');
       if (_safeStr(p.description).length < 24) missing.push('description');
       if (!_safeStr(p.category)) missing.push('category');
-      if (!_safeStr(p.barcode)) missing.push('barcode');
       if (!(Number(p.price) > 0)) missing.push('price');
       return { product: p, score: _completenessScore(p), missing: missing };
     }).sort(function(a, b) {
