@@ -78,12 +78,10 @@ function initApp() {
   })();
 
   // ── Sentry initialisation ────────────────────────────────────────────────
-  // Replace YOUR_SENTRY_DSN with the DSN from your Sentry project settings.
-  // The DSN is public-safe — it only lets data IN, never exposes your data.
-  // Get it at: sentry.io → Your Project → Settings → Client Keys (DSN)
+  // DSN is public-safe — it only allows data IN, never exposes your data.
   if (typeof Sentry !== 'undefined') {
     Sentry.init({
-      dsn: 'YOUR_SENTRY_DSN',
+      dsn: 'https://ff53979943e0f2a3ac927b695658968c@o4511099920449536.ingest.de.sentry.io/4511099927134288',
       release: 'quickshop@4.48',
       environment: IS_PROD ? 'production' : 'development',
       // Capture 100% of errors, 5% of performance traces (free tier safe)
@@ -329,6 +327,7 @@ function initApp() {
   let isSyncInProgress = false;
   let _lastSyncAt = 0; // timestamp of the last completed syncCloudData call
   let isSaveStateSyncing = false;
+  let _lsPersistTimer = null;
   let editingNoteId = null;
   let editingProductId = null;
   let _pendingResetEmail = '';
@@ -768,11 +767,39 @@ function handleTouchEnd() {
     } catch (e) { errlog('getUserProfile', e); return null; }
   }
 
-  async function saveState() {
-    const localKey = currentUser ? LOCAL_KEY_PREFIX + currentUser.id : LOCAL_KEY_PREFIX + 'anon';
+  // ── Local persistence helpers ─────────────────────────────────────────────
+  // Problem: JSON.stringify(state) on every sell/restock blocks the main thread
+  // because the full state object (products + sales + logs) can be 100–200 KB+
+  // on a busy store. On low-end Android this causes visible frame drops during
+  // the sell animation.
+  //
+  // Fix: hot-path mutations call _scheduleLocalPersist() which debounces the
+  // write 80 ms. Rapid back-to-back sells (POS mode) coalesce into one write.
+  // On page hide / pagehide we flush immediately so data is never lost on
+  // sudden app switch or system kill.
+  //
+  // _flushLocalState() is the single source of truth for the actual write —
+  // saveState() calls it directly so it can cancel any pending debounce and
+  // write now (the caller already yielded to the event loop via async/await).
+
+  function _getLocalKey() {
+    return currentUser ? LOCAL_KEY_PREFIX + currentUser.id : LOCAL_KEY_PREFIX + 'anon';
+  }
+
+  function _flushLocalState() {
+    if (_lsPersistTimer) { clearTimeout(_lsPersistTimer); _lsPersistTimer = null; }
     try {
-      localStorage.setItem(localKey, JSON.stringify({...state, lastSync: Date.now()}));
-    } catch (e) { errlog('local save failed', e); toast('Failed to save data locally!', 'error'); }
+      localStorage.setItem(_getLocalKey(), JSON.stringify({...state, lastSync: Date.now()}));
+    } catch (e) { errlog('local flush failed', e); toast('Failed to save data locally!', 'error'); }
+  }
+
+  function _scheduleLocalPersist() {
+    if (_lsPersistTimer) clearTimeout(_lsPersistTimer);
+    _lsPersistTimer = setTimeout(_flushLocalState, 80);
+  }
+
+  async function saveState() {
+    _flushLocalState(); // cancels any pending debounce, writes now
     if (!currentUser || !getClient() || !navigator.onLine) return;
     if (isSaveStateSyncing) return;
     isSaveStateSyncing = true;
@@ -899,6 +926,28 @@ function handleTouchEnd() {
     initAppUI();
   }
 
+  // ── fetchAllRows ──────────────────────────────────────────────────────────
+  // Supabase silently caps every query at 1 000 rows. For tables that can grow
+  // beyond that (products, notes) we must page through with .range() until we
+  // get back fewer rows than the page size, then concat.
+  // Usage: await fetchAllRows(supabase.from('products').select('*').eq('user_id', uid))
+  // The builder is cloned per page via .range() — the original chain is reused
+  // as a template (Supabase JS builders are immutable, each .range() returns a
+  // new builder).
+  async function fetchAllRows(baseQuery, pageSize = 1000) {
+    let all = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await baseQuery.range(from, from + pageSize - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      all = all.concat(data);
+      if (data.length < pageSize) break; // last page
+      from += pageSize;
+    }
+    return all;
+  }
+
   async function syncCloudData(user) {
     if (!user || !getClient() || !navigator.onLine) {
       if (!navigator.onLine) log('Offline, skipping cloud sync.');
@@ -910,15 +959,17 @@ function handleTouchEnd() {
     try {
       if (window.qsdb && window.qsdb.syncPendingToSupabase) await window.qsdb.syncPendingToSupabase();
       const supabase = getClient();
-      const [productsRes, salesRes, notesRes, categoriesRes, logsRes] = await Promise.all([
-        supabase.from('products').select('*').eq('user_id', user.id),
+      // products and notes use fetchAllRows to page past Supabase's 1 000-row
+      // silent cap. sales/categories/logs are range-bounded or small by design.
+      const [cloudProductRows, salesRes, cloudNoteRows, categoriesRes, logsRes] = await Promise.all([
+        fetchAllRows(supabase.from('products').select('*').eq('user_id', user.id)),
         supabase.from('sales').select('*').eq('user_id', user.id)
           .gte('sale_date', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()),
-        supabase.from('notes').select('*').eq('user_id', user.id),
+        fetchAllRows(supabase.from('notes').select('*').eq('user_id', user.id)),
         supabase.from('categories').select('*').eq('user_id', user.id),
         supabase.from('audit_logs').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(200)
       ]);
-      const cloudProducts = (productsRes.data || []).map(p => ({
+      const cloudProducts = (cloudProductRows || []).map(p => ({
         id: p.id, name: p.name, barcode: p.barcode, price: p.price, cost: p.cost, qty: p.qty,
         category: p.category || 'Others', image: p.image_url, image2: p.image_url2 || null, icon: p.icon,
         description: p.description || null,
@@ -933,7 +984,7 @@ function handleTouchEnd() {
         category: s.category || null,
         paymentMethod: s.payment_method || null
       }));
-      const cloudNotes = (notesRes.data || []).map(n => ({
+      const cloudNotes = (cloudNoteRows || []).map(n => ({
         id: n.id, title: n.title, content: n.content, ts: new Date(n.created_at).getTime()
       }));
       const cloudCategories = (categoriesRes.data || []).map(c => c.name);
@@ -1965,11 +2016,10 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     // Optimistic: render immediately, sync in background
     renderInventory(); renderProducts(); renderDashboard();
     toast(`Added ${qty} to ${p.name}`);
-    // Persist to localStorage immediately before async queue
-    try {
-      const localKey = currentUser ? LOCAL_KEY_PREFIX + currentUser.id : LOCAL_KEY_PREFIX + 'anon';
-      localStorage.setItem(localKey, JSON.stringify({...state, lastSync: Date.now()}));
-    } catch (e) { errlog('restock localStorage failed', e); }
+    // Schedule debounced write — flushes within 80 ms, coalesces rapid restocks.
+    // pagehide / visibilitychange=hidden will force-flush immediately if the
+    // user switches apps before the timer fires.
+    _scheduleLocalPersist();
 
     if (window.qsdb && window.qsdb.addPendingChange) {
       try {
@@ -2003,14 +2053,12 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     renderInventory(); renderProducts(); renderDashboard();
     toast(`Sold ${qty} × ${p.name}`);
 
-    // ── Persist to localStorage FIRST ────────────────────────────────
-    // saveState() writes to localStorage synchronously before any async
-    // IndexedDB or Supabase calls. This guarantees the sale survives a
-    // reload or pull-to-refresh even if the queue fails.
-    try {
-      const localKey = currentUser ? LOCAL_KEY_PREFIX + currentUser.id : LOCAL_KEY_PREFIX + 'anon';
-      localStorage.setItem(localKey, JSON.stringify({...state, lastSync: Date.now()}));
-    } catch (e) { errlog('sell localStorage failed', e); }
+    // ── Persist to localStorage (debounced, off hot path) ────────────
+    // _scheduleLocalPersist() defers JSON.stringify(state) 80 ms so the
+    // sell animation is never blocked by serializing 100 KB+ of state.
+    // pagehide / visibilitychange=hidden force-flushes immediately, so
+    // a sudden app switch never loses the sale.
+    _scheduleLocalPersist();
 
     // ── Queue to IndexedDB for cloud sync (non-blocking) ─────────────
     if (window.qsdb && window.qsdb.addPendingChange) {
@@ -6874,6 +6922,12 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
   document.addEventListener('touchmove', handleTouchMove, { passive: true });
   document.addEventListener('touchend', handleTouchEnd, { passive: true });
 
+  // ── Flush pending local state write on page hide ──────────────────────────
+  // If _scheduleLocalPersist() fired but the 80 ms timer hasn't elapsed yet,
+  // force a synchronous write now. Mobile browsers kill the page without
+  // firing beforeunload, but pagehide and visibilitychange=hidden are reliable.
+  window.addEventListener('pagehide', _flushLocalState);
+
   // ── Visibility change: suppress full reload UX on short background trips ──
   // When the vendor minimises the app to check WhatsApp and returns, the
   // browser fires visibilitychange. If the last sync was recent (< 5 min)
@@ -6881,7 +6935,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
   // If the tab was discarded and reloaded (cold resume), _lastSyncAt is 0
   // so the threshold is not met and a normal sync runs.
   document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState !== 'visible') return;
+    if (document.visibilityState === 'hidden') { _flushLocalState(); return; }
     const SYNC_THROTTLE_MS = 5 * 60 * 1000; // 5 minutes
     if (Date.now() - _lastSyncAt < SYNC_THROTTLE_MS) return; // recent sync — skip
     const user = currentUser;

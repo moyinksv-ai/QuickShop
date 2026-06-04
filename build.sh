@@ -73,12 +73,20 @@ else
   sed -i "s|%%GEMINI_API_KEY%%||g" supabase-config.js
 fi
 
+# ── Inject BUILD_HASH into sw.js ──────────────────────────────────────────────
+# Ties the SW cache name to the exact deploy so stale assets are evicted on
+# every Vercel deployment. Uses git short hash when available, falls back to
+# Unix timestamp (always available in Vercel's build environment).
+BUILD_HASH=$(git rev-parse --short HEAD 2>/dev/null || date +%s)
+echo "[build] Injecting BUILD_HASH=${BUILD_HASH} into sw.js..."
+sed -i "s|%%BUILD_HASH%%|${BUILD_HASH}|g" sw.js
+
 # ── Verification ──────────────────────────────────────────────────────────────
 # Match only %%PLACEHOLDER%% patterns (uppercase + underscores between %%).
 # This avoids false positives from literal '%%' strings in JS validation code.
-if grep -qE '%%[A-Z_]+%%' supabase-config.js; then
-  echo "[build] ERROR: supabase-config.js still contains unreplaced placeholders:" >&2
-  grep -nE '%%[A-Z_]+%%' supabase-config.js >&2
+if grep -qE '%%[A-Z_]+%%' supabase-config.js sw.js; then
+  echo "[build] ERROR: unreplaced placeholders found:" >&2
+  grep -nE '%%[A-Z_]+%%' supabase-config.js sw.js >&2
   exit 1
 fi
 
