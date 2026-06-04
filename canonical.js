@@ -339,6 +339,20 @@
       });
 
       if (error) errlog('canonical registerListing error', error);
+
+      // ── Pipe image_url into the listing ─────────────────────────────────
+      // The RPC doesn't accept image_url (to avoid schema coupling), so we
+      // update it separately. The DB trigger then propagates it to the
+      // canonical product when canonical.image_url is still null.
+      // product.image is the internal field name; image_url is the DB column.
+      const imageVal = product.image || null;
+      if (!error && imageVal) {
+        await sb
+          .from('qs_vendor_listings')
+          .update({ image_url: imageVal })
+          .eq('vendor_store_id', u.id)
+          .eq('local_product_id', product.id);
+      }
     } catch (e) {
       errlog('canonical registerListing exception', e);
     }

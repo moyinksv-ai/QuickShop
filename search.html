@@ -2,28 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <!--
-    CONTENT SECURITY POLICY
-    ─────────────────────────────────────────────────────────────────────────
-    • default-src 'self'        — Block all unlisted origins by default
-    • script-src                — self + jsdelivr (Supabase) + inline IIFE hash
-    • connect-src               — Supabase only (REST + WebSocket realtime)
-    • img-src                   — Supabase storage + data URIs + blobs
-    • style-src 'unsafe-inline' — Inline styles used throughout; no nonce in use
-    • object-src 'none'         — Block Flash / plugins entirely
-    • base-uri 'self'           — Prevent <base> tag hijacking
-    • form-action 'self'        — Prevent form exfiltration
-    • frame-src 'none'          — No iframes needed
-    • worker-src 'self'         — No workers on this page, belt-and-suspenders
-    NOTE: type="application/ld+json" scripts are not executable and are not
-    governed by script-src. The one executable inline script (search IIFE)
-    is permitted via its exact SHA-256 hash.
-    SRI: integrity= hash verified and applied for Supabase CDN.
-  -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self'
-               'sha256-3qGCuD5e0SnHl+RwkVhHaVl4+WVLIvE5faKtU00UIfI='
+               'sha256-f3cMOBGalGSqBzCwGA4QQ0qs20meYmlCYSu9n7NbOx4='
                https://cdn.jsdelivr.net;
     connect-src 'self'
                 https://*.supabase.co
@@ -43,22 +25,18 @@
   " />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content">
 
-  <!-- ── SEO defaults (updated dynamically per state) ── -->
   <title>QuickShop — Find Products From Vendors Near You</title>
   <meta name="description" content="Search perfumes, fashion, electronics and more from real vendors on QuickShop. Compare prices, see who has stock, order on WhatsApp.">
   <meta name="robots" content="index, follow">
 
-  <!-- Open Graph -->
   <meta property="og:type"        content="website">
   <meta property="og:site_name"   content="QuickShop">
   <meta property="og:title"       content="QuickShop — Find Products From Vendors Near You">
   <meta property="og:description" content="Compare prices from real vendors. Order directly on WhatsApp.">
   <meta property="og:url"         content="https://quickshopper.vercel.app/search.html">
 
-  <!-- Canonical -->
   <link rel="canonical" href="https://quickshopper.vercel.app/search.html">
 
-  <!-- JSON-LD: SearchAction (for Google Sitelinks Searchbox) -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -79,11 +57,10 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    /* ── Tokens — same family as landing ─────────────────────────────────── */
     :root {
       --green:    #22c55e;
       --green-d:  #4ade80;
-      --green-bg: rgba(34,197,94,0.08);
+      --green-bg: rgba(34,197,94,0.10);
       --bg:       #0a0a0f;
       --surface:  #111118;
       --lift:     #18181f;
@@ -93,7 +70,7 @@
       --muted:    rgba(236,236,241,0.44);
       --dim:      rgba(236,236,241,0.22);
       --accent:   #6366f1;
-      --px:       clamp(20px, 5vw, 80px);
+      --px:       clamp(16px, 5vw, 80px);
     }
 
     html { background: var(--bg); }
@@ -103,43 +80,30 @@
       min-height: 100dvh; -webkit-font-smoothing: antialiased;
     }
     ::-webkit-scrollbar { width: 0; background: transparent; }
+    [hidden] { display: none !important; }
 
-    /* ── Shell ────────────────────────────────────────────────────────────── */
-    .qs-shell {
-      width: 100%;
-      padding-bottom: 72px; min-height: 100dvh;
-    }
+    /* ── Shell ─────────────────────────────────────────────────────────────── */
+    .qs-shell { width: 100%; padding-bottom: 72px; min-height: 100dvh; }
     @media (min-width: 900px) {
       .qs-shell {
         display: grid;
         grid-template-columns: 280px 1fr;
-        grid-template-areas:
-          "header header"
-          "sidebar main";
+        grid-template-areas: "header header" "sidebar main";
         padding-bottom: 0;
       }
     }
-    @media (min-width: 1200px) {
-      .qs-shell { grid-template-columns: 320px 1fr; }
-    }
-    @media (min-width: 1600px) {
-      .qs-shell { grid-template-columns: 360px 1fr; }
-    }
+    @media (min-width: 1200px) { .qs-shell { grid-template-columns: 320px 1fr; } }
+    @media (min-width: 1600px) { .qs-shell { grid-template-columns: 360px 1fr; } }
 
-    /* ── Header ───────────────────────────────────────────────────────────── */
+    /* ── Header ────────────────────────────────────────────────────────────── */
     .qs-header {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 0 var(--px);
-      height: 60px;
+      padding: 0 var(--px); height: 60px;
       background: var(--bg); border-bottom: 1px solid var(--border);
-      position: sticky; top: 0; z-index: 200;
-      grid-area: header;
+      position: sticky; top: 0; z-index: 200; grid-area: header;
     }
     .qs-logo { display: flex; align-items: center; gap: 9px; text-decoration: none; }
-    .qs-logo-mark {
-      width: 26px; height: 26px; border-radius: 6px;
-      overflow: hidden; flex-shrink: 0; display: block;
-    }
+    .qs-logo-mark { width: 26px; height: 26px; border-radius: 6px; overflow: hidden; flex-shrink: 0; }
     .qs-logo-mark img { width:100%; height:100%; display:block; object-fit:cover; }
     .qs-logo-text { font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
     .qs-header-cta {
@@ -150,33 +114,25 @@
     }
     .qs-header-cta:hover { opacity: .85; }
 
-    /* ── Sidebar (desktop search + cats) ─────────────────────────────────── */
+    /* ── Sidebar ───────────────────────────────────────────────────────────── */
     @media (min-width: 900px) {
       .qs-sidebar {
-        grid-area: sidebar;
-        border-right: 1px solid var(--border);
-        padding: 32px 28px;
-        position: sticky; top: 60px;
-        height: calc(100dvh - 60px);
-        overflow-y: auto; scrollbar-width: none;
+        grid-area: sidebar; border-right: 1px solid var(--border);
+        padding: 32px 28px; position: sticky; top: 60px;
+        height: calc(100dvh - 60px); overflow-y: auto; scrollbar-width: none;
         display: flex; flex-direction: column; gap: 28px;
       }
       .qs-sidebar::-webkit-scrollbar { display: none; }
     }
+    @media (max-width: 899px) { .qs-sidebar { border-bottom: 1px solid var(--border); padding-bottom: 4px; } }
 
-    /* ── Sidebar mobile separator ────────────────────────────────────────────────────────────────── */
-    @media (max-width: 899px) {
-      .qs-sidebar { border-bottom: 1px solid var(--border); padding-bottom: 4px; }
-    }
-
-    /* ── Search bar ───────────────────────────────────────────────────────── */
+    /* ── Search bar ────────────────────────────────────────────────────────── */
     .search-wrap { padding: 16px var(--px) 12px; }
     @media (min-width: 900px) { .search-wrap { padding: 0; } }
     .search-box {
       display: flex; align-items: center; gap: 10px;
       background: var(--surface); border: 1px solid var(--border);
-      border-radius: 10px; padding: 0 14px;
-      transition: border-color .12s;
+      border-radius: 10px; padding: 0 14px; transition: border-color .12s;
     }
     .search-box:focus-within { border-color: var(--accent); }
     .search-icon { font-size: 15px; color: var(--muted); flex-shrink: 0; }
@@ -190,94 +146,192 @@
       color: var(--muted); font-size: 16px; cursor: pointer; padding: 4px; line-height: 1;
     }
 
-    /* ── Category chips (sidebar on desktop, grid on mobile) ─────────────── */
+    /* ── Category tiles ────────────────────────────────────────────────────── */
     .search-cats-label {
       font-size: 10px; font-weight: 700; letter-spacing: 1.8px;
-      text-transform: uppercase; color: var(--dim);
-      display: none;
+      text-transform: uppercase; color: var(--dim); display: none;
     }
     @media (min-width: 900px) { .search-cats-label { display: block; } }
 
     .cat-grid {
-      display: grid; grid-template-columns: repeat(4, 1fr);
-      gap: 8px; margin-bottom: 0; padding: 4px var(--px) 16px;
+      display: flex; flex-wrap: nowrap; overflow-x: auto;
+      gap: 7px; padding: 4px var(--px) 14px;
+      scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
     }
-    @media (min-width: 900px) {
-      .cat-grid {
-        display: flex; flex-direction: column; gap: 2px; padding: 0;
-      }
-    }
+    .cat-grid::-webkit-scrollbar { display: none; }
+    @media (min-width: 900px) { .cat-grid { display: flex; flex-direction: column; gap: 2px; padding: 0; overflow: visible; } }
+
     .cat-tile {
-      display: flex; flex-direction: column; align-items: center;
-      gap: 6px; padding: 12px 6px;
+      flex: 0 0 auto; scroll-snap-align: start;
+      display: flex; flex-direction: row; align-items: center;
+      gap: 7px; padding: 8px 14px 8px 10px;
       background: var(--surface); border: 1px solid var(--border);
-      border-radius: 10px; cursor: pointer; text-decoration: none;
-      transition: background .12s, border-color .12s;
+      border-radius: 20px; cursor: pointer; text-decoration: none;
+      transition: background .12s, border-color .12s; white-space: nowrap;
     }
     @media (min-width: 900px) {
-      .cat-tile {
-        flex-direction: row; gap: 12px;
-        padding: 10px 14px; border-radius: 8px;
-        background: transparent; border-color: transparent;
-        align-items: center;
-      }
+      .cat-tile { flex: unset; flex-direction: row; gap: 12px; padding: 10px 14px; border-radius: 8px; background: transparent; border-color: transparent; }
     }
-    .cat-tile:hover, .cat-tile:active {
-      background: var(--lift); border-color: var(--border);
-    }
-    .cat-tile .cat-emoji {
-      width: 32px; height: 32px; border-radius: 8px;
+    .cat-tile:hover, .cat-tile.active { background: var(--lift); border-color: var(--border); }
+    .cat-tile.active .cat-emoji { background: var(--green-bg); border-color: rgba(34,197,94,0.3); }
+    .cat-emoji {
+      width: 24px; height: 24px; border-radius: 6px;
       background: var(--lift); border: 1px solid var(--border);
       display: flex; align-items: center; justify-content: center;
-      font-size: 11px; font-weight: 800; color: var(--green);
-      letter-spacing: -0.5px; flex-shrink: 0;
+      font-size: 13px; flex-shrink: 0;
+      transition: background .12s, border-color .12s;
     }
-    @media (min-width: 900px) { .cat-tile .cat-emoji { width: 28px; height: 28px; } }
-    .cat-tile .cat-name {
-      font-size: 11px; font-weight: 600; color: var(--text);
-      text-align: center; line-height: 1.2;
-    }
-    @media (min-width: 900px) {
-      .cat-tile .cat-name { font-size: 13px; text-align: left; }
-    }
+    @media (min-width: 900px) { .cat-emoji { width: 28px; height: 28px; font-size: 14px; } }
+    .cat-name { font-size: 12px; font-weight: 600; color: var(--text); line-height: 1; }
+    @media (min-width: 900px) { .cat-name { font-size: 13px; } }
 
-    /* ── States ───────────────────────────────────────────────────────────── */
-    [hidden] { display: none !important; }
-
-    /* ── Main column (desktop) ────────────────────────────────────────────── */
+    /* ── Main column ───────────────────────────────────────────────────────── */
     @media (min-width: 900px) {
       .qs-main { grid-area: main; padding: 40px clamp(32px, 4vw, 72px); min-height: calc(100dvh - 60px); }
     }
 
-    /* ── Landing state ────────────────────────────────────────────────────── */
-    #state-landing { padding: 28px var(--px) 0; }
+    /* ── Landing state ─────────────────────────────────────────────────────── */
+    #state-landing { padding: 16px var(--px) 0; }
     @media (min-width: 900px) { #state-landing { padding: 0; } }
-
-    .landing-hero { margin-bottom: 32px; }
-    .landing-hero h1 {
-      font-size: clamp(28px, 4vw, 48px);
-      font-weight: 800; line-height: 1.08;
-      letter-spacing: -0.04em; margin-bottom: 14px;
-    }
-    .landing-hero h1 span { color: var(--green); }
-    .landing-hero p { font-size: 15px; color: var(--muted); line-height: 1.7; max-width: 50ch; }
 
     .section-label {
       font-size: 11px; font-weight: 700; letter-spacing: 2px;
       text-transform: uppercase; color: var(--accent);
-      margin-bottom: 12px; margin-top: 36px; display: block;
+      margin-bottom: 12px; margin-top: 32px; display: block;
     }
-    .section-label:first-of-type { margin-top: 0; }
 
-    /* ── Recent grid ──────────────────────────────────────────────────────── */
-    .recent-grid {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px;
+    /* ── Store discovery strip ─────────────────────────────────────────────── */
+    /* Horizontal scroll on mobile, grid on desktop */
+    .stores-strip {
+      display: flex; gap: 10px; overflow-x: auto;
+      padding-bottom: 8px; scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
     }
-    @media (min-width: 640px) { .recent-grid { grid-template-columns: repeat(3, 1fr); gap: 14px; } }
-    @media (min-width: 900px) { .recent-grid { grid-template-columns: repeat(3, 1fr); } }
-    @media (min-width: 1400px) { .recent-grid { grid-template-columns: repeat(4, 1fr); } }
+    .stores-strip::-webkit-scrollbar { display: none; }
+    @media (min-width: 640px) {
+      .stores-strip { display: grid; grid-template-columns: repeat(3, 1fr); overflow: visible; }
+    }
+    @media (min-width: 900px) {
+      .stores-strip { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (min-width: 1300px) {
+      .stores-strip { grid-template-columns: repeat(4, 1fr); }
+    }
 
-    /* ── Loading ──────────────────────────────────────────────────────────── */
+    .store-chip {
+      flex: 0 0 160px; scroll-snap-align: start;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px;
+      display: flex; flex-direction: column; gap: 8px;
+      text-decoration: none; cursor: pointer;
+      transition: border-color .12s, background .12s;
+    }
+    @media (min-width: 640px) { .store-chip { flex: unset; } }
+    .store-chip:hover { border-color: rgba(34,197,94,0.25); background: var(--lift); }
+    .store-chip-top { display: flex; align-items: center; gap: 10px; }
+    .store-chip-avatar {
+      width: 36px; height: 36px; border-radius: 9px; flex-shrink: 0;
+      background: var(--lift); border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 800; color: var(--green);
+      overflow: hidden;
+    }
+    .store-chip-avatar img { width:100%; height:100%; object-fit:cover; display:block; }
+    .store-chip-name {
+      font-size: 13px; font-weight: 700; color: var(--text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .store-chip-tagline {
+      font-size: 11px; color: var(--muted); line-height: 1.4;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .store-chip-count {
+      font-size: 11px; font-weight: 700; color: var(--green);
+      background: var(--green-bg); padding: 2px 8px; border-radius: 4px;
+      align-self: flex-start;
+    }
+
+    /* ── Product grid ──────────────────────────────────────────────────────── */
+    .product-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px;
+    }
+    @media (min-width: 480px) { .product-grid { grid-template-columns: repeat(3, 1fr); gap: 12px; } }
+    @media (min-width: 900px) { .product-grid { grid-template-columns: repeat(3, 1fr); gap: 14px; } }
+    @media (min-width: 1300px) { .product-grid { grid-template-columns: repeat(4, 1fr); } }
+
+    /* ── Product card ──────────────────────────────────────────────────────── */
+    .product-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; overflow: hidden; cursor: pointer;
+      transition: border-color .15s, transform .15s;
+      display: flex; flex-direction: column;
+      text-decoration: none;
+    }
+    .product-card:hover { border-color: rgba(34,197,94,0.3); transform: translateY(-2px); }
+    .product-card:active { transform: translateY(0); }
+
+    /* Image zone */
+    .pc-image {
+      width: 100%; aspect-ratio: 1 / 1;
+      background: var(--lift); overflow: hidden; position: relative;
+      flex-shrink: 0;
+    }
+    .pc-image img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+      transition: opacity .2s;
+    }
+    .pc-image img[data-loading] { opacity: 0; }
+    /* No-image placeholder */
+    .pc-image-placeholder {
+      width: 100%; height: 100%;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 6px;
+      background: linear-gradient(145deg, var(--lift) 0%, #0e0e16 100%);
+      font-size: clamp(32px, 7vw, 44px);
+    }
+    .pc-image-placeholder span {
+      font-size: 10px; font-weight: 600; letter-spacing: 1px;
+      text-transform: uppercase; color: var(--dim); opacity: 0.7;
+    }
+
+    /* ── Product detail image ────────────────────────────────────────────── */
+    .detail-image-wrap {
+      width: 100%; aspect-ratio: 4/3; max-height: 300px;
+      border-radius: 14px; overflow: hidden; margin-bottom: 20px;
+      background: var(--lift); border: 1px solid var(--border);
+    }
+    .detail-image-wrap img { width:100%; height:100%; object-fit:cover; display:block; }
+    @media (min-width: 900px) { .detail-image-wrap { max-height: 340px; } }
+
+    /* Subtle shimmer while image loads */
+    .pc-image-shimmer {
+      position: absolute; inset: 0;
+      background: linear-gradient(90deg, var(--lift) 25%, var(--surface) 50%, var(--lift) 75%);
+      background-size: 200% 100%;
+      animation: skel-shimmer 1.4s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    /* Text zone */
+    .pc-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
+    .pc-category {
+      font-size: 9px; font-weight: 700; letter-spacing: 1.2px;
+      text-transform: uppercase; color: var(--dim);
+    }
+    .pc-name {
+      font-size: 12px; font-weight: 700; color: var(--text);
+      line-height: 1.35; flex: 1;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .pc-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; gap: 4px; }
+    .pc-price { font-size: 13px; font-weight: 800; color: var(--green); letter-spacing: -0.3px; }
+    .pc-stores {
+      font-size: 10px; font-weight: 700; color: var(--dim);
+      background: var(--border2); padding: 2px 6px; border-radius: 4px;
+      white-space: nowrap; flex-shrink: 0;
+    }
+
+    /* ── Loading ───────────────────────────────────────────────────────────── */
     #state-loading {
       padding: 80px 20px; display: flex;
       flex-direction: column; align-items: center; gap: 14px;
@@ -290,130 +344,56 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     .loading-label { font-size: 13px; color: var(--muted); }
 
-    /* ── Results ──────────────────────────────────────────────────────────── */
+    /* ── Results state ─────────────────────────────────────────────────────── */
     #state-results { padding: 20px var(--px) 0; }
     @media (min-width: 900px) { #state-results { padding: 0; } }
-    .results-heading {
-      font-size: 13px; color: var(--muted); margin-bottom: 20px;
-    }
+    .results-heading { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
     .results-heading strong { color: var(--text); }
-    .results-grid {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
-    }
-    @media (min-width: 640px) { .results-grid { grid-template-columns: repeat(3, 1fr); gap: 12px; } }
-    @media (min-width: 900px) { .results-grid { grid-template-columns: repeat(3, 1fr); gap: 14px; } }
-    @media (min-width: 1300px) { .results-grid { grid-template-columns: repeat(4, 1fr); } }
 
-    /* ── Product card ─────────────────────────────────────────────────────── */
-    .product-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 12px; padding: 16px; cursor: pointer;
-      transition: border-color .12s, background .12s;
-      display: flex; flex-direction: column; gap: 6px;
-      text-decoration: none; min-height: 116px;
-    }
-    .product-card:hover, .product-card:active {
-      border-color: rgba(34,197,94,0.3); background: var(--lift);
-    }
-    .product-card .pc-category {
-      font-size: 9.5px; font-weight: 700; letter-spacing: 1.2px;
-      text-transform: uppercase; color: var(--dim);
-    }
-    .product-card .pc-name {
-      font-size: 13px; font-weight: 700; color: var(--text);
-      line-height: 1.35;
-      display: -webkit-box; -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical; overflow: hidden;
-      min-height: 2.7em; flex: 1;
-    }
-    .product-card .pc-footer {
-      display: flex; align-items: center;
-      justify-content: space-between; margin-top: auto;
-    }
-    .pc-stores {
-      font-size: 11px; font-weight: 700; color: var(--green);
-      background: var(--green-bg); padding: 3px 8px;
-      border-radius: 4px; letter-spacing: -0.2px;
-    }
-    .pc-sim { font-size: 10px; color: var(--dim); }
-
-    /* ── Product detail ───────────────────────────────────────────────────── */
+    /* ── Product detail ────────────────────────────────────────────────────── */
     #state-detail { padding: 0 var(--px); }
     @media (min-width: 900px) { #state-detail { padding: 0; max-width: 640px; } }
     .detail-back {
       display: flex; align-items: center; gap: 6px;
-      font-size: 13px; font-weight: 600; color: var(--muted);
-      cursor: pointer; padding: 20px 0 16px;
-      background: none; border: none; width: 100%;
-      text-align: left; transition: color .12s;
+      font-size: 13px; font-weight: 600; color: var(--dim);
+      cursor: pointer; padding: 14px 0 12px;
+      background: none; border: none; width: 100%; text-align: left; transition: color .12s;
     }
     .detail-back:hover { color: var(--text); }
-    .detail-category {
-      font-size: 10px; font-weight: 700; letter-spacing: 1.6px;
-      text-transform: uppercase; color: var(--dim); margin-bottom: 8px;
-    }
-    .detail-name {
-      font-size: clamp(24px, 3vw, 36px); font-weight: 800;
-      letter-spacing: -0.04em; line-height: 1.1; margin-bottom: 8px;
-    }
+    .detail-name { font-size: clamp(24px, 3vw, 36px); font-weight: 800; letter-spacing: -0.04em; line-height: 1.1; margin-bottom: 8px; }
     .detail-meta { font-size: 14px; color: var(--muted); margin-bottom: 28px; }
     .detail-meta span { color: var(--green); font-weight: 700; }
-    .detail-section-label {
-      font-size: 10px; font-weight: 700; letter-spacing: 1.8px;
-      text-transform: uppercase; color: var(--dim); margin-bottom: 12px;
-    }
+    .detail-section-label { font-size: 10px; font-weight: 700; letter-spacing: 1.8px; text-transform: uppercase; color: var(--dim); margin-bottom: 12px; }
     .vendor-list { display: flex; flex-direction: column; gap: 10px; }
     .vendor-card {
       background: var(--surface); border: 1px solid var(--border);
       border-radius: 12px; padding: 16px 18px;
-      display: flex; align-items: center; gap: 14px;
-      transition: border-color .12s;
+      display: flex; align-items: center; gap: 14px; transition: border-color .12s;
     }
     .vendor-card:hover { border-color: rgba(34,197,94,0.25); }
     .vc-avatar {
       width: 38px; height: 38px; background: var(--lift);
       border: 1px solid var(--border); border-radius: 9px;
       display: flex; align-items: center; justify-content: center;
-      font-size: 14px; font-weight: 800; color: var(--green);
-      flex-shrink: 0; text-transform: uppercase;
+      font-size: 14px; font-weight: 800; color: var(--green); flex-shrink: 0; text-transform: uppercase;
     }
     .vc-info { flex: 1; min-width: 0; }
-    .vc-store {
-      font-size: 14px; font-weight: 700; color: var(--text);
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .vc-tagline {
-      font-size: 12px; color: var(--muted);
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .vc-price {
-      font-size: 16px; font-weight: 800; color: var(--green);
-      flex-shrink: 0; text-align: right;
-    }
+    .vc-store { font-size: 14px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .vc-tagline { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .vc-price { font-size: 16px; font-weight: 800; color: var(--green); flex-shrink: 0; text-align: right; }
     .vc-view {
       display: block; margin-top: 4px; font-size: 11px; font-weight: 700;
       color: var(--text); background: var(--lift); border: 1px solid var(--border);
-      border-radius: 5px; padding: 4px 10px; text-align: center;
-      text-decoration: none; transition: border-color .12s;
+      border-radius: 5px; padding: 4px 10px; text-align: center; text-decoration: none; transition: border-color .12s;
     }
     .vc-view:hover { border-color: var(--text); }
     .vendor-card.best-price { border-color: rgba(34,197,94,0.3); }
-    .vc-best-badge {
-      font-size: 9.5px; font-weight: 700; color: var(--green);
-      letter-spacing: 1px; text-transform: uppercase; margin-top: 2px;
-    }
+    .vc-best-badge { font-size: 9.5px; font-weight: 700; color: var(--green); letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
 
-    /* ── Empty state ──────────────────────────────────────────────────────── */
-    .empty-state { padding: 64px 20px; text-align: center; }
-    .empty-state .es-icon { font-size: 32px; margin-bottom: 12px; }
-    .empty-state h3 { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
-    .empty-state p { font-size: 13px; color: var(--muted); line-height: 1.6; }
-
-    /* ── Sector browse sections ────────────────────────────────────────── */
+    /* ── Browse results store section ──────────────────────────────────────── */
     .sector-section-label {
       font-size: 10px; font-weight: 700; letter-spacing: 1.6px;
-      text-transform: uppercase; color: var(--dim);
-      margin: 20px 0 12px;
+      text-transform: uppercase; color: var(--dim); margin: 20px 0 12px;
     }
     .sector-section-label:first-child { margin-top: 0; }
     .store-cards-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; }
@@ -421,79 +401,197 @@
       background: var(--surface); border: 1px solid var(--border);
       border-radius: 12px; padding: 16px 18px;
       display: flex; align-items: center; gap: 14px;
-      text-decoration: none; transition: border-color .12s;
-      cursor: pointer;
+      text-decoration: none; transition: border-color .12s; cursor: pointer;
     }
     .store-card:hover { border-color: rgba(34,197,94,0.25); }
     .sc-avatar {
       width: 42px; height: 42px; background: var(--lift);
       border: 1px solid var(--border); border-radius: 10px;
       display: flex; align-items: center; justify-content: center;
-      font-size: 15px; font-weight: 800; color: var(--green);
-      flex-shrink: 0; text-transform: uppercase;
+      font-size: 15px; font-weight: 800; color: var(--green); flex-shrink: 0; text-transform: uppercase;
+      overflow: hidden;
     }
+    .sc-avatar img { width:100%; height:100%; object-fit:cover; display:block; }
     .sc-info { flex: 1; min-width: 0; }
-    .sc-name {
-      font-size: 14px; font-weight: 700; color: var(--text);
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .sc-tagline {
-      font-size: 12px; color: var(--muted); margin-top: 1px;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
+    .sc-name { font-size: 14px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sc-tagline { font-size: 12px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .sc-meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
     .sc-location { font-size: 11px; color: var(--dim); }
-    .sc-delivery {
-      font-size: 10px; font-weight: 700; color: var(--green);
-      background: var(--green-bg); padding: 2px 7px; border-radius: 4px;
-    }
+    .sc-delivery { font-size: 10px; font-weight: 700; color: var(--green); background: var(--green-bg); padding: 2px 7px; border-radius: 4px; }
     .sc-count { font-size: 11px; color: var(--dim); }
     .sc-action {
       font-size: 11px; font-weight: 700; color: var(--text);
       background: var(--lift); border: 1px solid var(--border);
-      border-radius: 5px; padding: 5px 12px; white-space: nowrap;
-      flex-shrink: 0; text-decoration: none; transition: border-color .12s;
+      border-radius: 5px; padding: 5px 12px; white-space: nowrap; flex-shrink: 0;
+      text-decoration: none; transition: border-color .12s;
     }
     .sc-action:hover { border-color: var(--text); }
 
-    /* ── Skeleton ─────────────────────────────────────────────────────────── */
+    /* ── Empty / error states ──────────────────────────────────────────────── */
+    .empty-state { padding: 64px 20px; text-align: center; }
+    .empty-state .es-icon { font-size: 32px; margin-bottom: 12px; }
+    .empty-state h3 { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+    .empty-state p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+    /* ── Skeleton ──────────────────────────────────────────────────────────── */
     @keyframes skel-shimmer {
       0%   { background-position: 200% 0; }
       100% { background-position: -200% 0; }
     }
     .skel {
       background: linear-gradient(90deg, var(--surface) 25%, var(--lift) 50%, var(--surface) 75%);
-      background-size: 200% 100%;
-      animation: skel-shimmer 1.4s ease-in-out infinite; border-radius: 6px;
+      background-size: 200% 100%; animation: skel-shimmer 1.4s ease-in-out infinite; border-radius: 6px;
     }
     .skel-card {
       background: var(--surface); border: 1px solid var(--border);
-      border-radius: 12px; padding: 16px;
-      display: flex; flex-direction: column; gap: 8px;
+      border-radius: 12px; overflow: hidden;
     }
+    .skel-card-img { width: 100%; aspect-ratio: 1/1; }
+    .skel-card-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
 
     /* ── Vendor nudge ──────────────────────────────────────────────────────── */
-    .qs-vendor-nudge {
-      margin-top: 36px; font-size: 13px; color: var(--muted);
-      line-height: 1.7;
+    .see-all-link {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 13px; font-weight: 700; color: var(--green);
+      text-decoration: none; padding: 12px 0 4px;
+      transition: opacity .12s;
     }
+    .see-all-link:hover { opacity: .75; }
+
+    /* All Stores pill — slightly accented */
+    .cat-tile--stores { border-color: rgba(34,197,94,0.2); }
+    .cat-tile--stores .cat-emoji { background: var(--green-bg); border-color: rgba(34,197,94,0.25); }
+    .cat-tile--stores.active,
+    .cat-tile--stores:hover { border-color: rgba(34,197,94,0.35); background: var(--green-bg); }
+
+    /* Stores state */
+    #state-stores { padding: 20px var(--px) 0; }
+    @media (min-width: 900px) { #state-stores { padding: 0; } }
     .qs-vendor-nudge a { color: var(--green); text-decoration: none; font-weight: 600; }
     .qs-vendor-nudge a:hover { text-decoration: underline; }
 
-    /* ── Page fade-in ──────────────────────────────────────────────────────── */
-    @media (prefers-reduced-motion: no-preference) {
-      body { animation: qs-page-in 0.22s ease both; }
+    .load-more-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 100%; margin: 20px 0 8px;
+      padding: 13px; border-radius: 10px;
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); font-size: 13px; font-weight: 700;
+      cursor: pointer; font-family: inherit;
+      transition: background .12s, border-color .12s;
     }
+    .load-more-btn:hover { background: var(--lift); border-color: rgba(255,255,255,0.14); }
+    .load-more-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* ── Page fade-in ──────────────────────────────────────────────────────── */
+    @media (prefers-reduced-motion: no-preference) { body { animation: qs-page-in 0.22s ease both; } }
     @keyframes qs-page-in { from { opacity: 0; } to { opacity: 1; } }
 
-    /* ── Footer ───────────────────────────────────────────────────────────── */
-    .qs-footer {
-      margin-top: 64px; padding: 32px var(--px);
-      border-top: 1px solid var(--border); text-align: center;
-    }
+    /* ── Footer ────────────────────────────────────────────────────────────── */
+    .qs-footer { margin-top: 64px; padding: 32px var(--px); border-top: 1px solid var(--border); text-align: center; }
     @media (min-width: 900px) { .qs-footer { grid-column: 1 / -1; } }
     .qs-footer p { font-size: 12px; color: var(--dim); line-height: 1.9; }
     .qs-footer a { color: var(--green); text-decoration: none; font-weight: 600; }
+
+    /* ── Touch target enforcement (min 44×44 px) ──────────────────────────── */
+    .cat-tile { min-height: 44px; }
+    .detail-back { min-height: 44px; }
+    .vc-view { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+    .sc-action { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+    .load-more-btn { min-height: 44px; }
+    #qs-clear-btn { min-width: 44px; min-height: 44px; }
+
+    /* ── Active / pressed feedback ─────────────────────────────────────────── */
+    .product-card:active { transform: scale(0.975) translateY(0) !important; background: var(--lift); }
+    .cat-tile:active { opacity: 0.72; transform: scale(0.97); }
+    .store-card:active { transform: scale(0.99); }
+    .store-chip:active { transform: scale(0.98); }
+    .detail-back:active { color: var(--text); }
+    .vc-view:active { background: var(--surface); border-color: var(--text); }
+
+    /* ── Detail image shimmer positioning ─────────────────────────────────── */
+    .detail-image-wrap { position: relative; }
+    .detail-image-wrap img[data-loading] { opacity: 0; }
+    .detail-image-wrap img { transition: opacity .22s; }
+
+    /* ── Category load-more button accent ─────────────────────────────────── */
+    #cat-load-more-btn {
+      border-color: rgba(34,197,94,0.25);
+      color: var(--green);
+      margin-top: 12px;
+    }
+    #cat-load-more-btn:hover { background: var(--green-bg); border-color: rgba(34,197,94,0.4); }
+
+    /* ── Option C: Store Directory Card ────────────────────────────────────── */
+    .sdc {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; overflow: hidden;
+      text-decoration: none; cursor: pointer;
+      display: flex; flex-direction: column;
+      transition: border-color .15s, transform .15s;
+    }
+    .sdc:hover { border-color: rgba(34,197,94,0.25); }
+    .sdc:active { transform: scale(0.99); }
+
+    .sdc-header {
+      display: flex; align-items: center; gap: 14px;
+      padding: 16px 18px 12px;
+    }
+    .sdc-avatar {
+      width: 44px; height: 44px; background: var(--lift);
+      border: 1px solid var(--border); border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; font-weight: 800; color: var(--green);
+      flex-shrink: 0; text-transform: uppercase; overflow: hidden;
+    }
+    .sdc-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .sdc-info { flex: 1; min-width: 0; }
+    .sdc-name {
+      font-size: 14px; font-weight: 700; color: var(--text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .sdc-tagline {
+      font-size: 12px; color: var(--muted); margin-top: 1px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .sdc-meta { display: flex; align-items: center; gap: 6px; margin-top: 5px; flex-wrap: wrap; }
+    .sdc-location { font-size: 11px; color: var(--dim); }
+    .sdc-delivery { font-size: 10px; font-weight: 700; color: var(--green); background: var(--green-bg); padding: 2px 7px; border-radius: 4px; }
+    .sdc-count { font-size: 11px; color: var(--dim); }
+    .sdc-action {
+      font-size: 11px; font-weight: 700; color: var(--text);
+      background: var(--lift); border: 1px solid var(--border);
+      border-radius: 5px; padding: 5px 12px; white-space: nowrap; flex-shrink: 0;
+      min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
+      transition: border-color .12s;
+    }
+    .sdc-action:hover { border-color: var(--text); }
+
+    /* Thumbnail strip — 3 equal squares flush along the bottom */
+    .sdc-thumbs {
+      display: flex; gap: 2px;
+      border-top: 1px solid var(--border2);
+    }
+    .sdc-thumb {
+      flex: 1; aspect-ratio: 1 / 1; min-width: 0;
+      background: var(--lift); overflow: hidden;
+    }
+    .sdc-thumb img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+      transition: opacity .18s;
+    }
+    .sdc-thumb-placeholder {
+      width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; background: var(--lift);
+    }
+
+    /* Responsive grid for All Stores directory */
+    @media (min-width: 640px) {
+      #all-stores-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    }
+    @media (min-width: 1100px) {
+      #all-stores-grid { grid-template-columns: repeat(3, 1fr); }
+    }
   </style>
 </head>
 <body>
@@ -510,7 +608,6 @@
 
 <!-- ── Sidebar: search + categories ────────────────────────────────────────── -->
 <aside class="qs-sidebar">
-  <!-- Search (always visible) -->
   <div class="search-wrap">
     <div class="search-box">
       <span class="search-icon">⌕</span>
@@ -526,37 +623,46 @@
       <button id="qs-clear-btn" aria-label="Clear search">✕</button>
     </div>
   </div>
-
-  <!-- Categories -->
   <div>
     <div class="search-cats-label">Categories</div>
     <div class="cat-grid" id="cat-grid">
-      <a class="cat-tile" href="#" data-cat="Fragrance"><span class="cat-emoji">FR</span><span class="cat-name">Fragrance</span></a>
-      <a class="cat-tile" href="#" data-cat="Fashion"><span class="cat-emoji">FA</span><span class="cat-name">Fashion</span></a>
-      <a class="cat-tile" href="#" data-cat="Shoes"><span class="cat-emoji">SH</span><span class="cat-name">Shoes</span></a>
-      <a class="cat-tile" href="#" data-cat="Bags"><span class="cat-emoji">BG</span><span class="cat-name">Bags</span></a>
-      <a class="cat-tile" href="#" data-cat="Beauty"><span class="cat-emoji">BE</span><span class="cat-name">Beauty</span></a>
-      <a class="cat-tile" href="#" data-cat="Electronics"><span class="cat-emoji">EL</span><span class="cat-name">Electronics</span></a>
-      <a class="cat-tile" href="#" data-cat="Food"><span class="cat-emoji">FD</span><span class="cat-name">Food</span></a>
-      <a class="cat-tile" href="#" data-cat="Home"><span class="cat-emoji">HM</span><span class="cat-name">Home</span></a>
+      <a class="cat-tile cat-tile--stores" href="#" data-cat="__stores__"><span class="cat-emoji">🏪</span><span class="cat-name">All Stores</span></a>
+      <a class="cat-tile" href="#" data-cat="Fragrance"><span class="cat-emoji">🌸</span><span class="cat-name">Fragrance</span></a>
+      <a class="cat-tile" href="#" data-cat="Fashion"><span class="cat-emoji">👗</span><span class="cat-name">Fashion</span></a>
+      <a class="cat-tile" href="#" data-cat="Shoes"><span class="cat-emoji">👟</span><span class="cat-name">Shoes</span></a>
+      <a class="cat-tile" href="#" data-cat="Bags"><span class="cat-emoji">👜</span><span class="cat-name">Bags</span></a>
+      <a class="cat-tile" href="#" data-cat="Beauty"><span class="cat-emoji">💄</span><span class="cat-name">Beauty</span></a>
+      <a class="cat-tile" href="#" data-cat="Electronics"><span class="cat-emoji">📱</span><span class="cat-name">Electronics</span></a>
+      <a class="cat-tile" href="#" data-cat="Food"><span class="cat-emoji">🍱</span><span class="cat-name">Food</span></a>
+      <a class="cat-tile" href="#" data-cat="Home"><span class="cat-emoji">🏠</span><span class="cat-name">Home</span></a>
     </div>
   </div>
 </aside>
 
-<!-- ── Main content area ─────────────────────────────────────────────────────── -->
+<!-- ── Main content ──────────────────────────────────────────────────────────── -->
 <main class="qs-main">
 
   <!-- LANDING STATE -->
   <div id="state-landing">
-    <div class="landing-hero">
-      <h1>Every vendor.<br><span>One search.</span></h1>
-      <p>Real products, real prices, from traders near you. Order on WhatsApp — no app, no account needed.</p>
+
+    <!-- Products — immediately visible, newest first -->
+    <div class="product-grid" id="recent-grid"></div>
+    <button class="load-more-btn" id="load-more-btn" hidden>Load more products</button>
+
+    <!-- Store directory — discoverable by scrolling -->
+    <div id="stores-section" hidden>
+      <span class="section-label">Active Stores</span>
+      <div class="store-cards-list" id="stores-strip"></div>
+      <a class="see-all-link" id="see-all-stores-btn" href="#">See all stores →</a>
+      <p class="qs-vendor-nudge">Are you a vendor? <a href="https://quickshopper.vercel.app">List your products free →</a></p>
     </div>
 
-    <div class="section-label" id="recent-label" hidden>Recently added</div>
-    <div class="recent-grid" id="recent-grid"></div>
+  </div>
 
-    <p class="qs-vendor-nudge">Are you a vendor? <a href="https://quickshopper.vercel.app">List your products free</a> — buyers are already searching.</p>
+  <!-- ALL STORES STATE -->
+  <div id="state-stores" hidden>
+    <p class="results-heading" id="stores-heading"></p>
+    <div class="store-cards-list" id="all-stores-grid"></div>
   </div>
 
   <!-- LOADING STATE -->
@@ -574,21 +680,20 @@
     </div>
     <div id="products-section">
       <div class="sector-section-label" id="products-section-label" hidden></div>
-      <div class="results-grid" id="results-grid"></div>
+      <div class="product-grid" id="results-grid"></div>
     </div>
   </div>
 
   <!-- PRODUCT DETAIL STATE -->
   <div id="state-detail" hidden>
     <button class="detail-back" id="detail-back">← Back</button>
-    <div class="detail-category" id="detail-category"></div>
+    <div class="detail-image-wrap" id="detail-image-wrap" hidden></div>
     <h1 class="detail-name" id="detail-name"></h1>
     <p class="detail-meta" id="detail-meta"></p>
     <div class="detail-section-label" id="detail-vendors-label"></div>
     <div class="vendor-list" id="vendor-list"></div>
   </div>
 
-  <!-- Footer -->
   <footer class="qs-footer">
     <p>
       Powered by <a href="https://quickshopper.vercel.app">QuickShop</a><br>
@@ -597,10 +702,8 @@
   </footer>
 
 </main>
+</div>
 
-</div><!-- /.qs-shell (mobile only wrapper) -->
-
-<!-- ── Supabase ───────────────────────────────────────────────────────────────── -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.105.4" integrity="sha384-4eCDoMN/7A46qQ5Tj0rZ/D2VEolFGNIINDTLAcWZcvhkRSsvTfqNfaBMlRRoGEZ5" crossorigin="anonymous"></script>
 <script src="supabase-config.js"></script>
 
@@ -608,47 +711,55 @@
 (function () {
   'use strict';
 
-  // ── Supabase client ───────────────────────────────────────────────────────
-  // supabase-config.js exposes window.__QS_SUPABASE.client — not window.supabaseConfig.
-  // Reading it here rather than at call-site so every function gets the same ref.
   var sb = (window.__QS_SUPABASE && window.__QS_SUPABASE.client)
-    ? window.__QS_SUPABASE.client
-    : null;
+    ? window.__QS_SUPABASE.client : null;
 
-  if (!sb) {
-    console.error('[QS Market] Supabase client not ready — check supabase-config.js loaded correctly.');
-  }
+  if (!sb) console.error('[QS Market] Supabase client not ready.');
 
-  // ── DOM refs ─────────────────────────────────────────────────────────────
-  var input        = document.getElementById('qs-search-input');
-  var clearBtn     = document.getElementById('qs-clear-btn');
-  var stateLanding = document.getElementById('state-landing');
-  var stateLoading = document.getElementById('state-loading');
-  var stateResults = document.getElementById('state-results');
-  var stateDetail  = document.getElementById('state-detail');
-  var loadingLabel = document.getElementById('loading-label');
-  var resultsGrid  = document.getElementById('results-grid');
-  var resultsHead  = document.getElementById('results-heading');
+  // ── DOM refs ──────────────────────────────────────────────────────────────
+  var input               = document.getElementById('qs-search-input');
+  var clearBtn            = document.getElementById('qs-clear-btn');
+  var stateLanding        = document.getElementById('state-landing');
+  var stateLoading        = document.getElementById('state-loading');
+  var stateResults        = document.getElementById('state-results');
+  var stateDetail         = document.getElementById('state-detail');
+  var loadingLabel        = document.getElementById('loading-label');
+  var resultsGrid         = document.getElementById('results-grid');
+  var resultsHead         = document.getElementById('results-heading');
   var vendorStoresSection = document.getElementById('vendor-stores-section');
   var vendorStoresLabel   = document.getElementById('vendor-stores-label');
   var storeCardsList      = document.getElementById('store-cards-list');
   var productsSectionEl   = document.getElementById('products-section');
-  var productsSectionLabel = document.getElementById('products-section-label');
-  var vendorList   = document.getElementById('vendor-list');
-  var detailBack   = document.getElementById('detail-back');
-  var detailCat    = document.getElementById('detail-category');
-  var detailName   = document.getElementById('detail-name');
-  var detailMeta   = document.getElementById('detail-meta');
-  var detailVLabel = document.getElementById('detail-vendors-label');
-  var catGrid      = document.getElementById('cat-grid');
-  var recentLabel  = document.getElementById('recent-label');
-  var recentGrid   = document.getElementById('recent-grid');
+  var productsSectionLabel= document.getElementById('products-section-label');
+  var vendorList          = document.getElementById('vendor-list');
+  var detailBack          = document.getElementById('detail-back');
+  var detailImageWrap     = document.getElementById('detail-image-wrap');
+  var detailName          = document.getElementById('detail-name');
+  var detailMeta          = document.getElementById('detail-meta');
+  var detailVLabel        = document.getElementById('detail-vendors-label');
+  var storesSection       = document.getElementById('stores-section');
+  var storesStrip         = document.getElementById('stores-strip');
+  var stateStores         = document.getElementById('state-stores');
+  var storesHeading       = document.getElementById('stores-heading');
+  var allStoresGrid       = document.getElementById('all-stores-grid');
+  var seeAllStoresBtn     = document.getElementById('see-all-stores-btn');
+  var recentGrid          = document.getElementById('recent-grid');
+  var loadMoreBtn         = document.getElementById('load-more-btn');
+  var catGrid             = document.getElementById('cat-grid');
 
-  // ── App state ────────────────────────────────────────────────────────────
-  var _lastQuery       = '';
-  var _lastResults     = [];   // search results or category browse results
-  var _currentProduct  = null; // canonical product being viewed
-  var _debounceTimer   = null;
+  // ── App state ─────────────────────────────────────────────────────────────
+  var _lastQuery      = '';
+  var _lastResults    = [];
+  var _currentProduct = null;
+  var _debounceTimer  = null;
+  var _recentOffset   = 0;
+  var _RECENT_PAGE    = 12;
+
+  // Category pagination state
+  var _catName        = '';
+  var _catOffset      = 0;
+  var _CAT_PAGE       = 16;
+  var _catHasMore     = false;
 
   // ── State machine ─────────────────────────────────────────────────────────
   function showState(name) {
@@ -656,35 +767,27 @@
     stateLoading.hidden = name !== 'loading';
     stateResults.hidden = name !== 'results';
     stateDetail.hidden  = name !== 'detail';
+    stateStores.hidden  = name !== 'stores';
   }
 
   // ── URL management ────────────────────────────────────────────────────────
-  // We use pushState so the back button works naturally.
-  function getParams() {
-    return new URLSearchParams(window.location.search);
-  }
+  function getParams() { return new URLSearchParams(window.location.search); }
 
   function navigate(params, replace) {
     var url = params.toString()
       ? window.location.pathname + '?' + params.toString()
       : window.location.pathname;
-    if (replace) {
-      history.replaceState(null, '', url);
-    } else {
-      history.pushState(null, '', url);
-    }
+    if (replace) history.replaceState(null, '', url);
+    else         history.pushState(null, '', url);
     updateSEO(params);
   }
 
   function updateSEO(params) {
-    var q       = params.get('q');
-    var product = params.get('product');
-    var cat     = params.get('cat');
+    var q = params.get('q'), product = params.get('product'), cat = params.get('cat');
     var title, desc, canonical;
-
     if (product && _currentProduct) {
       title     = _currentProduct.display_name + ' — Buy From QuickShop Vendors';
-      desc      = 'Compare prices for ' + _currentProduct.display_name + ' across multiple vendors on QuickShop. Order directly on WhatsApp.';
+      desc      = 'Compare prices for ' + _currentProduct.display_name + ' across vendors on QuickShop.';
       canonical = 'https://quickshopper.vercel.app/search.html?product=' + product;
     } else if (q) {
       title     = '"' + q + '" — QuickShop Product Search';
@@ -692,25 +795,46 @@
       canonical = 'https://quickshopper.vercel.app/search.html?q=' + encodeURIComponent(q);
     } else if (cat) {
       title     = cat + ' — QuickShop Vendors';
-      desc      = 'Browse ' + cat + ' products from QuickShop vendors. Compare prices, order on WhatsApp.';
+      desc      = 'Browse ' + cat + ' products from QuickShop vendors.';
       canonical = 'https://quickshopper.vercel.app/search.html?cat=' + encodeURIComponent(cat);
     } else {
       title     = 'QuickShop — Find Products From Vendors Near You';
       desc      = 'Search perfumes, fashion, electronics and more from real vendors on QuickShop.';
       canonical = 'https://quickshopper.vercel.app/search.html';
     }
-
     document.title = title;
-    var metaDesc = document.querySelector('meta[name="description"]');
-    if (metaDesc) metaDesc.content = desc;
-    var linkCan = document.querySelector('link[rel="canonical"]');
-    if (linkCan) linkCan.href = canonical;
+    var m = document.querySelector('meta[name="description"]');
+    if (m) m.content = desc;
+    var c = document.querySelector('link[rel="canonical"]');
+    if (c) c.href = canonical;
   }
 
-  // ── Currency format ───────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────
   function fmt(price) {
     if (!price && price !== 0) return '';
     return '₦' + Number(price).toLocaleString('en-NG');
+  }
+
+  function escHtml(str) {
+    return String(str || '')
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Batch-fetch listing stats (count + min price) for an array of canonical IDs
+  // Returns { countMap: {id:n}, priceMap: {id:price} }
+  async function fetchListingStats(ids) {
+    var countMap = {}, priceMap = {};
+    if (!ids || !ids.length) return { countMap: countMap, priceMap: priceMap };
+    var res = await sb.from('qs_vendor_listings').select('canonical_id, price').in('canonical_id', ids);
+    if (res.data) {
+      res.data.forEach(function (row) {
+        countMap[row.canonical_id] = (countMap[row.canonical_id] || 0) + 1;
+        var cur = priceMap[row.canonical_id];
+        if (cur === undefined || row.price < cur) priceMap[row.canonical_id] = row.price;
+      });
+    }
+    return { countMap: countMap, priceMap: priceMap };
   }
 
   // ── Skeleton helpers ──────────────────────────────────────────────────────
@@ -719,38 +843,101 @@
     for (var i = 0; i < count; i++) {
       var card = document.createElement('div');
       card.className = 'skel-card';
-      card.innerHTML =
-        '<div class="skel" style="height:12px;width:50%"></div>' +
-        '<div class="skel" style="height:16px;width:85%"></div>' +
-        '<div class="skel" style="height:12px;width:65%"></div>';
+      var img = document.createElement('div');
+      img.className = 'skel-card-img skel';
+      var body = document.createElement('div');
+      body.className = 'skel-card-body';
+      body.innerHTML =
+        '<div class="skel" style="height:10px;width:45%"></div>' +
+        '<div class="skel" style="height:14px;width:85%"></div>' +
+        '<div class="skel" style="height:12px;width:55%"></div>';
+      card.appendChild(img);
+      card.appendChild(body);
       container.appendChild(card);
     }
   }
 
   // ── Render product card ───────────────────────────────────────────────────
+  var CAT_EMOJI = {
+    fragrance:'🌸', fashion:'👗', shoes:'👟', bags:'👜',
+    beauty:'💄', electronics:'📱', food:'🍱', home:'🏠', others:'📦'
+  };
+
   function renderProductCard(item) {
     var card = document.createElement('div');
     card.className = 'product-card';
     card.setAttribute('role', 'button');
     card.setAttribute('tabindex', '0');
 
-    var cat  = item.category ? item.category.toUpperCase() : '';
-    var name = item.display_name || item.name || '';
-    var count = item.vendor_count || 0;
-    var slug  = item.slug || '';
+    var catKey = (item.category || 'others').toLowerCase();
+    var emoji  = CAT_EMOJI[catKey] || '📦';
+    var name   = item.display_name || item.name || '';
+    var count  = item.vendor_count || 0;
+    var price  = item.min_price;
+    var imgUrl = item.image_url;
 
-    card.innerHTML =
-      (cat ? '<div class="pc-category">' + escHtml(cat) + '</div>' : '') +
-      '<div class="pc-name">' + escHtml(name) + '</div>' +
-      '<div class="pc-footer">' +
-        '<span class="pc-stores">' +
-          (count === 1 ? '1 store' : count > 1 ? count + ' stores' : 'New') +
-        '</span>' +
-      '</div>';
+    // ── Image zone ─────────────────────────────────────────────────────
+    var imgZone = document.createElement('div');
+    imgZone.className = 'pc-image';
 
-    function open() {
-      openProduct(item);
+    if (imgUrl && typeof imgUrl === 'string' && imgUrl.startsWith('https://')) {
+      var shimmer = document.createElement('div');
+      shimmer.className = 'pc-image-shimmer';
+      imgZone.appendChild(shimmer);
+
+      var img = document.createElement('img');
+      img.alt = name;
+      img.setAttribute('data-loading', '1');
+      img.src = imgUrl;
+      img.onload = function () {
+        img.removeAttribute('data-loading');
+        if (shimmer.parentNode) shimmer.parentNode.removeChild(shimmer);
+      };
+      img.onerror = function () {
+        imgZone.innerHTML = '<div class="pc-image-placeholder">' + emoji + '<span>' + escHtml((item.category || 'product').toUpperCase()) + '</span></div>';
+      };
+      imgZone.appendChild(img);
+    } else {
+      imgZone.innerHTML = '<div class="pc-image-placeholder">' + emoji + '<span>' + escHtml((item.category || 'product').toUpperCase()) + '</span></div>';
     }
+
+    // ── Text zone ──────────────────────────────────────────────────────
+    var body = document.createElement('div');
+    body.className = 'pc-body';
+
+    if (item.category) {
+      var catEl = document.createElement('div');
+      catEl.className = 'pc-category';
+      catEl.textContent = item.category.toUpperCase();
+      body.appendChild(catEl);
+    }
+
+    var nameEl = document.createElement('div');
+    nameEl.className = 'pc-name';
+    nameEl.textContent = name;
+    body.appendChild(nameEl);
+
+    var footer = document.createElement('div');
+    footer.className = 'pc-footer';
+
+    var priceEl = document.createElement('div');
+    priceEl.className = 'pc-price';
+    if (price !== undefined && price !== null) {
+      priceEl.textContent = (count > 1 ? 'from ' : '') + fmt(price);
+    }
+    footer.appendChild(priceEl);
+
+    var storeEl = document.createElement('div');
+    storeEl.className = 'pc-stores';
+    storeEl.textContent = count === 1 ? '1 store' : count > 1 ? count + ' stores' : 'New';
+    footer.appendChild(storeEl);
+
+    body.appendChild(footer);
+
+    card.appendChild(imgZone);
+    card.appendChild(body);
+
+    function open() { openProduct(item); }
     card.addEventListener('click', open);
     card.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
@@ -759,16 +946,15 @@
     return card;
   }
 
-  // ── Render vendor card ────────────────────────────────────────────────────
+  // ── Render vendor card (product detail) ───────────────────────────────────
   function renderVendorCard(listing, profile, isBest) {
     var card = document.createElement('div');
     card.className = 'vendor-card' + (isBest ? ' best-price' : '');
-
     var storeName = (profile && (profile.business_name || profile.name)) || 'QuickShop Vendor';
     var tagline   = (profile && profile.tagline) || '';
     var initial   = storeName.charAt(0);
-    var storeUrl  = '/?store=' + encodeURIComponent(listing.vendor_store_id);
-
+    var storeUrl  = '/?store=' + encodeURIComponent(listing.vendor_store_id) +
+      (listing.local_product_id ? '&pid=' + encodeURIComponent(listing.local_product_id) : '');
     card.innerHTML =
       '<div class="vc-avatar">' + escHtml(initial) + '</div>' +
       '<div class="vc-info">' +
@@ -780,83 +966,166 @@
         '<div class="vc-price">' + fmt(listing.price) + '</div>' +
         '<a class="vc-view" href="' + storeUrl + '">View store →</a>' +
       '</div>';
-
     return card;
   }
 
-  // ── Render vendor store card (sector browse) ──────────────────────────────
+  // ── Render vendor store card (category browse results) ────────────────────
   function renderVendorStoreCard(profile, productCount) {
     var card = document.createElement('a');
     card.className = 'store-card';
     var storeName = (profile.business_name || profile.name) || 'QuickShop Vendor';
     var initial   = storeName.charAt(0).toUpperCase();
-    var catalogUrl = '/?store=' + encodeURIComponent(profile.id);
-    card.href = catalogUrl;
+    card.href = '/?store=' + encodeURIComponent(profile.id);
 
     var avatarEl = document.createElement('div');
     avatarEl.className = 'sc-avatar';
-    if (profile.avatar_url &&
-        typeof profile.avatar_url === 'string' &&
-        profile.avatar_url.startsWith('https://')) {
+    if (profile.avatar_url && typeof profile.avatar_url === 'string' && profile.avatar_url.startsWith('https://')) {
       var img = document.createElement('img');
-      img.src = profile.avatar_url;
-      img.alt = storeName;
-      img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:inherit;';
+      img.src = profile.avatar_url; img.alt = storeName;
       avatarEl.appendChild(img);
     } else {
       avatarEl.textContent = initial;
     }
     card.appendChild(avatarEl);
 
-    var infoEl = document.createElement('div');
-    infoEl.className = 'sc-info';
+    var info = document.createElement('div'); info.className = 'sc-info';
+    var nameEl = document.createElement('div'); nameEl.className = 'sc-name'; nameEl.textContent = storeName;
+    info.appendChild(nameEl);
+    if (profile.tagline) {
+      var tagEl = document.createElement('div'); tagEl.className = 'sc-tagline'; tagEl.textContent = profile.tagline;
+      info.appendChild(tagEl);
+    }
+    var meta = document.createElement('div'); meta.className = 'sc-meta';
+    if (profile.location) {
+      var loc = document.createElement('span'); loc.className = 'sc-location'; loc.textContent = '📍 ' + profile.location;
+      meta.appendChild(loc);
+    }
+    if (profile.delivery_available === true) {
+      var del = document.createElement('span'); del.className = 'sc-delivery'; del.textContent = '🚚 Delivers';
+      meta.appendChild(del);
+    }
+    if (typeof productCount === 'number' && productCount > 0) {
+      var cnt = document.createElement('span'); cnt.className = 'sc-count'; cnt.textContent = productCount + ' product' + (productCount !== 1 ? 's' : '');
+      meta.appendChild(cnt);
+    }
+    info.appendChild(meta);
+    card.appendChild(info);
 
-    var nameEl = document.createElement('div');
-    nameEl.className = 'sc-name';
-    nameEl.textContent = storeName;
-    infoEl.appendChild(nameEl);
+    var action = document.createElement('span'); action.className = 'sc-action'; action.setAttribute('aria-hidden', 'true'); action.textContent = 'Browse →';
+    card.appendChild(action);
+    return card;
+  }
+
+  // ── Render store directory card (Option C — All Stores view only) ──────────
+  // Shows avatar + info header plus a 3-image product thumbnail strip.
+  // thumbnails: string[] — up to 3 https image URLs from the store's products.
+  function renderStoreDirectoryCard(profile, productCount, thumbnails) {
+    var card = document.createElement('a');
+    card.className = 'sdc';
+    var storeName = (profile.business_name || profile.name) || 'QuickShop Vendor';
+    var initial   = storeName.charAt(0).toUpperCase();
+    card.href = '/?store=' + encodeURIComponent(profile.id);
+
+    // ── Header ─────────────────────────────────────────────────────────────
+    var header = document.createElement('div');
+    header.className = 'sdc-header';
+
+    var avatarEl = document.createElement('div');
+    avatarEl.className = 'sdc-avatar';
+    if (profile.avatar_url && typeof profile.avatar_url === 'string' && profile.avatar_url.startsWith('https://')) {
+      var avImg = document.createElement('img');
+      avImg.src = profile.avatar_url; avImg.alt = storeName;
+      avatarEl.appendChild(avImg);
+    } else {
+      avatarEl.textContent = initial;
+    }
+    header.appendChild(avatarEl);
+
+    var info = document.createElement('div'); info.className = 'sdc-info';
+    var nameEl = document.createElement('div'); nameEl.className = 'sdc-name'; nameEl.textContent = storeName;
+    info.appendChild(nameEl);
+    if (profile.tagline) {
+      var tagEl = document.createElement('div'); tagEl.className = 'sdc-tagline'; tagEl.textContent = profile.tagline;
+      info.appendChild(tagEl);
+    }
+    var meta = document.createElement('div'); meta.className = 'sdc-meta';
+    if (profile.location) {
+      var loc = document.createElement('span'); loc.className = 'sdc-location'; loc.textContent = '📍 ' + profile.location;
+      meta.appendChild(loc);
+    }
+    if (profile.delivery_available === true) {
+      var del = document.createElement('span'); del.className = 'sdc-delivery'; del.textContent = '🚚 Delivers';
+      meta.appendChild(del);
+    }
+    if (typeof productCount === 'number' && productCount > 0) {
+      var cnt = document.createElement('span'); cnt.className = 'sdc-count'; cnt.textContent = productCount + ' product' + (productCount !== 1 ? 's' : '');
+      meta.appendChild(cnt);
+    }
+    info.appendChild(meta);
+    header.appendChild(info);
+
+    var action = document.createElement('span'); action.className = 'sdc-action'; action.setAttribute('aria-hidden', 'true'); action.textContent = 'Browse →';
+    header.appendChild(action);
+    card.appendChild(header);
+
+    // ── Thumbnail strip ────────────────────────────────────────────────────
+    var imgs = (thumbnails || []).filter(function (u) {
+      return typeof u === 'string' && u.startsWith('https://');
+    }).slice(0, 3);
+
+    if (imgs.length > 0) {
+      var strip = document.createElement('div');
+      strip.className = 'sdc-thumbs';
+      imgs.forEach(function (url) {
+        var cell = document.createElement('div');
+        cell.className = 'sdc-thumb';
+        var tImg = document.createElement('img');
+        tImg.src = url; tImg.alt = storeName + ' product'; tImg.loading = 'lazy';
+        tImg.onerror = function () {
+          cell.innerHTML = '<div class="sdc-thumb-placeholder">📦</div>';
+        };
+        cell.appendChild(tImg);
+        strip.appendChild(cell);
+      });
+      card.appendChild(strip);
+    }
+
+    return card;
+  }
+
+  // ── Render store chip (landing strip) ─────────────────────────────────────
+  function renderStoreChip(profile, productCount) {
+    var chip = document.createElement('a');
+    chip.className = 'store-chip';
+    chip.href = '/?store=' + encodeURIComponent(profile.id);
+
+    var storeName = (profile.business_name || profile.name) || 'QuickShop Vendor';
+    var initial   = storeName.charAt(0).toUpperCase();
+
+    var top = document.createElement('div'); top.className = 'store-chip-top';
+    var av  = document.createElement('div'); av.className = 'store-chip-avatar';
+    if (profile.avatar_url && typeof profile.avatar_url === 'string' && profile.avatar_url.startsWith('https://')) {
+      var img = document.createElement('img'); img.src = profile.avatar_url; img.alt = storeName;
+      av.appendChild(img);
+    } else {
+      av.textContent = initial;
+    }
+    var nameEl = document.createElement('div'); nameEl.className = 'store-chip-name'; nameEl.textContent = storeName;
+    top.appendChild(av); top.appendChild(nameEl);
+    chip.appendChild(top);
 
     if (profile.tagline) {
-      var taglineEl = document.createElement('div');
-      taglineEl.className = 'sc-tagline';
-      taglineEl.textContent = profile.tagline;
-      infoEl.appendChild(taglineEl);
-    }
-
-    var metaEl = document.createElement('div');
-    metaEl.className = 'sc-meta';
-
-    if (profile.location) {
-      var locEl = document.createElement('span');
-      locEl.className = 'sc-location';
-      locEl.textContent = '\uD83D\uDCCD ' + profile.location;
-      metaEl.appendChild(locEl);
-    }
-
-    if (profile.delivery_available === true) {
-      var delEl = document.createElement('span');
-      delEl.className = 'sc-delivery';
-      delEl.textContent = '\uD83D\uDE9A Delivers';
-      metaEl.appendChild(delEl);
+      var tag = document.createElement('div'); tag.className = 'store-chip-tagline'; tag.textContent = profile.tagline;
+      chip.appendChild(tag);
     }
 
     if (typeof productCount === 'number' && productCount > 0) {
-      var cntEl = document.createElement('span');
-      cntEl.className = 'sc-count';
-      cntEl.textContent = productCount + ' product' + (productCount !== 1 ? 's' : '');
-      metaEl.appendChild(cntEl);
+      var cnt = document.createElement('div'); cnt.className = 'store-chip-count';
+      cnt.textContent = productCount + ' item' + (productCount !== 1 ? 's' : '');
+      chip.appendChild(cnt);
     }
 
-    infoEl.appendChild(metaEl);
-    card.appendChild(infoEl);
-
-    var actionEl = document.createElement('span');
-    actionEl.className = 'sc-action';
-    actionEl.setAttribute('aria-hidden', 'true');
-    actionEl.textContent = 'Browse store \u2192';
-    card.appendChild(actionEl);
-
-    return card;
+    return chip;
   }
 
   // ── Empty state ───────────────────────────────────────────────────────────
@@ -869,46 +1138,29 @@
       '</div>';
   }
 
-  // ── Escape HTML ───────────────────────────────────────────────────────────
-  function escHtml(str) {
-    return String(str || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
   // ── SEARCH ────────────────────────────────────────────────────────────────
   async function runSearch(query) {
     if (!sb) return;
     _lastQuery = query;
-
     var params = getParams();
-    params.set('q', query);
-    params.delete('product');
-    params.delete('cat');
+    params.set('q', query); params.delete('product'); params.delete('cat');
     navigate(params, false);
 
     showState('loading');
     loadingLabel.textContent = 'Searching for "' + query + '"…';
 
     try {
-      var res = await sb.rpc('qs_find_canonical', {
-        p_name: query,
-        p_threshold: 0.25
-      });
-
+      var res = await sb.rpc('qs_find_canonical', { p_name: query, p_threshold: 0.25 });
       var data = res.data || [];
       _lastResults = data;
 
       showState('results');
-      // Hide sector sections — text search uses only the product grid
       vendorStoresSection.hidden = true;
       productsSectionLabel.hidden = true;
 
       if (data.length === 0) {
         resultsHead.innerHTML = 'No results for <strong>"' + escHtml(query) + '"</strong>';
-        renderEmpty(resultsGrid, 'Nothing found', 'Try a different spelling, or browse a category below.');
+        renderEmpty(resultsGrid, 'Nothing found', 'Try a different spelling, or browse a category.');
         return;
       }
 
@@ -916,10 +1168,34 @@
         'Found <strong>' + data.length + ' product' + (data.length !== 1 ? 's' : '') + '</strong>' +
         ' matching "' + escHtml(query) + '"';
 
-      resultsGrid.innerHTML = '';
-      data.forEach(function (item) {
-        resultsGrid.appendChild(renderProductCard(item));
+      // Batch-fetch listing stats (count + min price) for all results
+      var ids = data.map(function (d) { return d.id; });
+      var stats = await fetchListingStats(ids);
+
+      // Fix 2: RPC (qs_find_canonical) does not return image_url.
+      // Fetch it separately from qs_canonical_products for all result IDs.
+      var imageMap = {};
+      try {
+        var imgRes = await sb
+          .from('qs_canonical_products')
+          .select('id, image_url')
+          .in('id', ids);
+        if (imgRes.data) {
+          imgRes.data.forEach(function (r) {
+            if (r.image_url) imageMap[r.id] = r.image_url;
+          });
+        }
+      } catch (_) { /* silent — images are non-critical */ }
+
+      data.forEach(function (d) {
+        d.vendor_count = d.vendor_count || stats.countMap[d.id] || 0;
+        d.min_price    = stats.priceMap[d.id];
+        // image_url: prefer value from RPC; fall back to canonical products table
+        d.image_url    = d.image_url || imageMap[d.id] || null;
       });
+
+      resultsGrid.innerHTML = '';
+      data.forEach(function (item) { resultsGrid.appendChild(renderProductCard(item)); });
 
     } catch (e) {
       console.error('[search] error', e);
@@ -930,118 +1206,136 @@
   }
 
   // ── BROWSE BY CATEGORY ────────────────────────────────────────────────────
-  async function browseCategory(cat) {
+  async function browseCategory(cat, append) {
     if (!sb) return;
-    _lastQuery = '';
+    if (!append) {
+      _lastQuery = '';
+      _catName   = cat;
+      _catOffset = 0;
+      var params = getParams();
+      params.set('cat', cat); params.delete('q'); params.delete('product');
+      navigate(params, false);
+      input.value = '';
+      clearBtn.style.display = 'none';
 
-    var params = getParams();
-    params.set('cat', cat);
-    params.delete('q');
-    params.delete('product');
-    navigate(params, false);
-
-    input.value = '';
-    clearBtn.style.display = 'none';
+      // Highlight active category tile
+      document.querySelectorAll('.cat-tile').forEach(function (t) {
+        t.classList.toggle('active', t.dataset.cat === cat);
+      });
+    }
 
     showState('loading');
-    loadingLabel.textContent = 'Loading ' + cat + '\u2026';
+    loadingLabel.textContent = (append ? 'Loading more ' : 'Loading ') + cat + '…';
 
     try {
-      // ── Path A: vendor stores by sector ──────────────────────────────
-      var storeRes = await sb
-        .from('public_catalog_profiles')
-        .select('id, business_name, name, tagline, avatar_url, location, delivery_available, slug')
-        .ilike('store_sector', cat)
-        .eq('is_active', true);
-
-      var stores = storeRes.data || [];
-
-      // Fetch product counts for each matched store
+      // Stores section only on first page
+      var stores = [];
       var storeProductCounts = {};
-      if (stores.length > 0) {
-        var storeIds = stores.map(function (s) { return s.id; });
-        var prodCountRes = await sb
-          .from('public_catalog_products')
-          .select('user_id')
-          .in('user_id', storeIds);
-        if (prodCountRes.data) {
-          prodCountRes.data.forEach(function (row) {
-            storeProductCounts[row.user_id] = (storeProductCounts[row.user_id] || 0) + 1;
-          });
+      if (!append) {
+        var storeRes = await sb
+          .from('public_catalog_profiles')
+          .select('id, business_name, name, tagline, avatar_url, location, delivery_available, slug')
+          .ilike('store_sector', cat)
+          .eq('is_active', true);
+        stores = storeRes.data || [];
+
+        if (stores.length > 0) {
+          var storeIds = stores.map(function (s) { return s.id; });
+          var cntRes = await sb.from('public_catalog_products').select('user_id').in('user_id', storeIds);
+          if (cntRes.data) {
+            cntRes.data.forEach(function (r) {
+              storeProductCounts[r.user_id] = (storeProductCounts[r.user_id] || 0) + 1;
+            });
+          }
         }
       }
 
-      // ── Path B: canonical products in this category ───────────────────
       var canonRes = await sb
         .from('qs_canonical_products')
-        .select('id, display_name, slug, category')
+        .select('id, display_name, slug, category, image_url')
         .ilike('category', cat)
         .order('created_at', { ascending: false })
-        .limit(40);
-
+        .range(_catOffset, _catOffset + _CAT_PAGE - 1);
       var canonData = canonRes.data || [];
-      _lastResults = canonData;
+      _catHasMore = canonData.length === _CAT_PAGE;
 
-      // Fetch vendor counts for canonicals
+      if (!append) _lastResults = canonData;
+      else _lastResults = _lastResults.concat(canonData);
+
       if (canonData.length > 0) {
-        var ids = canonData.map(function (d) { return d.id; });
-        var countRes = await sb
-          .from('qs_vendor_listings')
-          .select('canonical_id')
-          .in('canonical_id', ids);
-        var countMap = {};
-        if (countRes.data) {
-          countRes.data.forEach(function (row) {
-            countMap[row.canonical_id] = (countMap[row.canonical_id] || 0) + 1;
-          });
-        }
-        canonData.forEach(function (d) { d.vendor_count = countMap[d.id] || 0; });
+        var stats = await fetchListingStats(canonData.map(function (d) { return d.id; }));
+        canonData.forEach(function (d) {
+          d.vendor_count = stats.countMap[d.id] || 0;
+          d.min_price    = stats.priceMap[d.id];
+        });
+        // Completeness-first: photos up, then by store count
+        canonData.sort(function (a, b) {
+          var ai = (a.image_url && a.image_url.startsWith('https://')) ? 0 : 1;
+          var bi = (b.image_url && b.image_url.startsWith('https://')) ? 0 : 1;
+          if (ai !== bi) return ai - bi;
+          return (b.vendor_count || 0) - (a.vendor_count || 0);
+        });
       }
 
-      // ── Render ────────────────────────────────────────────────────────
       showState('results');
 
-      // Reset section visibility
-      vendorStoresSection.hidden = true;
-      storeCardsList.innerHTML = '';
-      productsSectionLabel.hidden = true;
-      resultsGrid.innerHTML = '';
-
       var hasStores   = stores.length > 0;
-      var hasProducts = canonData.length > 0;
+      var hasProducts = canonData.length > 0 || _catOffset > 0;
+
+      if (!append) {
+        vendorStoresSection.hidden = true; storeCardsList.innerHTML = '';
+        productsSectionLabel.hidden = true; resultsGrid.innerHTML = '';
+        // Remove any existing cat load-more button
+        var oldLM = document.getElementById('cat-load-more-btn');
+        if (oldLM) oldLM.remove();
+      }
 
       if (!hasStores && !hasProducts) {
-        resultsHead.innerHTML = '<strong>' + escHtml(cat) + '</strong> \u2014 no products yet';
-        renderEmpty(resultsGrid, 'Empty category', 'Be the first vendor to add products in this category.');
+        resultsHead.innerHTML = '<strong>' + escHtml(cat) + '</strong> — no products yet';
+        renderEmpty(resultsGrid, 'Empty category', 'Be the first vendor to add products here.');
         return;
       }
 
-      // Update main heading
+      var totalShown = _catOffset + canonData.length;
       var parts = [];
       if (hasStores)   parts.push(stores.length + ' store' + (stores.length !== 1 ? 's' : ''));
-      if (hasProducts) parts.push(canonData.length + ' product' + (canonData.length !== 1 ? 's' : ''));
-      resultsHead.innerHTML = '<strong>' + escHtml(cat) + '</strong> \u2014 ' + parts.join(', ');
+      if (hasProducts) parts.push(totalShown + (_catHasMore ? '+' : '') + ' product' + (totalShown !== 1 ? 's' : ''));
+      resultsHead.innerHTML = '<strong>' + escHtml(cat) + '</strong> — ' + parts.join(', ');
 
-      // Section A: store cards
-      if (hasStores) {
+      if (!append && hasStores) {
         vendorStoresLabel.textContent = 'Stores selling ' + cat;
-        stores.forEach(function (profile) {
-          var cnt = storeProductCounts[profile.id] || 0;
-          storeCardsList.appendChild(renderVendorStoreCard(profile, cnt));
-        });
+        stores.forEach(function (p) { storeCardsList.appendChild(renderVendorStoreCard(p, storeProductCounts[p.id] || 0)); });
         vendorStoresSection.hidden = false;
       }
 
-      // Section B: canonical product grid
-      if (hasProducts) {
-        if (hasStores) {
-          productsSectionLabel.textContent = 'Products in ' + cat;
-          productsSectionLabel.hidden = false;
-        }
-        canonData.forEach(function (item) {
-          resultsGrid.appendChild(renderProductCard(item));
-        });
+      if (canonData.length > 0) {
+        if (!append && hasStores) { productsSectionLabel.textContent = 'Products in ' + cat; productsSectionLabel.hidden = false; }
+        canonData.forEach(function (item) { resultsGrid.appendChild(renderProductCard(item)); });
       }
+
+      // Update/create Load More button
+      var catLMBtn = document.getElementById('cat-load-more-btn');
+      if (_catHasMore) {
+        if (!catLMBtn) {
+          catLMBtn = document.createElement('button');
+          catLMBtn.id = 'cat-load-more-btn';
+          catLMBtn.className = 'load-more-btn';
+          catLMBtn.addEventListener('click', function () {
+            catLMBtn.disabled = true;
+            catLMBtn.textContent = 'Loading…';
+            _catOffset += _CAT_PAGE;
+            browseCategory(_catName, true);
+          });
+          productsSectionEl.appendChild(catLMBtn);
+        }
+        catLMBtn.disabled = false;
+        catLMBtn.textContent = 'View all ' + escHtml(cat) + ' products →';
+        catLMBtn.hidden = false;
+      } else if (catLMBtn) {
+        catLMBtn.hidden = true;
+      }
+
+      _catOffset += canonData.length;
 
     } catch (e) {
       console.error('[browse] error', e);
@@ -1049,59 +1343,61 @@
     }
   }
 
-  // ── OPEN PRODUCT DETAIL ───────────────────────────────────────────────────
+  // ── PRODUCT DETAIL ────────────────────────────────────────────────────────
   async function openProduct(item) {
     if (!sb) return;
-
-    // item may come from search results (has slug) or from URL load (needs slug lookup)
-    var canonical = item;
-
-    // If item came from search RPC, it has id + slug but may lack full canonical data.
-    // That's fine — we have what we need.
-
-    _currentProduct = canonical;
-
+    _currentProduct = item;
     var params = getParams();
-    params.set('product', canonical.slug);
-    params.delete('q');
-    params.delete('cat');
+    params.set('product', item.slug); params.delete('q'); params.delete('cat');
     navigate(params, false);
 
     showState('loading');
     loadingLabel.textContent = 'Loading product…';
 
     try {
-      // 1. Fetch all vendor listings for this canonical
       var listRes = await sb
-        .from('qs_vendor_listings')
-        .select('*')
-        .eq('canonical_id', canonical.id)
-        .order('price', { ascending: true });
-
+        .from('qs_vendor_listings').select('*')
+        .eq('canonical_id', item.id).order('price', { ascending: true });
       var listings = listRes.data || [];
 
-      // 2. Batch-fetch store profiles
       var vendorIds = listings.map(function (l) { return l.vendor_store_id; });
       var profileMap = {};
-
       if (vendorIds.length > 0) {
-        var profRes = await sb
-          .from('profiles')
-          .select('id, name, business_name, tagline')
-          .in('id', vendorIds);
-
-        if (profRes.data) {
-          profRes.data.forEach(function (p) { profileMap[p.id] = p; });
-        }
+        var profRes = await sb.from('public_catalog_profiles').select('id, business_name, name, tagline, avatar_url').in('id', vendorIds);
+        if (profRes.data) profRes.data.forEach(function (p) { profileMap[p.id] = p; });
       }
 
-      // 3. Render detail view
-      detailCat.textContent  = canonical.category || '';
-      detailName.textContent = canonical.display_name || canonical.name || '';
+      detailName.textContent = item.display_name || item.name || '';
+
+      // ── Product image ────────────────────────────────────────────────────
+      detailImageWrap.innerHTML = '';
+      detailImageWrap.hidden = true;
+      if (item.image_url && typeof item.image_url === 'string' && item.image_url.startsWith('https://')) {
+        // Shimmer skeleton while the detail image loads
+        var dShimmer = document.createElement('div');
+        dShimmer.className = 'pc-image-shimmer';
+        dShimmer.style.cssText = 'position:absolute;inset:0;z-index:1;';
+        detailImageWrap.style.position = 'relative';
+        detailImageWrap.appendChild(dShimmer);
+        var dImg = document.createElement('img');
+        dImg.src = item.image_url;
+        dImg.alt = item.display_name || item.name || '';
+        dImg.setAttribute('data-loading', '1');
+        dImg.onload = function () {
+          dImg.removeAttribute('data-loading');
+          if (dShimmer.parentNode) dShimmer.parentNode.removeChild(dShimmer);
+        };
+        dImg.onerror = function () {
+          detailImageWrap.hidden = true;
+          if (dShimmer.parentNode) dShimmer.parentNode.removeChild(dShimmer);
+        };
+        detailImageWrap.appendChild(dImg);
+        detailImageWrap.hidden = false;
+      }
 
       var storeCount = listings.length;
-      var minPrice   = listings.length ? listings[0].price : null;   // already sorted ASC
-      var maxPrice   = listings.length ? listings[listings.length - 1].price : null;
+      var minPrice   = storeCount ? listings[0].price : null;
+      var maxPrice   = storeCount ? listings[storeCount - 1].price : null;
 
       if (storeCount === 0) {
         detailMeta.textContent = 'No vendors currently selling this product.';
@@ -1114,24 +1410,16 @@
       }
 
       detailVLabel.textContent = storeCount === 0 ? '' : 'Where to buy';
-
       vendorList.innerHTML = '';
       if (storeCount === 0) {
-        vendorList.innerHTML =
-          '<div class="empty-state"><div class="es-icon">📦</div>' +
-          '<h3>Not available yet</h3>' +
-          '<p>No vendor on QuickShop is selling this right now.</p></div>';
+        vendorList.innerHTML = '<div class="empty-state"><div class="es-icon">📦</div><h3>Not available yet</h3><p>No vendor on QuickShop is selling this right now.</p></div>';
       } else {
         listings.forEach(function (listing, idx) {
-          var profile = profileMap[listing.vendor_store_id] || null;
-          var isBest  = idx === 0 && storeCount > 1; // lowest price
-          vendorList.appendChild(renderVendorCard(listing, profile, isBest));
+          vendorList.appendChild(renderVendorCard(listing, profileMap[listing.vendor_store_id] || null, idx === 0 && storeCount > 1));
         });
       }
 
-      // JSON-LD for product page (helps Google index price data)
-      injectProductSchema(canonical, listings, profileMap);
-
+      injectProductSchema(item, listings, profileMap);
       showState('detail');
 
     } catch (e) {
@@ -1140,195 +1428,273 @@
     }
   }
 
-  // ── OPEN PRODUCT BY SLUG (direct URL load) ────────────────────────────────
   async function loadProductBySlug(slug) {
     if (!sb) return;
-    showState('loading');
-    loadingLabel.textContent = 'Loading…';
-
+    showState('loading'); loadingLabel.textContent = 'Loading…';
     try {
-      var res = await sb
-        .from('qs_canonical_products')
-        .select('id, display_name, slug, category')
-        .eq('slug', slug)
-        .single();
-
-      if (res.error || !res.data) {
-        showState('landing');
-        return;
-      }
-
+      var res = await sb.from('qs_canonical_products')
+        .select('id, display_name, slug, category, image_url').eq('slug', slug).single();
+      if (res.error || !res.data) { showState('landing'); return; }
       await openProduct(res.data);
-
-    } catch (e) {
-      console.error('[load by slug] error', e);
-      showState('landing');
-    }
+    } catch (e) { console.error('[load by slug] error', e); showState('landing'); }
   }
 
-  // ── JSON-LD product schema injection ─────────────────────────────────────
+  // ── JSON-LD product schema ────────────────────────────────────────────────
   function injectProductSchema(canonical, listings, profileMap) {
-    var old = document.getElementById('qs-product-ld');
-    if (old) old.remove();
-
+    var old = document.getElementById('qs-product-ld'); if (old) old.remove();
     if (!listings.length) return;
-
     var offers = listings.map(function (l) {
-      var profile   = profileMap[l.vendor_store_id] || {};
-      var storeName = profile.business_name || profile.name || 'QuickShop Vendor';
-      return {
-        '@type': 'Offer',
-        'price': l.price,
-        'priceCurrency': 'NGN',
-        'availability': 'https://schema.org/InStock',
-        'seller': { '@type': 'Organization', 'name': storeName }
-      };
+      var p = profileMap[l.vendor_store_id] || {};
+      return { '@type':'Offer', 'price':l.price, 'priceCurrency':'NGN', 'availability':'https://schema.org/InStock', 'seller':{'@type':'Organization','name':p.business_name||p.name||'QuickShop Vendor'} };
     });
-
-    var ld = {
-      '@context': 'https://schema.org',
-      '@type': 'Product',
-      'name': canonical.display_name,
-      'offers': offers
-    };
-
     var script = document.createElement('script');
-    script.type = 'application/ld+json';
-    script.id   = 'qs-product-ld';
-    script.textContent = JSON.stringify(ld);
+    script.type = 'application/ld+json'; script.id = 'qs-product-ld';
+    script.textContent = JSON.stringify({'@context':'https://schema.org','@type':'Product','name':canonical.display_name,'offers':offers});
     document.head.appendChild(script);
   }
 
-  // ── LOAD RECENT PRODUCTS (landing page) ───────────────────────────────────
-  async function loadRecent() {
+  // ── LOAD FEATURED STORES (landing) ────────────────────────────────────────
+  async function loadFeaturedStores() {
     if (!sb) return;
     try {
       var res = await sb
-        .from('qs_canonical_products')
-        .select('id, display_name, slug, category')
+        .from('public_catalog_profiles')
+        .select('id, business_name, name, tagline, avatar_url, location')
         .order('created_at', { ascending: false })
-        .limit(6);
+        .limit(20);  // fetch more than we show so we can rank client-side
+      var stores = res.data || [];
+      if (res.error) { console.error('[stores strip]', res.error); return; }
+      if (!stores.length) return;
 
-      if (!res.data || res.data.length === 0) return;
-
-      // Fetch vendor counts
-      var ids = res.data.map(function (d) { return d.id; });
-      var countRes = await sb
-        .from('qs_vendor_listings')
-        .select('canonical_id')
-        .in('canonical_id', ids);
-
+      // Batch product counts
+      var ids = stores.map(function (s) { return s.id; });
+      var cntRes = await sb.from('public_catalog_products').select('user_id').in('user_id', ids);
       var countMap = {};
-      if (countRes.data) {
-        countRes.data.forEach(function (row) {
-          countMap[row.canonical_id] = (countMap[row.canonical_id] || 0) + 1;
-        });
+      if (cntRes.data) cntRes.data.forEach(function (r) { countMap[r.user_id] = (countMap[r.user_id] || 0) + 1; });
+
+      // Sort: most products first, completeness tiebreaker — then show top 8
+      stores.sort(function (a, b) {
+        var ca = countMap[a.id] || 0, cb = countMap[b.id] || 0;
+        if (cb !== ca) return cb - ca;
+        var sa = (a.avatar_url?1:0)+(a.tagline?1:0)+(a.location?1:0);
+        var sb2= (b.avatar_url?1:0)+(b.tagline?1:0)+(b.location?1:0);
+        return sb2 - sa;
+      });
+      stores = stores.slice(0, 8);
+
+      storesStrip.innerHTML = '';
+      stores.forEach(function (profile) {
+        storesStrip.appendChild(renderVendorStoreCard(profile, countMap[profile.id] || 0));
+      });
+      storesSection.hidden = false;
+    } catch (e) {
+      // Silent — landing works fine without stores strip
+    }
+  }
+
+  // ── ALL STORES DIRECTORY ──────────────────────────────────────────────────
+  async function browseAllStores() {
+    if (!sb) return;
+    var params = getParams();
+    params.set('view', 'stores'); params.delete('q'); params.delete('cat'); params.delete('product');
+    navigate(params, false);
+
+    document.querySelectorAll('.cat-tile').forEach(function (t) {
+      t.classList.toggle('active', t.dataset.cat === '__stores__');
+    });
+
+    showState('loading');
+    loadingLabel.textContent = 'Loading stores…';
+
+    try {
+      var res = await sb
+        .from('public_catalog_profiles')
+        .select('id, business_name, name, tagline, avatar_url, location, delivery_available, slug')
+        .order('created_at', { ascending: false });
+
+      if (res.error) { console.error('[all stores]', res.error); showState('landing'); return; }
+      var stores = res.data || [];
+
+      // Combined query: product counts + thumbnail URLs in one round-trip.
+      // countMap: { storeId: n }   thumbMap: { storeId: [url, url, url] }
+      var countMap = {};
+      var thumbMap = {};
+      if (stores.length > 0) {
+        var ids = stores.map(function (s) { return s.id; });
+        var prodRes = await sb
+          .from('public_catalog_products')
+          .select('user_id, image_url')
+          .in('user_id', ids);
+        if (prodRes.data) {
+          prodRes.data.forEach(function (r) {
+            countMap[r.user_id] = (countMap[r.user_id] || 0) + 1;
+            if (r.image_url && typeof r.image_url === 'string' && r.image_url.startsWith('https://')) {
+              if (!thumbMap[r.user_id]) thumbMap[r.user_id] = [];
+              if (thumbMap[r.user_id].length < 3) thumbMap[r.user_id].push(r.image_url);
+            }
+          });
+        }
       }
 
-      res.data.forEach(function (d) { d.vendor_count = countMap[d.id] || 0; });
-
-      recentLabel.hidden = false;
-      recentGrid.innerHTML = '';
-      res.data.forEach(function (item) {
-        recentGrid.appendChild(renderProductCard(item));
+      // ── Rank: most products first, completeness tiebreaker ──────────────
+      stores.sort(function (a, b) {
+        var ca = countMap[a.id] || 0;
+        var cb = countMap[b.id] || 0;
+        if (cb !== ca) return cb - ca;
+        var sa = (a.avatar_url ? 1 : 0) + (a.tagline ? 1 : 0) + (a.location ? 1 : 0);
+        var sb2 = (b.avatar_url ? 1 : 0) + (b.tagline ? 1 : 0) + (b.location ? 1 : 0);
+        return sb2 - sa;
       });
+
+      storesHeading.innerHTML =
+        '<strong>' + stores.length + ' store' + (stores.length !== 1 ? 's' : '') + '</strong> on QuickShop';
+
+      allStoresGrid.innerHTML = '';
+      if (!stores.length) {
+        allStoresGrid.innerHTML =
+          '<div class="empty-state"><div class="es-icon">🏪</div>' +
+          '<h3>No stores yet</h3><p>Be the first vendor to list your products on QuickShop.</p></div>';
+        showState('stores');
+        return;
+      }
+      stores.forEach(function (profile) {
+        allStoresGrid.appendChild(
+          renderStoreDirectoryCard(profile, countMap[profile.id] || 0, thumbMap[profile.id] || [])
+        );
+      });
+      showState('stores');
+
     } catch (e) {
-      // Silent — landing works fine without recent products
+      console.error('[all stores]', e);
+      showState('landing');
     }
   }
 
-  // ── BACK BUTTON ───────────────────────────────────────────────────────────
+  // ── LOAD RECENT PRODUCTS (landing) ────────────────────────────────────────
+
+  async function loadRecent(append) {
+    if (!sb) return;
+    try {
+      var from = _recentOffset;
+      var to   = from + _RECENT_PAGE - 1;
+      var res  = await sb
+        .from('qs_canonical_products')
+        .select('id, display_name, slug, category, image_url')
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (!res.data || !res.data.length) {
+        loadMoreBtn.hidden = true;
+        return;
+      }
+
+      var stats = await fetchListingStats(res.data.map(function (d) { return d.id; }));
+      res.data.forEach(function (d) {
+        d.vendor_count = stats.countMap[d.id] || 0;
+        d.min_price    = stats.priceMap[d.id];
+      });
+
+      // Completeness-first: products with photos float to the top.
+      // Within each group, more vendor listings = more popular = shown first.
+      res.data.sort(function (a, b) {
+        var ai = (a.image_url && a.image_url.startsWith('https://')) ? 0 : 1;
+        var bi = (b.image_url && b.image_url.startsWith('https://')) ? 0 : 1;
+        if (ai !== bi) return ai - bi;
+        return (b.vendor_count || 0) - (a.vendor_count || 0);
+      });
+
+      if (!append) recentGrid.innerHTML = '';
+      res.data.forEach(function (item) { recentGrid.appendChild(renderProductCard(item)); });
+
+      // Show load-more only if a full page came back (more likely to exist)
+      _recentOffset += res.data.length;
+      loadMoreBtn.hidden   = res.data.length < _RECENT_PAGE;
+      loadMoreBtn.disabled = false;
+      loadMoreBtn.textContent = 'Load more products';
+
+    } catch (e) { console.error('[loadRecent]', e); }
+  }
+
+  async function loadMoreProducts() {
+    loadMoreBtn.disabled    = true;
+    loadMoreBtn.textContent = 'Loading…';
+    await loadRecent(true);
+  }
+
+  // ── BACK ──────────────────────────────────────────────────────────────────
   function goBack() {
     _currentProduct = null;
-
-    // Remove product-specific JSON-LD
-    var old = document.getElementById('qs-product-ld');
-    if (old) old.remove();
-
+    var old = document.getElementById('qs-product-ld'); if (old) old.remove();
+    document.querySelectorAll('.cat-tile').forEach(function (t) { t.classList.remove('active'); });
     if (_lastResults.length > 0) {
-      var params = getParams();
-      params.delete('product');
+      var params = getParams(); params.delete('product');
       if (_lastQuery) params.set('q', _lastQuery);
-      navigate(params, false);
-      showState('results');
+      navigate(params, false); showState('results');
     } else {
-      var params2 = new URLSearchParams();
-      navigate(params2, false);
-      showState('landing');
-      updateSEO(params2);
+      var params2 = new URLSearchParams(); navigate(params2, false);
+      _recentOffset = 0;
+      showState('landing'); updateSEO(params2);
+      loadFeaturedStores(); loadRecent(false);
     }
   }
 
-  // ── BROWSER BACK/FORWARD ──────────────────────────────────────────────────
-  window.addEventListener('popstate', function () {
-    routeFromURL();
-  });
+  loadMoreBtn.addEventListener('click', loadMoreProducts);
 
-  // ── ROUTER — read URL and show correct state ──────────────────────────────
+  // ── ROUTER ────────────────────────────────────────────────────────────────
+  window.addEventListener('popstate', function () { routeFromURL(); });
+
   function routeFromURL() {
     var params  = getParams();
     var q       = params.get('q');
     var product = params.get('product');
     var cat     = params.get('cat');
-
+    var view    = params.get('view');
     updateSEO(params);
-
-    if (product) {
-      loadProductBySlug(product);
-    } else if (q) {
-      input.value = q;
-      clearBtn.style.display = 'block';
-      runSearch(q);
-    } else if (cat) {
-      browseCategory(cat);
-    } else {
-      showState('landing');
-      loadRecent();
+    if (product)           loadProductBySlug(product);
+    else if (q)            { input.value = q; clearBtn.style.display = 'block'; runSearch(q); }
+    else if (cat)          browseCategory(cat);
+    else if (view === 'stores') browseAllStores();
+    else                   {
+      _recentOffset = 0;
+      showState('landing'); loadFeaturedStores(); loadRecent(false);
     }
   }
 
-  // ── SEARCH INPUT EVENTS ───────────────────────────────────────────────────
+  // ── INPUT EVENTS ──────────────────────────────────────────────────────────
   input.addEventListener('input', function () {
     var val = input.value.trim();
     clearBtn.style.display = val ? 'block' : 'none';
     clearTimeout(_debounceTimer);
-
     if (!val) {
-      var p = new URLSearchParams();
-      navigate(p, true);
-      showState('landing');
-      return;
+      document.querySelectorAll('.cat-tile').forEach(function (t) { t.classList.remove('active'); });
+      navigate(new URLSearchParams(), true); showState('landing'); return;
     }
-
     if (val.length < 2) return;
-
-    _debounceTimer = setTimeout(function () {
-      runSearch(val);
-    }, 420);
+    _debounceTimer = setTimeout(function () { runSearch(val); }, 420);
   });
 
   clearBtn.addEventListener('click', function () {
-    input.value = '';
-    clearBtn.style.display = 'none';
-    input.focus();
-    var p = new URLSearchParams();
-    navigate(p, true);
-    _lastResults  = [];
-    _lastQuery    = '';
-    _currentProduct = null;
+    input.value = ''; clearBtn.style.display = 'none'; input.focus();
+    document.querySelectorAll('.cat-tile').forEach(function (t) { t.classList.remove('active'); });
+    navigate(new URLSearchParams(), true);
+    _lastResults = []; _lastQuery = ''; _currentProduct = null;
     showState('landing');
   });
 
-  // ── CATEGORY TILE EVENTS ──────────────────────────────────────────────────
+  seeAllStoresBtn.addEventListener('click', function (e) {
+    e.preventDefault();
+    browseAllStores();
+  });
+
   catGrid.addEventListener('click', function (e) {
     var tile = e.target.closest('.cat-tile');
     if (!tile) return;
     e.preventDefault();
     var cat = tile.dataset.cat;
-    if (cat) browseCategory(cat);
+    if (cat === '__stores__') browseAllStores();
+    else if (cat)             browseCategory(cat);
   });
 
-  // ── DETAIL BACK BUTTON ────────────────────────────────────────────────────
   detailBack.addEventListener('click', goBack);
 
   // ── INIT ──────────────────────────────────────────────────────────────────

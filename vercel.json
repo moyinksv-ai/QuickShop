@@ -14,6 +14,27 @@
   ],
   "headers": [
     {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.supabase.in https://world.openfoodfacts.org https://*.sentry.io https://generativelanguage.googleapis.com; img-src 'self' data: blob: https://*.supabase.co https://*.supabase.in; style-src 'self' 'unsafe-inline'; font-src 'self'; media-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'; worker-src 'self';"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        }
+      ]
+    },
+    {
       "source": "/admin.html",
       "headers": [
         {
@@ -27,10 +48,6 @@
         {
           "key": "X-Frame-Options",
           "value": "DENY"
-        },
-        {
-          "key": "X-Content-Type-Options",
-          "value": "nosniff"
         },
         {
           "key": "Referrer-Policy",

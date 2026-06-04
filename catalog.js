@@ -2647,6 +2647,19 @@
     // Attach all events (single pass)
     attachEvents(storeName);
 
+    // ── Deep link: auto-open product detail if ?pid= is present ──
+    // Allows search.html to route directly to a specific product in this
+    // vendor’s catalog without the buyer having to find it manually.
+    (function () {
+      var _pidParam = (_p.get('pid') || '').replace(/[^a-zA-Z0-9\-]/g, '').slice(0, 64);
+      if (!_pidParam) return;
+      var _target = allProducts.find(function (p) { return p.id === _pidParam; });
+      if (_target) {
+        // Short delay so DOM and events are fully settled before overlay opens
+        setTimeout(function () { openDetailOverlay(_target); }, 120);
+      }
+    })();
+
     // ── Realtime subscription — live inventory updates ──
     // Supabase pushes a notification any time the vendor's products table changes.
     // We re-fetch the full product list and re-render — no page refresh needed.
