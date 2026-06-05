@@ -359,17 +359,50 @@
     if (clr1) clr1.addEventListener('click', function (e) { e.preventDefault(); clearInvImage(); });
     const clr2 = $('invImgClear2');
     if (clr2) clr2.addEventListener('click', function (e) { e.preventDefault(); clearInvImage2(); });
+
+    // ── "Cost & stock" collapsible row toggle ────────────────────────────
+    const moreToggle = $('invMoreDetailsToggle');
+    const moreRow    = $('invMoreDetailsRow');
+    if (moreToggle && moreRow) {
+      moreToggle.addEventListener('click', function () {
+        const isOpen = moreRow.style.display === 'flex';
+        moreRow.style.display  = isOpen ? 'none' : 'flex';
+        moreToggle.textContent = isOpen ? '▸ Cost & stock' : '▴ Cost & stock';
+      });
+    }
   }
 
   // ══════════════════════════════════════════════════════════════════════════
   // ADD / EDIT FORM
   // ══════════════════════════════════════════════════════════════════════════
   function clearAddForm() {
-    ['invId','invName','invBarcode','invPrice','invCost','invQty','invDesc'].forEach(id => {
+    ['invId','invName','invBarcode','invPrice','invDesc'].forEach(id => {
       const el = $(id); if (el) el.value = '';
     });
+
+    // ── Restore last-used cost / qty so batch-adding similar products
+    //    doesn't require re-typing the same values every time.
+    const invCost = $('invCost');
+    const invQty  = $('invQty');
+    const lastCost = localStorage.getItem('qs_last_cost') || '';
+    const lastQty  = localStorage.getItem('qs_last_qty')  || '';
+    if (invCost) invCost.value = lastCost;
+    if (invQty)  invQty.value  = lastQty;
+
+    // Expand "Cost & stock" row only when there are remembered values.
+    const moreRow    = $('invMoreDetailsRow');
+    const moreToggle = $('invMoreDetailsToggle');
+    const hasSaved   = lastCost !== '' || lastQty !== '';
+    if (moreRow)    moreRow.style.display  = hasSaved ? 'flex' : 'none';
+    if (moreToggle) moreToggle.textContent = hasSaved ? '▴ Cost & stock' : '▸ Cost & stock';
+
+    // ── Pre-select last-used category ─────────────────────────────────────
     const invCategory = $('invCategory');
-    if (invCategory) invCategory.value = state().categories[0] || 'Others';
+    if (invCategory) {
+      const lastCat = localStorage.getItem('qs_last_cat');
+      invCategory.value = lastCat || state().categories[0] || 'Others';
+    }
+
     clearInvImage();
     clearInvImage2();
     setEditingProductId(null);
@@ -531,6 +564,10 @@
             syncType = 'addProduct';
             addActivityLog('Create', 'Created product: ' + name);
             toast('Product saved! Keep adding product orTap X to cancel.', 'success');
+            // Persist last-used values so the next add starts pre-filled
+            try { localStorage.setItem('qs_last_cost', cost > 0 ? String(cost) : ''); } catch(e) {}
+            try { localStorage.setItem('qs_last_qty',  qty  > 0 ? String(qty)  : ''); } catch(e) {}
+            try { localStorage.setItem('qs_last_cat',  category || ''); }              catch(e) {}
             clearAddForm();
             populateCategoryDropdown();
             requestAnimationFrame(() => {
@@ -693,6 +730,15 @@
 
     if (p.image) { showImageInSlot(p.image, 'img1'); } else { clearInvImage(); }
     if (p.image2) { showImageInSlot(p.image2, 'img2'); } else { clearInvImage2(); }
+
+    // Expand "Cost & stock" row if the product has either value set
+    const moreRow    = $('invMoreDetailsRow');
+    const moreToggle = $('invMoreDetailsToggle');
+    if (moreRow && moreToggle) {
+      const hasDetails = (p.cost && p.cost > 0) || (p.qty && p.qty > 0);
+      moreRow.style.display  = hasDetails ? 'flex' : 'none';
+      moreToggle.textContent = hasDetails ? '▴ Cost & stock' : '▸ Cost & stock';
+    }
 
     const addProductBtn    = $('addProductBtn');
     const cancelProductBtn = $('cancelProductBtn');

@@ -5,7 +5,7 @@
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self'
-               'sha256-f3cMOBGalGSqBzCwGA4QQ0qs20meYmlCYSu9n7NbOx4='
+               'sha256-Sqn6GZhhfx2g/y3C3RYGWLONaP00qvJ+Z96GpThxi+M='
                https://cdn.jsdelivr.net;
     connect-src 'self'
                 https://*.supabase.co
@@ -654,7 +654,7 @@
       <span class="section-label">Active Stores</span>
       <div class="store-cards-list" id="stores-strip"></div>
       <a class="see-all-link" id="see-all-stores-btn" href="#">See all stores →</a>
-      <p class="qs-vendor-nudge">Are you a vendor? <a href="https://quickshopper.vercel.app">List your products free →</a></p>
+      <p class="qs-vendor-nudge">Are you a vendor? <a href="https://quickshopper.vercel.app">List your products here →</a></p>
     </div>
 
   </div>
@@ -697,7 +697,7 @@
   <footer class="qs-footer">
     <p>
       Powered by <a href="https://quickshopper.vercel.app">QuickShop</a><br>
-      Are you a vendor? <a href="https://quickshopper.vercel.app">Sell on QuickShop — it's free →</a>
+      Are you a vendor? <a href="https://quickshopper.vercel.app">Sell on QuickShop →</a>
     </p>
   </footer>
 
@@ -753,7 +753,7 @@
   var _currentProduct = null;
   var _debounceTimer  = null;
   var _recentOffset   = 0;
-  var _RECENT_PAGE    = 12;
+  var _RECENT_PAGE    = 60;
 
   // Category pagination state
   var _catName        = '';
@@ -964,7 +964,7 @@
       '</div>' +
       '<div style="text-align:right;flex-shrink:0">' +
         '<div class="vc-price">' + fmt(listing.price) + '</div>' +
-        '<a class="vc-view" href="' + storeUrl + '">View store →</a>' +
+        '<a class="vc-view" href="' + storeUrl + '">Order →</a>' +
       '</div>';
     return card;
   }
@@ -1235,8 +1235,7 @@
         var storeRes = await sb
           .from('public_catalog_profiles')
           .select('id, business_name, name, tagline, avatar_url, location, delivery_available, slug')
-          .ilike('store_sector', cat)
-          .eq('is_active', true);
+          .ilike('store_sector', cat);
         stores = storeRes.data || [];
 
         if (stores.length > 0) {
@@ -1572,6 +1571,35 @@
 
   // ── LOAD RECENT PRODUCTS (landing) ────────────────────────────────────────
 
+  // ── Weighted Fisher-Yates shuffle ────────────────────────────────────────
+  // Scores each product 0–4 by listing completeness, groups into buckets,
+  // shuffles randomly within each bucket, then concatenates highest→lowest.
+  // Result: complete listings float to the top, but within each tier the
+  // order is different on every page load — no single vendor can dominate.
+  function weightedShuffle(items) {
+    function score(item) {
+      var s = 0;
+      if (item.image_url && item.image_url.startsWith('https://')) s += 2;
+      if ((item.vendor_count || 0) >= 2) s += 1;
+      if (item.min_price !== undefined && item.min_price !== null) s += 1;
+      return s;
+    }
+    var buckets = {4:[], 3:[], 2:[], 1:[], 0:[]};
+    items.forEach(function(item) { buckets[score(item)].push(item); });
+    function shuffle(arr) {
+      for (var i = arr.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+      }
+      return arr;
+    }
+    return shuffle(buckets[4])
+      .concat(shuffle(buckets[3]))
+      .concat(shuffle(buckets[2]))
+      .concat(shuffle(buckets[1]))
+      .concat(shuffle(buckets[0]));
+  }
+
   async function loadRecent(append) {
     if (!sb) return;
     try {
@@ -1594,19 +1622,10 @@
         d.min_price    = stats.priceMap[d.id];
       });
 
-      // Completeness-first: products with photos float to the top.
-      // Within each group, more vendor listings = more popular = shown first.
-      res.data.sort(function (a, b) {
-        var ai = (a.image_url && a.image_url.startsWith('https://')) ? 0 : 1;
-        var bi = (b.image_url && b.image_url.startsWith('https://')) ? 0 : 1;
-        if (ai !== bi) return ai - bi;
-        return (b.vendor_count || 0) - (a.vendor_count || 0);
-      });
-
+      var ordered = weightedShuffle(res.data);
       if (!append) recentGrid.innerHTML = '';
-      res.data.forEach(function (item) { recentGrid.appendChild(renderProductCard(item)); });
+      ordered.forEach(function (item) { recentGrid.appendChild(renderProductCard(item)); });
 
-      // Show load-more only if a full page came back (more likely to exist)
       _recentOffset += res.data.length;
       loadMoreBtn.hidden   = res.data.length < _RECENT_PAGE;
       loadMoreBtn.disabled = false;

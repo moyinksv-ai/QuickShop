@@ -6505,7 +6505,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
           '\n\nMy name: \nMy store: \nIssue / feedback: ' +
           '\n\nThank you.'
         );
-        window.open('https://wa.me/2347035023138?text=' + msg, '_blank', 'noopener,noreferrer');
+        window.open('https://wa.me/2348112439876?text=' + msg, '_blank', 'noopener,noreferrer');
       });
       sup.appendChild(contactBtn);
       body.appendChild(sup);

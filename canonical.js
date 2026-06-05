@@ -158,7 +158,7 @@
     const nameInput = getNameInput();
     if (!nameInput) return null;
 
-    nameInput.parentNode.insertBefore(strip, nameInput.nextSibling);
+    nameInput.closest('.add-row').insertAdjacentElement('afterend', strip);
     _stripEl = strip;
     return strip;
   }
@@ -234,6 +234,8 @@
         _selectedId = chosen;
       }
       selectRow(strip, _selectedId);
+      // Brief flash so vendor sees the selection confirmed, then dismiss
+      setTimeout(hideStrip, 600);
     });
 
     return row;
@@ -380,8 +382,8 @@
   // any re-render that might replace the input element).
   document.addEventListener('click', function (e) {
     const addBtn = e.target && (
-      e.target.id === 'addItemBtn' ||
-      e.target.closest && e.target.closest('#addItemBtn')
+      e.target.id === 'toggleAddFormBtn' ||
+      e.target.closest && e.target.closest('#toggleAddFormBtn')
     );
     if (addBtn) {
       // Small delay so inventory.js showAddForm() finishes first
