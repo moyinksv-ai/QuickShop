@@ -5,7 +5,7 @@
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self'
-               'sha256-Sqn6GZhhfx2g/y3C3RYGWLONaP00qvJ+Z96GpThxi+M='
+               'sha256-riCFjHI6zw6DJLKV2D8JpGwcNfgklZ1m+Kc2W/6hw8Y='
                https://cdn.jsdelivr.net;
     connect-src 'self'
                 https://*.supabase.co
@@ -521,6 +521,14 @@
     }
     #cat-load-more-btn:hover { background: var(--green-bg); border-color: rgba(34,197,94,0.4); }
 
+    /* All Active Stores landing button */
+    .all-stores-landing-btn {
+      border-color: rgba(34,197,94,0.25);
+      color: var(--green);
+      margin-top: 12px;
+    }
+    .all-stores-landing-btn:hover { background: var(--green-bg); border-color: rgba(34,197,94,0.4); }
+
     /* ── Option C: Store Directory Card ────────────────────────────────────── */
     .sdc {
       background: var(--surface); border: 1px solid var(--border);
@@ -592,6 +600,15 @@
     @media (min-width: 1100px) {
       #all-stores-grid { grid-template-columns: repeat(3, 1fr); }
     }
+
+    /* Responsive grid for landing stores section — mirrors all-stores-grid */
+    #landing-stores-grid { display: flex; flex-direction: column; gap: 10px; }
+    @media (min-width: 640px) {
+      #landing-stores-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    }
+    @media (min-width: 1100px) {
+      #landing-stores-grid { grid-template-columns: repeat(3, 1fr); }
+    }
   </style>
 </head>
 <body>
@@ -645,17 +662,15 @@
   <!-- LANDING STATE -->
   <div id="state-landing">
 
-    <!-- Products — immediately visible, newest first -->
-    <div class="product-grid" id="recent-grid"></div>
-    <button class="load-more-btn" id="load-more-btn" hidden>Load more products</button>
-
-    <!-- Store directory — discoverable by scrolling -->
+    <!-- Active Stores — top of landing, vendors only -->
     <div id="stores-section" hidden>
       <span class="section-label">Active Stores</span>
-      <div class="store-cards-list" id="stores-strip"></div>
-      <a class="see-all-link" id="see-all-stores-btn" href="#">See all stores →</a>
-      <p class="qs-vendor-nudge">Are you a vendor? <a href="https://quickshopper.vercel.app">List your products here →</a></p>
+      <div id="landing-stores-grid"></div>
     </div>
+
+    <!-- Products below stores -->
+    <div class="product-grid" id="recent-grid"></div>
+    <button class="load-more-btn" id="load-more-btn" hidden>Load more products</button>
 
   </div>
 
@@ -738,11 +753,10 @@
   var detailMeta          = document.getElementById('detail-meta');
   var detailVLabel        = document.getElementById('detail-vendors-label');
   var storesSection       = document.getElementById('stores-section');
-  var storesStrip         = document.getElementById('stores-strip');
+  var landingStoresGrid   = document.getElementById('landing-stores-grid');
   var stateStores         = document.getElementById('state-stores');
   var storesHeading       = document.getElementById('stores-heading');
   var allStoresGrid       = document.getElementById('all-stores-grid');
-  var seeAllStoresBtn     = document.getElementById('see-all-stores-btn');
   var recentGrid          = document.getElementById('recent-grid');
   var loadMoreBtn         = document.getElementById('load-more-btn');
   var catGrid             = document.getElementById('cat-grid');
@@ -1064,7 +1078,7 @@
     info.appendChild(meta);
     header.appendChild(info);
 
-    var action = document.createElement('span'); action.className = 'sdc-action'; action.setAttribute('aria-hidden', 'true'); action.textContent = 'Browse →';
+    var action = document.createElement('span'); action.className = 'sdc-action'; action.setAttribute('aria-hidden', 'true'); action.textContent = 'Shop now →';
     header.appendChild(action);
     card.appendChild(header);
 
@@ -1073,20 +1087,33 @@
       return typeof u === 'string' && u.startsWith('https://');
     }).slice(0, 3);
 
-    if (imgs.length > 0) {
+    if (imgs.length > 0 || productCount > 0) {
       var strip = document.createElement('div');
       strip.className = 'sdc-thumbs';
-      imgs.forEach(function (url) {
-        var cell = document.createElement('div');
-        cell.className = 'sdc-thumb';
-        var tImg = document.createElement('img');
-        tImg.src = url; tImg.alt = storeName + ' product'; tImg.loading = 'lazy';
-        tImg.onerror = function () {
-          cell.innerHTML = '<div class="sdc-thumb-placeholder">📦</div>';
-        };
-        cell.appendChild(tImg);
-        strip.appendChild(cell);
-      });
+      if (imgs.length > 0) {
+        imgs.forEach(function (url) {
+          var cell = document.createElement('div');
+          cell.className = 'sdc-thumb';
+          var tImg = document.createElement('img');
+          tImg.src = url; tImg.alt = storeName + ' product'; tImg.loading = 'lazy';
+          tImg.onerror = function () {
+            cell.innerHTML = '<div class="sdc-thumb-placeholder">📦</div>';
+          };
+          cell.appendChild(tImg);
+          strip.appendChild(cell);
+        });
+      } else {
+        // productCount > 0 but no image URLs — show placeholder cells
+        for (var pi = 0; pi < 3; pi++) {
+          var cell = document.createElement('div');
+          cell.className = 'sdc-thumb';
+          var ph = document.createElement('div');
+          ph.className = 'sdc-thumb-placeholder';
+          ph.textContent = '📦';
+          cell.appendChild(ph);
+          strip.appendChild(cell);
+        }
+      }
       card.appendChild(strip);
     }
 
@@ -1094,40 +1121,6 @@
   }
 
   // ── Render store chip (landing strip) ─────────────────────────────────────
-  function renderStoreChip(profile, productCount) {
-    var chip = document.createElement('a');
-    chip.className = 'store-chip';
-    chip.href = '/?store=' + encodeURIComponent(profile.id);
-
-    var storeName = (profile.business_name || profile.name) || 'QuickShop Vendor';
-    var initial   = storeName.charAt(0).toUpperCase();
-
-    var top = document.createElement('div'); top.className = 'store-chip-top';
-    var av  = document.createElement('div'); av.className = 'store-chip-avatar';
-    if (profile.avatar_url && typeof profile.avatar_url === 'string' && profile.avatar_url.startsWith('https://')) {
-      var img = document.createElement('img'); img.src = profile.avatar_url; img.alt = storeName;
-      av.appendChild(img);
-    } else {
-      av.textContent = initial;
-    }
-    var nameEl = document.createElement('div'); nameEl.className = 'store-chip-name'; nameEl.textContent = storeName;
-    top.appendChild(av); top.appendChild(nameEl);
-    chip.appendChild(top);
-
-    if (profile.tagline) {
-      var tag = document.createElement('div'); tag.className = 'store-chip-tagline'; tag.textContent = profile.tagline;
-      chip.appendChild(tag);
-    }
-
-    if (typeof productCount === 'number' && productCount > 0) {
-      var cnt = document.createElement('div'); cnt.className = 'store-chip-count';
-      cnt.textContent = productCount + ' item' + (productCount !== 1 ? 's' : '');
-      chip.appendChild(cnt);
-    }
-
-    return chip;
-  }
-
   // ── Empty state ───────────────────────────────────────────────────────────
   function renderEmpty(container, title, body) {
     container.innerHTML =
@@ -1322,7 +1315,6 @@
           catLMBtn.addEventListener('click', function () {
             catLMBtn.disabled = true;
             catLMBtn.textContent = 'Loading…';
-            _catOffset += _CAT_PAGE;
             browseCategory(_catName, true);
           });
           productsSectionEl.appendChild(catLMBtn);
@@ -1423,6 +1415,7 @@
 
     } catch (e) {
       console.error('[product detail] error', e);
+      _currentProduct = null;
       showState('results');
     }
   }
@@ -1442,36 +1435,53 @@
   function injectProductSchema(canonical, listings, profileMap) {
     var old = document.getElementById('qs-product-ld'); if (old) old.remove();
     if (!listings.length) return;
-    var offers = listings.map(function (l) {
-      var p = profileMap[l.vendor_store_id] || {};
-      return { '@type':'Offer', 'price':l.price, 'priceCurrency':'NGN', 'availability':'https://schema.org/InStock', 'seller':{'@type':'Organization','name':p.business_name||p.name||'QuickShop Vendor'} };
-    });
+    var offers = listings
+      .filter(function (l) { return l.price !== null && l.price !== undefined; })
+      .map(function (l) {
+        var p = profileMap[l.vendor_store_id] || {};
+        return { '@type':'Offer', 'price':l.price, 'priceCurrency':'NGN', 'availability':'https://schema.org/InStock', 'seller':{'@type':'Organization','name':p.business_name||p.name||'QuickShop Vendor'} };
+      });
+    if (!offers.length) return;
     var script = document.createElement('script');
     script.type = 'application/ld+json'; script.id = 'qs-product-ld';
     script.textContent = JSON.stringify({'@context':'https://schema.org','@type':'Product','name':canonical.display_name,'offers':offers});
     document.head.appendChild(script);
   }
 
-  // ── LOAD FEATURED STORES (landing) ────────────────────────────────────────
+  // ── LOAD ALL STORES (landing) ─────────────────────────────────────────────
   async function loadFeaturedStores() {
     if (!sb) return;
     try {
       var res = await sb
         .from('public_catalog_profiles')
-        .select('id, business_name, name, tagline, avatar_url, location')
-        .order('created_at', { ascending: false })
-        .limit(20);  // fetch more than we show so we can rank client-side
+        .select('id, business_name, name, tagline, avatar_url, location, delivery_available, slug')
+        .order('created_at', { ascending: false });
+      if (res.error) { console.error('[stores landing]', res.error); return; }
       var stores = res.data || [];
-      if (res.error) { console.error('[stores strip]', res.error); return; }
       if (!stores.length) return;
 
-      // Batch product counts
+      // Batch: product counts + up to 3 thumbnail URLs per store in one query
       var ids = stores.map(function (s) { return s.id; });
-      var cntRes = await sb.from('public_catalog_products').select('user_id').in('user_id', ids);
-      var countMap = {};
-      if (cntRes.data) cntRes.data.forEach(function (r) { countMap[r.user_id] = (countMap[r.user_id] || 0) + 1; });
+      var countMap = {}, thumbMap = {};
+      var prodRes = await sb
+        .from('public_catalog_products')
+        .select('user_id, image_url')
+        .in('user_id', ids);
+      if (prodRes.data) {
+        prodRes.data.forEach(function (r) {
+          countMap[r.user_id] = (countMap[r.user_id] || 0) + 1;
+          if (r.image_url && typeof r.image_url === 'string' && r.image_url.startsWith('https://')) {
+            if (!thumbMap[r.user_id]) thumbMap[r.user_id] = [];
+            if (thumbMap[r.user_id].length < 3) thumbMap[r.user_id].push(r.image_url);
+          }
+        });
+      }
 
-      // Sort: most products first, completeness tiebreaker — then show top 8
+      // Active stores only — profiles with at least one listed product
+      stores = stores.filter(function (s) { return (countMap[s.id] || 0) > 0; });
+      if (!stores.length) return;
+
+      // Sort: most products first, completeness tiebreaker
       stores.sort(function (a, b) {
         var ca = countMap[a.id] || 0, cb = countMap[b.id] || 0;
         if (cb !== ca) return cb - ca;
@@ -1479,16 +1489,15 @@
         var sb2= (b.avatar_url?1:0)+(b.tagline?1:0)+(b.location?1:0);
         return sb2 - sa;
       });
-      stores = stores.slice(0, 8);
 
-      storesStrip.innerHTML = '';
+      landingStoresGrid.innerHTML = '';
       stores.forEach(function (profile) {
-        storesStrip.appendChild(renderVendorStoreCard(profile, countMap[profile.id] || 0));
+        landingStoresGrid.appendChild(
+          renderStoreDirectoryCard(profile, countMap[profile.id] || 0, thumbMap[profile.id] || [])
+        );
       });
       storesSection.hidden = false;
-    } catch (e) {
-      // Silent — landing works fine without stores strip
-    }
+    } catch (e) { console.error('[loadFeaturedStores]', e); }
   }
 
   // ── ALL STORES DIRECTORY ──────────────────────────────────────────────────
@@ -1535,6 +1544,9 @@
         }
       }
 
+      // Active stores only — exclude ghost accounts with no products
+      stores = stores.filter(function (s) { return (countMap[s.id] || 0) > 0; });
+
       // ── Rank: most products first, completeness tiebreaker ──────────────
       stores.sort(function (a, b) {
         var ca = countMap[a.id] || 0;
@@ -1546,13 +1558,13 @@
       });
 
       storesHeading.innerHTML =
-        '<strong>' + stores.length + ' store' + (stores.length !== 1 ? 's' : '') + '</strong> on QuickShop';
+        '<strong>' + stores.length + ' active store' + (stores.length !== 1 ? 's' : '') + '</strong> on QuickShop';
 
       allStoresGrid.innerHTML = '';
       if (!stores.length) {
         allStoresGrid.innerHTML =
           '<div class="empty-state"><div class="es-icon">🏪</div>' +
-          '<h3>No stores yet</h3><p>Be the first vendor to list your products on QuickShop.</p></div>';
+          '<h3>No active stores</h3><p>No vendors currently have products listed on QuickShop.</p></div>';
         showState('stores');
         return;
       }
@@ -1572,19 +1584,23 @@
   // ── LOAD RECENT PRODUCTS (landing) ────────────────────────────────────────
 
   // ── Weighted Fisher-Yates shuffle ────────────────────────────────────────
-  // Scores each product 0–4 by listing completeness, groups into buckets,
+  // Scores each product 0–3 by listing completeness, groups into buckets,
   // shuffles randomly within each bucket, then concatenates highest→lowest.
-  // Result: complete listings float to the top, but within each tier the
-  // order is different on every page load — no single vendor can dominate.
+  // A product scores 3 (top) only if it has image + vendor + price — all three.
+  // This means every complete listing has equal random chance; no vendor
+  // gets positional advantage over another complete vendor.
   function weightedShuffle(items) {
     function score(item) {
+      var hasImage  = !!(item.image_url && item.image_url.startsWith('https://'));
+      var hasVendor = (item.vendor_count || 0) >= 1;
+      var hasPrice  = item.min_price !== undefined && item.min_price !== null;
+      if (hasImage && hasVendor && hasPrice) return 3;
       var s = 0;
-      if (item.image_url && item.image_url.startsWith('https://')) s += 2;
-      if ((item.vendor_count || 0) >= 2) s += 1;
-      if (item.min_price !== undefined && item.min_price !== null) s += 1;
-      return s;
+      if (hasImage)  s += 2;
+      if (hasPrice)  s += 1;
+      return Math.min(s, 2);
     }
-    var buckets = {4:[], 3:[], 2:[], 1:[], 0:[]};
+    var buckets = {3:[], 2:[], 1:[], 0:[]};
     items.forEach(function(item) { buckets[score(item)].push(item); });
     function shuffle(arr) {
       for (var i = arr.length - 1; i > 0; i--) {
@@ -1593,8 +1609,7 @@
       }
       return arr;
     }
-    return shuffle(buckets[4])
-      .concat(shuffle(buckets[3]))
+    return shuffle(buckets[3])
       .concat(shuffle(buckets[2]))
       .concat(shuffle(buckets[1]))
       .concat(shuffle(buckets[0]));
@@ -1653,7 +1668,7 @@
       var params2 = new URLSearchParams(); navigate(params2, false);
       _recentOffset = 0;
       showState('landing'); updateSEO(params2);
-      loadFeaturedStores(); loadRecent(false);
+      renderSkeletonGrid(recentGrid, 12); loadFeaturedStores(); loadRecent(false);
     }
   }
 
@@ -1675,7 +1690,7 @@
     else if (view === 'stores') browseAllStores();
     else                   {
       _recentOffset = 0;
-      showState('landing'); loadFeaturedStores(); loadRecent(false);
+      showState('landing'); renderSkeletonGrid(recentGrid, 12); loadFeaturedStores(); loadRecent(false);
     }
   }
 
@@ -1700,10 +1715,7 @@
     showState('landing');
   });
 
-  seeAllStoresBtn.addEventListener('click', function (e) {
-    e.preventDefault();
-    browseAllStores();
-  });
+
 
   catGrid.addEventListener('click', function (e) {
     var tile = e.target.closest('.cat-tile');

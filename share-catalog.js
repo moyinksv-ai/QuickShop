@@ -306,6 +306,52 @@
 
   // ── Paywall modals (State 1 and State 2) ────────────────────────────────────
 
+  // ── Reusable bank details block ────────────────────────────────────────────
+  // Used by both the sent-confirmation and the pending modal so vendors always
+  // have the transfer details in front of them regardless of which screen they see.
+  function _buildBankBlock() {
+    var wrapper = document.createElement('div');
+    wrapper.style.cssText = 'margin-bottom:18px;';
+
+    var lbl = document.createElement('div');
+    lbl.style.cssText = [
+      'color:rgba(255,255,255,0.35);font-size:10px;font-weight:700;',
+      'letter-spacing:0.8px;text-transform:uppercase;margin-bottom:8px;',
+    ].join('');
+    lbl.textContent = 'Transfer details';
+    wrapper.appendChild(lbl);
+
+    var card = document.createElement('div');
+    card.style.cssText = [
+      'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);',
+      'border-radius:12px;padding:14px 16px;',
+    ].join('');
+
+    var lines = [
+      ['Bank',    BANK_NAME],
+      ['Acct No', ACCOUNT_NUMBER],
+      ['Name',    ACCOUNT_NAME],
+      ['Amount',  '\u20a61,500'],
+    ];
+    lines.forEach(function (pair, idx) {
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:6px 0;' +
+        (idx < lines.length - 1 ? 'border-bottom:1px solid rgba(255,255,255,0.05);' : '');
+      var k = document.createElement('span');
+      k.style.cssText = 'color:rgba(255,255,255,0.35);font-size:12px;';
+      k.textContent = pair[0];
+      var v = document.createElement('span');
+      v.style.cssText = 'color:#e2e8f0;font-size:13px;font-weight:700;letter-spacing:0.1px;';
+      v.textContent = pair[1];
+      row.appendChild(k);
+      row.appendChild(v);
+      card.appendChild(row);
+    });
+
+    wrapper.appendChild(card);
+    return wrapper;
+  }
+
   // shared bottom-sheet scaffold
   function _buildSheet(id) {
     var stale = document.getElementById(id);
@@ -372,7 +418,7 @@
       sub.style.cssText = 'color:rgba(255,255,255,0.5);font-size:14px;text-align:center;margin:0 0 24px;line-height:1.6;';
       sub.textContent = isRenewal
         ? 'Your subscription has expired. Renew for ₦1,500/month to restore your catalog link.'
-        : 'Share your catalog with your customer for ₦1,500/month. Bank transfer — activated within minutes.';
+        : 'One-time payment of ₦1,500. Your catalog link is yours for life — no monthly fees. Bank transfer. Activated in minutes.';
 
       // Price badge
       var priceBadge = document.createElement('div');
@@ -387,7 +433,7 @@
       priceAmt.textContent = '₦1,500';
       var pricePer = document.createElement('span');
       pricePer.style.cssText = 'color:rgba(255,255,255,0.4);font-size:14px;';
-      pricePer.textContent = '/ month';
+      pricePer.textContent = 'one time';
       var priceNote = document.createElement('div');
       priceNote.style.cssText = 'color:rgba(255,255,255,0.35);font-size:12px;text-align:center;';
       priceNote.textContent = 'Inventory management stays free forever';
@@ -408,8 +454,8 @@
       bankCard.appendChild(bankTitle);
 
       var bankLines = [
-        ['Bank',       'Zenith Bank'],
-        ['Account No', '2119868917'],
+        ['Bank',       'Opay (Paycom)'],
+        ['Account No', '7035023138'],
         ['Name',       'Moses Olayinka O'],
         ['Amount',     '₦1,500'],
       ];
@@ -480,33 +526,36 @@
     });
   }
 
-  // Inline confirmation — shown immediately after WhatsApp opens
-  // Not a new modal — replaces the paywall in place so there's no re-entry point
+  // Inline confirmation — shown immediately after WhatsApp opens.
+  // Always includes transfer details because the vendor may have clicked the
+  // WhatsApp button without completing the bank transfer first.
   function _showSentConfirmation(userId) {
     var _s = _buildSheet('qs-paywall-confirm');
     var backdrop = _s.backdrop, box = _s.box;
 
     var icon = document.createElement('div');
-    icon.style.cssText = 'font-size:44px;text-align:center;margin-bottom:12px;';
-    icon.textContent = '⏳';
+    icon.style.cssText = 'font-size:40px;text-align:center;margin-bottom:12px;';
+    icon.textContent = '\u23f3';
 
     var title = document.createElement('h2');
-    title.style.cssText = 'color:#fff;font-size:19px;font-weight:800;text-align:center;margin:0 0 10px;';
-    title.textContent = 'Payment Noted';
+    title.style.cssText = 'color:#fff;font-size:19px;font-weight:800;text-align:center;margin:0 0 8px;letter-spacing:-0.2px;';
+    title.textContent = 'Almost there';
 
     var msg = document.createElement('p');
-    msg.style.cssText = 'color:rgba(255,255,255,0.5);font-size:14px;text-align:center;margin:0 0 24px;line-height:1.65;';
-    msg.textContent = "We've received your WhatsApp message. Your store link will be activated within a few minutes once we verify your transfer.";
+    msg.style.cssText = 'color:rgba(255,255,255,0.5);font-size:13px;text-align:center;margin:0 0 20px;line-height:1.65;';
+    msg.textContent = "We've received your WhatsApp message. Once we confirm your \u20a61,500 transfer below, your store link goes live \u2014 usually within a few minutes.";
+
+    // Always show bank details so they can complete the transfer if they haven't yet
+    var bankBlock = _buildBankBlock();
 
     var note = document.createElement('div');
     note.style.cssText = [
-      'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);',
-      'border-radius:10px;padding:12px 16px;margin-bottom:20px;',
-      'font-size:12px;color:rgba(255,255,255,0.4);line-height:1.55;',
+      'background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);',
+      'border-radius:10px;padding:11px 14px;margin-bottom:18px;',
+      'font-size:12px;color:rgba(255,255,255,0.38);line-height:1.55;',
     ].join('');
-    note.textContent = 'Come back and tap "Share Catalog" again after activation. If it\'s been more than 15 minutes, tap the button below.';
+    note.textContent = 'After activation, come back and tap "Share Catalog" \u2014 your link will work immediately.';
 
-    // Follow-up WhatsApp link (soft, not a CTA button)
     var followUp = document.createElement('a');
     followUp.href = 'https://wa.me/' + VENDOR_WHATSAPP + '?text=' + encodeURIComponent("Hi, I'm following up on my QuickShop catalog payment. Has my store been activated?");
     followUp.target = '_blank';
@@ -514,9 +563,9 @@
     followUp.style.cssText = [
       'display:block;text-align:center;',
       'color:#a78bfa;font-size:13px;font-weight:600;',
-      'text-decoration:none;margin-bottom:20px;',
+      'text-decoration:none;margin-bottom:18px;',
     ].join('');
-    followUp.textContent = 'Still waiting? Follow up on WhatsApp →';
+    followUp.textContent = 'Still waiting after 15 mins? Follow up on WhatsApp \u2192';
 
     var doneBtn = document.createElement('button');
     doneBtn.type = 'button';
@@ -527,7 +576,7 @@
       'border-radius:12px;color:rgba(255,255,255,0.7);',
       'font-size:14px;font-weight:600;cursor:pointer;',
     ].join('');
-    doneBtn.textContent = 'Got it, I\'ll wait';
+    doneBtn.textContent = "Got it, I'll wait";
 
     doneBtn.addEventListener('click', function () { backdrop.remove(); });
     backdrop.addEventListener('click', function (e) { if (e.target === backdrop) backdrop.remove(); });
@@ -536,6 +585,7 @@
     box.appendChild(icon);
     box.appendChild(title);
     box.appendChild(msg);
+    box.appendChild(bankBlock);
     box.appendChild(note);
     box.appendChild(followUp);
     box.appendChild(doneBtn);
@@ -543,67 +593,90 @@
     requestAnimationFrame(function () { doneBtn.focus(); });
   }
 
-  // State 2 — already notified, awaiting admin activation
-  function showPendingModal(userId, pendingTs) {
+  // State 2 — vendor returned after clicking WhatsApp but before activation.
+  // Accepts optional userEmail so the WhatsApp pre-fill includes their account.
+  // KEY DESIGN: we don't know if they paid yet. Show bank details + pay CTA
+  // so both situations (paid/not-paid) are handled without accusatory copy.
+  function showPendingModal(userId, pendingTs, userEmail) {
     return new Promise(function (resolve) {
       var _s = _buildSheet('qs-paywall-pending');
       var backdrop = _s.backdrop, box = _s.box;
       backdrop.setAttribute('aria-labelledby', 'qs-pending-title');
 
       var icon = document.createElement('div');
-      icon.style.cssText = 'font-size:44px;text-align:center;margin-bottom:12px;';
-      icon.textContent = '⏳';
+      icon.style.cssText = 'font-size:40px;text-align:center;margin-bottom:12px;';
+      icon.textContent = '\u23f3';
 
       var title = document.createElement('h2');
       title.id = 'qs-pending-title';
-      title.style.cssText = 'color:#fff;font-size:19px;font-weight:800;text-align:center;margin:0 0 10px;';
-      title.textContent = 'Awaiting Activation';
+      title.style.cssText = 'color:#fff;font-size:19px;font-weight:800;text-align:center;margin:0 0 8px;letter-spacing:-0.2px;';
+      title.textContent = "We're holding your slot";
 
-      // Human-readable time since notification
       var elapsed = Date.now() - (parseInt(pendingTs, 10) || Date.now());
+      var elapsedMins = Math.floor(elapsed / 60000);
       var elapsedTxt = elapsed < 60000
         ? 'just now'
         : elapsed < 3600000
-          ? Math.floor(elapsed / 60000) + ' minute' + (Math.floor(elapsed / 60000) === 1 ? '' : 's') + ' ago'
-          : Math.floor(elapsed / 3600000) + ' hour' + (Math.floor(elapsed / 3600000) === 1 ? '' : 's') + ' ago';
+          ? elapsedMins + ' min' + (elapsedMins === 1 ? '' : 's') + ' ago'
+          : Math.floor(elapsed / 3600000) + ' hr' + (Math.floor(elapsed / 3600000) === 1 ? '' : 's') + ' ago';
 
-      var msg = document.createElement('p');
-      msg.style.cssText = 'color:rgba(255,255,255,0.5);font-size:14px;text-align:center;margin:0 0 20px;line-height:1.65;';
-      msg.textContent = 'You notified us ' + elapsedTxt + '. We\'re verifying your transfer — your store link will be live shortly.';
+      var subMsg = document.createElement('p');
+      subMsg.style.cssText = 'color:rgba(255,255,255,0.45);font-size:13px;text-align:center;margin:0 0 20px;line-height:1.6;';
+      subMsg.textContent = 'You reached out ' + elapsedTxt + '. If you already transferred, we are verifying \u2014 usually a few minutes. If not, the details are below.';
 
-      var note = document.createElement('div');
-      note.style.cssText = [
-        'background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);',
-        'border-radius:10px;padding:12px 16px;margin-bottom:20px;',
-        'font-size:12px;color:rgba(255,255,255,0.45);line-height:1.55;',
+      // Bank details — always visible so they can pay if they haven't yet
+      var bankBlock = _buildBankBlock();
+
+      // Primary CTA: send/resend the WhatsApp notification after paying
+      var payBtn = document.createElement('button');
+      payBtn.type = 'button';
+      payBtn.style.cssText = [
+        'width:100%;padding:14px;',
+        'background:linear-gradient(135deg,#22c55e,#16a34a);',
+        'border:0;border-radius:12px;color:#fff;',
+        'font-size:14px;font-weight:700;cursor:pointer;',
+        'letter-spacing:0.1px;margin-bottom:12px;',
+        'box-shadow:0 6px 20px rgba(34,197,94,0.25);',
       ].join('');
-      note.textContent = 'Once activated, tap "Share Catalog" and your link will work. Activation is usually within a few minutes during business hours.';
+      payBtn.textContent = '\u2705 I\'ve sent the transfer \u2014 notify on WhatsApp';
 
-      // Follow-up link — available after 15 mins
-      if (elapsed > 15 * 60 * 1000) {
-        var followUp = document.createElement('a');
-        followUp.href = 'https://wa.me/' + VENDOR_WHATSAPP + '?text=' + encodeURIComponent("Hi, I'm following up on my QuickShop catalog payment. Has my store been activated?");
-        followUp.target = '_blank';
-        followUp.rel = 'noopener noreferrer';
-        followUp.style.cssText = [
-          'display:block;text-align:center;',
-          'color:#a78bfa;font-size:13px;font-weight:600;',
-          'text-decoration:none;margin-bottom:20px;',
-        ].join('');
-        followUp.textContent = 'Still waiting? Follow up on WhatsApp →';
-        box.appendChild(followUp);
-      }
+      payBtn.addEventListener('click', function () {
+        try { localStorage.setItem(pendingKey(userId), String(Date.now())); } catch (_) {}
+        var email = userEmail || 'N/A';
+        var msg = 'Hi, I just transferred \u20a61,500 for QuickShop catalog access.\nAccount email: ' + email + '\nPlease activate my store link. \uD83D\uDE4F';
+        window.open('https://wa.me/' + VENDOR_WHATSAPP + '?text=' + encodeURIComponent(msg), '_blank', 'noopener,noreferrer');
+        backdrop.remove();
+        _showSentConfirmation(userId);
+        resolve();
+      });
+
+      // Follow-up link — always shown (they may have paid and be genuinely waiting)
+      var followUp = document.createElement('a');
+      var followMsg = elapsed > 15 * 60 * 1000
+        ? "Hi, I'm following up on my QuickShop catalog payment. Has my store been activated?"
+        : "Hi, I sent a transfer for QuickShop catalog access. Can you confirm receipt? \uD83D\uDE4F";
+      followUp.href = 'https://wa.me/' + VENDOR_WHATSAPP + '?text=' + encodeURIComponent(followMsg);
+      followUp.target = '_blank';
+      followUp.rel = 'noopener noreferrer';
+      followUp.style.cssText = [
+        'display:block;text-align:center;',
+        'color:#a78bfa;font-size:13px;font-weight:600;',
+        'text-decoration:none;margin-bottom:18px;',
+      ].join('');
+      followUp.textContent = elapsed > 15 * 60 * 1000
+        ? 'Already paid? Follow up on WhatsApp \u2192'
+        : 'Already notified us? Check in on WhatsApp \u2192';
 
       var doneBtn = document.createElement('button');
       doneBtn.type = 'button';
       doneBtn.style.cssText = [
-        'width:100%;padding:14px;',
-        'background:rgba(255,255,255,0.06);',
-        'border:1px solid rgba(255,255,255,0.1);',
-        'border-radius:12px;color:rgba(255,255,255,0.7);',
-        'font-size:14px;font-weight:600;cursor:pointer;',
+        'width:100%;padding:13px;',
+        'background:rgba(255,255,255,0.04);',
+        'border:1px solid rgba(255,255,255,0.08);',
+        'border-radius:12px;color:rgba(255,255,255,0.45);',
+        'font-size:13px;font-weight:600;cursor:pointer;',
       ].join('');
-      doneBtn.textContent = 'OK, I\'ll wait';
+      doneBtn.textContent = "I'll come back after transferring";
 
       function close() { backdrop.remove(); resolve(); }
       doneBtn.addEventListener('click', close);
@@ -612,11 +685,13 @@
 
       box.appendChild(icon);
       box.appendChild(title);
-      box.appendChild(msg);
-      box.appendChild(note);
+      box.appendChild(subMsg);
+      box.appendChild(bankBlock);
+      box.appendChild(payBtn);
+      box.appendChild(followUp);
       box.appendChild(doneBtn);
       document.body.appendChild(backdrop);
-      requestAnimationFrame(function () { doneBtn.focus(); });
+      requestAnimationFrame(function () { payBtn.focus(); });
     });
   }
 
@@ -662,7 +737,7 @@
 
       if (pendingTs) {
         // State 2 — show waiting screen, no bank details, no re-notify CTA
-        await showPendingModal(userId, pendingTs);
+        await showPendingModal(userId, pendingTs, userEmail);
         return;
       }
 

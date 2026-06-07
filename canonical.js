@@ -229,9 +229,16 @@
       if (!strip) return;
       const chosen = row.dataset.canonicalId;
       if (chosen === '__new__') {
-        _selectedId = false; // explicit "new product"
+        _selectedId = false; // explicit "new product" — keep whatever the vendor typed
       } else {
         _selectedId = chosen;
+        // Fill the name field with the canonical's exact display name
+        const nameInput = getNameInput();
+        if (nameInput && name) {
+          nameInput.value = name;
+          // Move cursor to end so vendor can append e.g. " 100ml"
+          nameInput.setSelectionRange(nameInput.value.length, nameInput.value.length);
+        }
       }
       selectRow(strip, _selectedId);
       // Brief flash so vendor sees the selection confirmed, then dismiss

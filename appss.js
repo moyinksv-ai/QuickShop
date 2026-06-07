@@ -1279,9 +1279,14 @@ function handleTouchEnd() {
       btnResendVerification.addEventListener('click', async function () {
         try {
           const supabase = getClient();
-          const user = getUser();
-          if (!user) { toast('You need to be signed in to resend verification', 'error'); return; }
-          const { error } = await supabase.auth.resend({ type: 'signup', email: user.email });
+          // Email is always in the DOM — getUser() is null here because the user
+          // has no active session (either just signed up, or was signed out after
+          // a login attempt with an unverified account). Read from the element
+          // that showVerificationNotice() populates instead.
+          const emailEl = $('verificationEmail');
+          const email = (emailEl && emailEl.textContent || '').trim();
+          if (!email) { toast('Could not determine your email. Please try signing up again.', 'error'); return; }
+          const { error } = await supabase.auth.resend({ type: 'signup', email });
           if (error) throw error;
           toast('New 6-digit code sent. Check your inbox.');
         } catch (e) { errlog('resend verification error', e); toast('Failed to resend verification. Try again later.', 'error'); }

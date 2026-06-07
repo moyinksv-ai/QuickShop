@@ -1147,8 +1147,12 @@
         </div>
       </div>
 
-      <input id="invImg"  type="file" accept="image/*" style="display:none" aria-hidden="true" />
-      <input id="invImg2" type="file" accept="image/*" style="display:none" aria-hidden="true" />
+      <input id="invImg"     type="file" accept="image/*" style="display:none" aria-hidden="true" />
+      <input id="invImg2"    type="file" accept="image/*" style="display:none" aria-hidden="true" />
+      <!-- Dedicated multi-select input for the "Add Photos" button.
+           multiple must be a static HTML attribute — setting it dynamically
+           before .click() is silently ignored on Android WebView. -->
+      <input id="invImgBoth" type="file" accept="image/*" multiple style="display:none" aria-hidden="true" />
       <div id="invImgPreview"  style="display:none;"></div>
       <div id="invImgPreview2" style="display:none;"></div>
     </div>

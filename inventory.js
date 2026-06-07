@@ -318,16 +318,26 @@
       else { if (slot === 'img1') clearInvImage(); else clearInvImage2(); }
     }
 
-    const bothBtn   = $('invPhotoBothBtn');
-    const img1Input = $('invImg');
-    if (bothBtn && img1Input) {
+    const bothBtn      = $('invPhotoBothBtn');
+    const imgBothInput = $('invImgBoth');   // static multiple — safe to .click() on Android
+
+    if (bothBtn && imgBothInput) {
       bothBtn.addEventListener('click', function () {
-        img1Input.setAttribute('multiple', '');
-        img1Input.click();
+        imgBothInput.value = ''; // reset so re-selecting same files fires change
+        imgBothInput.click();
+      });
+      imgBothInput.addEventListener('change', async function (e) {
+        const files = Array.from(e.target.files || []);
+        const tasks = [];
+        if (files[0]) tasks.push(handleFileForSlot(files[0], 'img1'));
+        if (files[1]) tasks.push(handleFileForSlot(files[1], 'img2'));
+        await Promise.all(tasks);
+        imgBothInput.value = '';
       });
     }
 
     const img1Btn   = $('invImg1Btn');
+    const img1Input = $('invImg');          // single-slot input — no multiple
     if (img1Btn && img1Input) {
       img1Btn.addEventListener('click', function () {
         img1Input.removeAttribute('multiple');
