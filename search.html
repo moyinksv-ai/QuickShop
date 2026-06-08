@@ -5,7 +5,7 @@
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self'
-               'sha256-riCFjHI6zw6DJLKV2D8JpGwcNfgklZ1m+Kc2W/6hw8Y='
+               'sha256-BI5jcoKXAYv0BQhsKQJoTuiAPTutyjGrt30PJhhbRIY='
                https://cdn.jsdelivr.net;
     connect-src 'self'
                 https://*.supabase.co
@@ -134,7 +134,7 @@
       background: var(--surface); border: 1px solid var(--border);
       border-radius: 10px; padding: 0 14px; transition: border-color .12s;
     }
-    .search-box:focus-within { border-color: var(--accent); }
+    .search-box:focus-within { border-color: rgba(34,197,94,0.55); box-shadow: 0 0 0 3px rgba(34,197,94,0.08); }
     .search-icon { font-size: 15px; color: var(--muted); flex-shrink: 0; }
     #qs-search-input {
       flex: 1; background: none; border: none; outline: none;
@@ -190,65 +190,63 @@
       .qs-main { grid-area: main; padding: 40px clamp(32px, 4vw, 72px); min-height: calc(100dvh - 60px); }
     }
 
-    /* ── Landing state ─────────────────────────────────────────────────────── */
-    #state-landing { padding: 16px var(--px) 0; }
-    @media (min-width: 900px) { #state-landing { padding: 0; } }
+    /* ── Tab bar (shared across all browse states) ─────────────────────────── */
+    #main-tab-bar {
+      display: flex; align-items: stretch; gap: 0;
+      padding: 0 var(--px);
+      border-bottom: 1px solid var(--border);
+    }
+    @media (min-width: 900px) { #main-tab-bar { padding: 0; } }
 
-    .section-label {
-      font-size: 11px; font-weight: 700; letter-spacing: 2px;
-      text-transform: uppercase; color: var(--accent);
-      margin-bottom: 12px; margin-top: 32px; display: block;
+    .landing-tab {
+      flex: 1;
+      font-size: 13px; font-weight: 700; font-family: inherit;
+      color: var(--muted);
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      padding: 15px 0; cursor: pointer;
+      text-align: center;
+      transition: color .15s, border-color .15s;
+      min-height: 48px; line-height: 1; white-space: nowrap;
+      letter-spacing: -0.1px;
+      margin-bottom: -1px;
+    }
+    .landing-tab:hover  { color: var(--text); }
+    .landing-tab:active { opacity: 0.7; }
+    .landing-tab.active {
+      color: var(--text);
+      border-bottom-color: var(--text);
+      font-weight: 800;
     }
 
-    /* ── Store discovery strip ─────────────────────────────────────────────── */
-    /* Horizontal scroll on mobile, grid on desktop */
-    .stores-strip {
-      display: flex; gap: 10px; overflow-x: auto;
-      padding-bottom: 8px; scroll-snap-type: x mandatory;
-      -webkit-overflow-scrolling: touch;
-    }
-    .stores-strip::-webkit-scrollbar { display: none; }
-    @media (min-width: 640px) {
-      .stores-strip { display: grid; grid-template-columns: repeat(3, 1fr); overflow: visible; }
+    /* ── Content panels ────────────────────────────────────────────────────── */
+    #panel-products,
+    #panel-stores {
+      padding: 16px var(--px) 0;
     }
     @media (min-width: 900px) {
-      .stores-strip { grid-template-columns: repeat(3, 1fr); }
-    }
-    @media (min-width: 1300px) {
-      .stores-strip { grid-template-columns: repeat(4, 1fr); }
+      #panel-products,
+      #panel-stores { padding: 20px 0 0; }
     }
 
-    .store-chip {
-      flex: 0 0 160px; scroll-snap-align: start;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 12px; padding: 14px;
-      display: flex; flex-direction: column; gap: 8px;
-      text-decoration: none; cursor: pointer;
-      transition: border-color .12s, background .12s;
+    /* ── Results heading ───────────────────────────────────────────────────── */
+    .results-heading { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
+    .results-heading strong { color: var(--text); }
+
+    /* ── Stores grid ───────────────────────────────────────────────────────── */
+    #stores-grid { display: flex; flex-direction: column; gap: 10px; }
+    @media (min-width: 640px) {
+      #stores-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
     }
-    @media (min-width: 640px) { .store-chip { flex: unset; } }
-    .store-chip:hover { border-color: rgba(34,197,94,0.25); background: var(--lift); }
-    .store-chip-top { display: flex; align-items: center; gap: 10px; }
-    .store-chip-avatar {
-      width: 36px; height: 36px; border-radius: 9px; flex-shrink: 0;
-      background: var(--lift); border: 1px solid var(--border);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 14px; font-weight: 800; color: var(--green);
-      overflow: hidden;
+    @media (min-width: 1100px) {
+      #stores-grid { grid-template-columns: repeat(3, 1fr); }
     }
-    .store-chip-avatar img { width:100%; height:100%; object-fit:cover; display:block; }
-    .store-chip-name {
-      font-size: 13px; font-weight: 700; color: var(--text);
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .store-chip-tagline {
-      font-size: 11px; color: var(--muted); line-height: 1.4;
-      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-    }
-    .store-chip-count {
-      font-size: 11px; font-weight: 700; color: var(--green);
-      background: var(--green-bg); padding: 2px 8px; border-radius: 4px;
-      align-self: flex-start;
+
+    /* Inline spinner for stores panel lazy-load */
+    .panel-loading {
+      padding: 40px 20px; display: flex;
+      flex-direction: column; align-items: center; gap: 12px;
     }
 
     /* ── Product grid ──────────────────────────────────────────────────────── */
@@ -268,7 +266,7 @@
       text-decoration: none;
     }
     .product-card:hover { border-color: rgba(34,197,94,0.3); transform: translateY(-2px); }
-    .product-card:active { transform: translateY(0); }
+    .product-card:active { transform: scale(0.975) translateY(0) !important; background: var(--lift); }
 
     /* Image zone */
     .pc-image {
@@ -281,7 +279,6 @@
       transition: opacity .2s;
     }
     .pc-image img[data-loading] { opacity: 0; }
-    /* No-image placeholder */
     .pc-image-placeholder {
       width: 100%; height: 100%;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -299,11 +296,13 @@
       width: 100%; aspect-ratio: 4/3; max-height: 300px;
       border-radius: 14px; overflow: hidden; margin-bottom: 20px;
       background: var(--lift); border: 1px solid var(--border);
+      position: relative;
     }
-    .detail-image-wrap img { width:100%; height:100%; object-fit:cover; display:block; }
+    .detail-image-wrap img { width:100%; height:100%; object-fit:cover; display:block; transition: opacity .22s; }
+    .detail-image-wrap img[data-loading] { opacity: 0; }
     @media (min-width: 900px) { .detail-image-wrap { max-height: 340px; } }
 
-    /* Subtle shimmer while image loads */
+    /* Shimmer */
     .pc-image-shimmer {
       position: absolute; inset: 0;
       background: linear-gradient(90deg, var(--lift) 25%, var(--surface) 50%, var(--lift) 75%);
@@ -331,7 +330,7 @@
       white-space: nowrap; flex-shrink: 0;
     }
 
-    /* ── Loading ───────────────────────────────────────────────────────────── */
+    /* ── Loading state (full-page — product detail only) ───────────────────── */
     #state-loading {
       padding: 80px 20px; display: flex;
       flex-direction: column; align-items: center; gap: 14px;
@@ -344,12 +343,6 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     .loading-label { font-size: 13px; color: var(--muted); }
 
-    /* ── Results state ─────────────────────────────────────────────────────── */
-    #state-results { padding: 20px var(--px) 0; }
-    @media (min-width: 900px) { #state-results { padding: 0; } }
-    .results-heading { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
-    .results-heading strong { color: var(--text); }
-
     /* ── Product detail ────────────────────────────────────────────────────── */
     #state-detail { padding: 0 var(--px); }
     @media (min-width: 900px) { #state-detail { padding: 0; max-width: 640px; } }
@@ -360,6 +353,7 @@
       background: none; border: none; width: 100%; text-align: left; transition: color .12s;
     }
     .detail-back:hover { color: var(--text); }
+    .detail-back:active { color: var(--text); }
     .detail-name { font-size: clamp(24px, 3vw, 36px); font-weight: 800; letter-spacing: -0.04em; line-height: 1.1; margin-bottom: 8px; }
     .detail-meta { font-size: 14px; color: var(--muted); margin-bottom: 28px; }
     .detail-meta span { color: var(--green); font-weight: 700; }
@@ -371,6 +365,7 @@
       display: flex; align-items: center; gap: 14px; transition: border-color .12s;
     }
     .vendor-card:hover { border-color: rgba(34,197,94,0.25); }
+    .vendor-card.best-price { border-color: rgba(34,197,94,0.3); }
     .vc-avatar {
       width: 38px; height: 38px; background: var(--lift);
       border: 1px solid var(--border); border-radius: 9px;
@@ -385,18 +380,12 @@
       display: block; margin-top: 4px; font-size: 11px; font-weight: 700;
       color: var(--text); background: var(--lift); border: 1px solid var(--border);
       border-radius: 5px; padding: 4px 10px; text-align: center; text-decoration: none; transition: border-color .12s;
+      min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
     }
     .vc-view:hover { border-color: var(--text); }
-    .vendor-card.best-price { border-color: rgba(34,197,94,0.3); }
     .vc-best-badge { font-size: 9.5px; font-weight: 700; color: var(--green); letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
 
-    /* ── Browse results store section ──────────────────────────────────────── */
-    .sector-section-label {
-      font-size: 10px; font-weight: 700; letter-spacing: 1.6px;
-      text-transform: uppercase; color: var(--dim); margin: 20px 0 12px;
-    }
-    .sector-section-label:first-child { margin-top: 0; }
-    .store-cards-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; }
+    /* ── Store card (used in stores panel) ─────────────────────────────────── */
     .store-card {
       background: var(--surface); border: 1px solid var(--border);
       border-radius: 12px; padding: 16px 18px;
@@ -404,6 +393,7 @@
       text-decoration: none; transition: border-color .12s; cursor: pointer;
     }
     .store-card:hover { border-color: rgba(34,197,94,0.25); }
+    .store-card:active { transform: scale(0.99); }
     .sc-avatar {
       width: 42px; height: 42px; background: var(--lift);
       border: 1px solid var(--border); border-radius: 10px;
@@ -423,6 +413,7 @@
       font-size: 11px; font-weight: 700; color: var(--text);
       background: var(--lift); border: 1px solid var(--border);
       border-radius: 5px; padding: 5px 12px; white-space: nowrap; flex-shrink: 0;
+      min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
       text-decoration: none; transition: border-color .12s;
     }
     .sc-action:hover { border-color: var(--text); }
@@ -449,27 +440,7 @@
     .skel-card-img { width: 100%; aspect-ratio: 1/1; }
     .skel-card-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
 
-    /* ── Vendor nudge ──────────────────────────────────────────────────────── */
-    .see-all-link {
-      display: inline-flex; align-items: center; gap: 6px;
-      font-size: 13px; font-weight: 700; color: var(--green);
-      text-decoration: none; padding: 12px 0 4px;
-      transition: opacity .12s;
-    }
-    .see-all-link:hover { opacity: .75; }
-
-    /* All Stores pill — slightly accented */
-    .cat-tile--stores { border-color: rgba(34,197,94,0.2); }
-    .cat-tile--stores .cat-emoji { background: var(--green-bg); border-color: rgba(34,197,94,0.25); }
-    .cat-tile--stores.active,
-    .cat-tile--stores:hover { border-color: rgba(34,197,94,0.35); background: var(--green-bg); }
-
-    /* Stores state */
-    #state-stores { padding: 20px var(--px) 0; }
-    @media (min-width: 900px) { #state-stores { padding: 0; } }
-    .qs-vendor-nudge a { color: var(--green); text-decoration: none; font-weight: 600; }
-    .qs-vendor-nudge a:hover { text-decoration: underline; }
-
+    /* ── Load more button ──────────────────────────────────────────────────── */
     .load-more-btn {
       display: flex; align-items: center; justify-content: center;
       width: 100%; margin: 20px 0 8px;
@@ -478,58 +449,18 @@
       color: var(--text); font-size: 13px; font-weight: 700;
       cursor: pointer; font-family: inherit;
       transition: background .12s, border-color .12s;
+      min-height: 44px;
     }
     .load-more-btn:hover { background: var(--lift); border-color: rgba(255,255,255,0.14); }
     .load-more-btn:disabled { opacity: .4; cursor: not-allowed; }
 
-    /* ── Page fade-in ──────────────────────────────────────────────────────── */
-    @media (prefers-reduced-motion: no-preference) { body { animation: qs-page-in 0.22s ease both; } }
-    @keyframes qs-page-in { from { opacity: 0; } to { opacity: 1; } }
+    /* ── All Stores cat tile accent ─────────────────────────────────────────── */
+    .cat-tile--stores { border-color: rgba(34,197,94,0.2); }
+    .cat-tile--stores .cat-emoji { background: var(--green-bg); border-color: rgba(34,197,94,0.25); }
+    .cat-tile--stores.active,
+    .cat-tile--stores:hover { border-color: rgba(34,197,94,0.35); background: var(--green-bg); }
 
-    /* ── Footer ────────────────────────────────────────────────────────────── */
-    .qs-footer { margin-top: 64px; padding: 32px var(--px); border-top: 1px solid var(--border); text-align: center; }
-    @media (min-width: 900px) { .qs-footer { grid-column: 1 / -1; } }
-    .qs-footer p { font-size: 12px; color: var(--dim); line-height: 1.9; }
-    .qs-footer a { color: var(--green); text-decoration: none; font-weight: 600; }
-
-    /* ── Touch target enforcement (min 44×44 px) ──────────────────────────── */
-    .cat-tile { min-height: 44px; }
-    .detail-back { min-height: 44px; }
-    .vc-view { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
-    .sc-action { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
-    .load-more-btn { min-height: 44px; }
-    #qs-clear-btn { min-width: 44px; min-height: 44px; }
-
-    /* ── Active / pressed feedback ─────────────────────────────────────────── */
-    .product-card:active { transform: scale(0.975) translateY(0) !important; background: var(--lift); }
-    .cat-tile:active { opacity: 0.72; transform: scale(0.97); }
-    .store-card:active { transform: scale(0.99); }
-    .store-chip:active { transform: scale(0.98); }
-    .detail-back:active { color: var(--text); }
-    .vc-view:active { background: var(--surface); border-color: var(--text); }
-
-    /* ── Detail image shimmer positioning ─────────────────────────────────── */
-    .detail-image-wrap { position: relative; }
-    .detail-image-wrap img[data-loading] { opacity: 0; }
-    .detail-image-wrap img { transition: opacity .22s; }
-
-    /* ── Category load-more button accent ─────────────────────────────────── */
-    #cat-load-more-btn {
-      border-color: rgba(34,197,94,0.25);
-      color: var(--green);
-      margin-top: 12px;
-    }
-    #cat-load-more-btn:hover { background: var(--green-bg); border-color: rgba(34,197,94,0.4); }
-
-    /* All Active Stores landing button */
-    .all-stores-landing-btn {
-      border-color: rgba(34,197,94,0.25);
-      color: var(--green);
-      margin-top: 12px;
-    }
-    .all-stores-landing-btn:hover { background: var(--green-bg); border-color: rgba(34,197,94,0.4); }
-
-    /* ── Option C: Store Directory Card ────────────────────────────────────── */
+    /* ── Store Directory Card (SDC) ─────────────────────────────────────────── */
     .sdc {
       background: var(--surface); border: 1px solid var(--border);
       border-radius: 14px; overflow: hidden;
@@ -539,7 +470,6 @@
     }
     .sdc:hover { border-color: rgba(34,197,94,0.25); }
     .sdc:active { transform: scale(0.99); }
-
     .sdc-header {
       display: flex; align-items: center; gap: 14px;
       padding: 16px 18px 12px;
@@ -573,8 +503,6 @@
       transition: border-color .12s;
     }
     .sdc-action:hover { border-color: var(--text); }
-
-    /* Thumbnail strip — 3 equal squares flush along the bottom */
     .sdc-thumbs {
       display: flex; gap: 2px;
       border-top: 1px solid var(--border2);
@@ -593,22 +521,20 @@
       font-size: 22px; background: var(--lift);
     }
 
-    /* Responsive grid for All Stores directory */
-    @media (min-width: 640px) {
-      #all-stores-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-    }
-    @media (min-width: 1100px) {
-      #all-stores-grid { grid-template-columns: repeat(3, 1fr); }
-    }
+    /* ── Touch targets ─────────────────────────────────────────────────────── */
+    .cat-tile { min-height: 44px; }
+    .detail-back { min-height: 44px; }
+    #qs-clear-btn { min-width: 44px; min-height: 44px; }
 
-    /* Responsive grid for landing stores section — mirrors all-stores-grid */
-    #landing-stores-grid { display: flex; flex-direction: column; gap: 10px; }
-    @media (min-width: 640px) {
-      #landing-stores-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-    }
-    @media (min-width: 1100px) {
-      #landing-stores-grid { grid-template-columns: repeat(3, 1fr); }
-    }
+    /* ── Page fade-in ──────────────────────────────────────────────────────── */
+    @media (prefers-reduced-motion: no-preference) { body { animation: qs-page-in 0.22s ease both; } }
+    @keyframes qs-page-in { from { opacity: 0; } to { opacity: 1; } }
+
+    /* ── Footer ────────────────────────────────────────────────────────────── */
+    .qs-footer { margin-top: 64px; padding: 32px var(--px); border-top: 1px solid var(--border); text-align: center; }
+    @media (min-width: 900px) { .qs-footer { grid-column: 1 / -1; } }
+    .qs-footer p { font-size: 12px; color: var(--dim); line-height: 1.9; }
+    .qs-footer a { color: var(--green); text-decoration: none; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -659,44 +585,40 @@
 <!-- ── Main content ──────────────────────────────────────────────────────────── -->
 <main class="qs-main">
 
-  <!-- LANDING STATE -->
-  <div id="state-landing">
+  <!--
+    MAIN STATE
+    ──────────
+    Single unified state for all browse contexts:
+    home · search results · category browse · all-stores directory
+    The tab bar is always visible here; panels swap on tab click.
+  -->
+  <div id="state-main">
 
-    <!-- Active Stores — top of landing, vendors only -->
-    <div id="stores-section" hidden>
-      <span class="section-label">Active Stores</span>
-      <div id="landing-stores-grid"></div>
+    <!-- Persistent tab bar -->
+    <div id="main-tab-bar">
+      <button class="landing-tab active" id="tab-products">Products</button>
+      <button class="landing-tab"        id="tab-stores">Active Stores</button>
     </div>
 
-    <!-- Products below stores -->
-    <div class="product-grid" id="recent-grid"></div>
-    <button class="load-more-btn" id="load-more-btn" hidden>Load more products</button>
+    <!-- Products panel -->
+    <div id="panel-products">
+      <p class="results-heading" id="products-heading" hidden></p>
+      <div class="product-grid" id="products-grid"></div>
+      <button class="load-more-btn" id="load-more-btn" hidden>Load more products</button>
+    </div>
+
+    <!-- Stores panel (lazy-loaded on first tab switch) -->
+    <div id="panel-stores" hidden>
+      <p class="results-heading" id="stores-heading" hidden></p>
+      <div id="stores-grid"></div>
+    </div>
 
   </div>
 
-  <!-- ALL STORES STATE -->
-  <div id="state-stores" hidden>
-    <p class="results-heading" id="stores-heading"></p>
-    <div class="store-cards-list" id="all-stores-grid"></div>
-  </div>
-
-  <!-- LOADING STATE -->
+  <!-- LOADING STATE (product detail only) -->
   <div id="state-loading" hidden>
     <div class="qs-spinner"></div>
-    <span class="loading-label" id="loading-label">Searching…</span>
-  </div>
-
-  <!-- RESULTS STATE -->
-  <div id="state-results" hidden>
-    <p class="results-heading" id="results-heading"></p>
-    <div id="vendor-stores-section" hidden>
-      <div class="sector-section-label" id="vendor-stores-label"></div>
-      <div class="store-cards-list" id="store-cards-list"></div>
-    </div>
-    <div id="products-section">
-      <div class="sector-section-label" id="products-section-label" hidden></div>
-      <div class="product-grid" id="results-grid"></div>
-    </div>
+    <span class="loading-label" id="loading-label">Loading…</span>
   </div>
 
   <!-- PRODUCT DETAIL STATE -->
@@ -728,60 +650,78 @@
 
   var sb = (window.__QS_SUPABASE && window.__QS_SUPABASE.client)
     ? window.__QS_SUPABASE.client : null;
-
   if (!sb) console.error('[QS Market] Supabase client not ready.');
 
   // ── DOM refs ──────────────────────────────────────────────────────────────
-  var input               = document.getElementById('qs-search-input');
-  var clearBtn            = document.getElementById('qs-clear-btn');
-  var stateLanding        = document.getElementById('state-landing');
-  var stateLoading        = document.getElementById('state-loading');
-  var stateResults        = document.getElementById('state-results');
-  var stateDetail         = document.getElementById('state-detail');
-  var loadingLabel        = document.getElementById('loading-label');
-  var resultsGrid         = document.getElementById('results-grid');
-  var resultsHead         = document.getElementById('results-heading');
-  var vendorStoresSection = document.getElementById('vendor-stores-section');
-  var vendorStoresLabel   = document.getElementById('vendor-stores-label');
-  var storeCardsList      = document.getElementById('store-cards-list');
-  var productsSectionEl   = document.getElementById('products-section');
-  var productsSectionLabel= document.getElementById('products-section-label');
-  var vendorList          = document.getElementById('vendor-list');
-  var detailBack          = document.getElementById('detail-back');
-  var detailImageWrap     = document.getElementById('detail-image-wrap');
-  var detailName          = document.getElementById('detail-name');
-  var detailMeta          = document.getElementById('detail-meta');
-  var detailVLabel        = document.getElementById('detail-vendors-label');
-  var storesSection       = document.getElementById('stores-section');
-  var landingStoresGrid   = document.getElementById('landing-stores-grid');
-  var stateStores         = document.getElementById('state-stores');
-  var storesHeading       = document.getElementById('stores-heading');
-  var allStoresGrid       = document.getElementById('all-stores-grid');
-  var recentGrid          = document.getElementById('recent-grid');
-  var loadMoreBtn         = document.getElementById('load-more-btn');
-  var catGrid             = document.getElementById('cat-grid');
+  var input           = document.getElementById('qs-search-input');
+  var clearBtn        = document.getElementById('qs-clear-btn');
+  var stateMain       = document.getElementById('state-main');
+  var stateLoading    = document.getElementById('state-loading');
+  var stateDetail     = document.getElementById('state-detail');
+  var loadingLabel    = document.getElementById('loading-label');
+  var tabProducts     = document.getElementById('tab-products');
+  var tabStores       = document.getElementById('tab-stores');
+  var panelProducts   = document.getElementById('panel-products');
+  var panelStores     = document.getElementById('panel-stores');
+  var productsHeading = document.getElementById('products-heading');
+  var storesHeading   = document.getElementById('stores-heading');
+  var productsGrid    = document.getElementById('products-grid');
+  var storesGrid      = document.getElementById('stores-grid');
+  var loadMoreBtn     = document.getElementById('load-more-btn');
+  var catGrid         = document.getElementById('cat-grid');
+  var detailBack      = document.getElementById('detail-back');
+  var detailImageWrap = document.getElementById('detail-image-wrap');
+  var detailName      = document.getElementById('detail-name');
+  var detailMeta      = document.getElementById('detail-meta');
+  var detailVLabel    = document.getElementById('detail-vendors-label');
+  var vendorList      = document.getElementById('vendor-list');
 
   // ── App state ─────────────────────────────────────────────────────────────
-  var _lastQuery      = '';
-  var _lastResults    = [];
-  var _currentProduct = null;
-  var _debounceTimer  = null;
-  var _recentOffset   = 0;
-  var _RECENT_PAGE    = 60;
-
-  // Category pagination state
+  var _mode           = 'home';   // 'home' | 'search' | 'category'
+  var _activeTab      = 'products';
+  var _storesLoaded   = false;    // whether stores panel has been fetched
+  var _storesFetcher  = null;     // fn to call when stores tab is first opened
   var _catName        = '';
   var _catOffset      = 0;
   var _CAT_PAGE       = 16;
   var _catHasMore     = false;
+  var _recentOffset   = 0;
+  var _RECENT_PAGE    = 60;
+  var _lastQuery      = '';
+  var _currentProduct = null;
+  var _debounceTimer  = null;
 
   // ── State machine ─────────────────────────────────────────────────────────
   function showState(name) {
-    stateLanding.hidden = name !== 'landing';
+    stateMain.hidden    = name !== 'main';
     stateLoading.hidden = name !== 'loading';
-    stateResults.hidden = name !== 'results';
     stateDetail.hidden  = name !== 'detail';
-    stateStores.hidden  = name !== 'stores';
+  }
+
+  // ── Tab system ────────────────────────────────────────────────────────────
+  // switchTab: toggle panels + lazy-load stores on first switch
+  function switchTab(tab) {
+    _activeTab = tab;
+    tabProducts.classList.toggle('active', tab === 'products');
+    tabStores.classList.toggle('active',   tab === 'stores');
+    panelProducts.hidden = tab !== 'products';
+    panelStores.hidden   = tab !== 'stores';
+
+    // Lazy-load the stores panel the first time it's opened
+    if (tab === 'stores' && !_storesLoaded && _storesFetcher) {
+      _storesLoaded = true;
+      _storesFetcher();
+    }
+  }
+
+  // Update the tab bar labels for the current context
+  // Products: always "Products"
+  // Stores label changes per mode:
+  //   home / all-stores  → "Active Stores"
+  //   category browse    → "Stores"   (heading inside panel gives full context)
+  //   search results     → "Stores"
+  function setTabLabels(storesLabel) {
+    tabStores.textContent = storesLabel || 'Stores';
   }
 
   // ── URL management ────────────────────────────────────────────────────────
@@ -835,8 +775,35 @@
       .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  // ── Batch-fetch listing stats (count + min price) for an array of canonical IDs
-  // Returns { countMap: {id:n}, priceMap: {id:price} }
+  // ── Skeleton helpers ──────────────────────────────────────────────────────
+  function renderSkeletonGrid(container, count) {
+    container.innerHTML = '';
+    for (var i = 0; i < count; i++) {
+      var card = document.createElement('div');
+      card.className = 'skel-card';
+      var img  = document.createElement('div');
+      img.className = 'skel-card-img skel';
+      var body = document.createElement('div');
+      body.className = 'skel-card-body';
+      body.innerHTML =
+        '<div class="skel" style="height:10px;width:45%"></div>' +
+        '<div class="skel" style="height:14px;width:85%"></div>' +
+        '<div class="skel" style="height:12px;width:55%"></div>';
+      card.appendChild(img);
+      card.appendChild(body);
+      container.appendChild(card);
+    }
+  }
+
+  function renderStorePanelLoading() {
+    storesGrid.innerHTML =
+      '<div class="panel-loading">' +
+      '<div class="qs-spinner"></div>' +
+      '<span class="loading-label">Loading stores…</span>' +
+      '</div>';
+  }
+
+  // ── Batch-fetch listing stats ─────────────────────────────────────────────
   async function fetchListingStats(ids) {
     var countMap = {}, priceMap = {};
     if (!ids || !ids.length) return { countMap: countMap, priceMap: priceMap };
@@ -849,26 +816,6 @@
       });
     }
     return { countMap: countMap, priceMap: priceMap };
-  }
-
-  // ── Skeleton helpers ──────────────────────────────────────────────────────
-  function renderSkeletonGrid(container, count) {
-    container.innerHTML = '';
-    for (var i = 0; i < count; i++) {
-      var card = document.createElement('div');
-      card.className = 'skel-card';
-      var img = document.createElement('div');
-      img.className = 'skel-card-img skel';
-      var body = document.createElement('div');
-      body.className = 'skel-card-body';
-      body.innerHTML =
-        '<div class="skel" style="height:10px;width:45%"></div>' +
-        '<div class="skel" style="height:14px;width:85%"></div>' +
-        '<div class="skel" style="height:12px;width:55%"></div>';
-      card.appendChild(img);
-      card.appendChild(body);
-      container.appendChild(card);
-    }
   }
 
   // ── Render product card ───────────────────────────────────────────────────
@@ -890,7 +837,6 @@
     var price  = item.min_price;
     var imgUrl = item.image_url;
 
-    // ── Image zone ─────────────────────────────────────────────────────
     var imgZone = document.createElement('div');
     imgZone.className = 'pc-image';
 
@@ -898,7 +844,6 @@
       var shimmer = document.createElement('div');
       shimmer.className = 'pc-image-shimmer';
       imgZone.appendChild(shimmer);
-
       var img = document.createElement('img');
       img.alt = name;
       img.setAttribute('data-loading', '1');
@@ -915,7 +860,6 @@
       imgZone.innerHTML = '<div class="pc-image-placeholder">' + emoji + '<span>' + escHtml((item.category || 'product').toUpperCase()) + '</span></div>';
     }
 
-    // ── Text zone ──────────────────────────────────────────────────────
     var body = document.createElement('div');
     body.className = 'pc-body';
 
@@ -933,19 +877,16 @@
 
     var footer = document.createElement('div');
     footer.className = 'pc-footer';
-
     var priceEl = document.createElement('div');
     priceEl.className = 'pc-price';
     if (price !== undefined && price !== null) {
       priceEl.textContent = (count > 1 ? 'from ' : '') + fmt(price);
     }
     footer.appendChild(priceEl);
-
     var storeEl = document.createElement('div');
     storeEl.className = 'pc-stores';
     storeEl.textContent = count === 1 ? '1 store' : count > 1 ? count + ' stores' : 'New';
     footer.appendChild(storeEl);
-
     body.appendChild(footer);
 
     card.appendChild(imgZone);
@@ -956,7 +897,6 @@
     card.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
     });
-
     return card;
   }
 
@@ -974,7 +914,7 @@
       '<div class="vc-info">' +
         '<div class="vc-store">' + escHtml(storeName) + '</div>' +
         (tagline ? '<div class="vc-tagline">' + escHtml(tagline) + '</div>' : '') +
-        (isBest ? '<div class="vc-best-badge">Best price</div>' : '') +
+        (isBest  ? '<div class="vc-best-badge">Best price</div>' : '') +
       '</div>' +
       '<div style="text-align:right;flex-shrink:0">' +
         '<div class="vc-price">' + fmt(listing.price) + '</div>' +
@@ -983,56 +923,9 @@
     return card;
   }
 
-  // ── Render vendor store card (category browse results) ────────────────────
-  function renderVendorStoreCard(profile, productCount) {
-    var card = document.createElement('a');
-    card.className = 'store-card';
-    var storeName = (profile.business_name || profile.name) || 'QuickShop Vendor';
-    var initial   = storeName.charAt(0).toUpperCase();
-    card.href = '/?store=' + encodeURIComponent(profile.id);
-
-    var avatarEl = document.createElement('div');
-    avatarEl.className = 'sc-avatar';
-    if (profile.avatar_url && typeof profile.avatar_url === 'string' && profile.avatar_url.startsWith('https://')) {
-      var img = document.createElement('img');
-      img.src = profile.avatar_url; img.alt = storeName;
-      avatarEl.appendChild(img);
-    } else {
-      avatarEl.textContent = initial;
-    }
-    card.appendChild(avatarEl);
-
-    var info = document.createElement('div'); info.className = 'sc-info';
-    var nameEl = document.createElement('div'); nameEl.className = 'sc-name'; nameEl.textContent = storeName;
-    info.appendChild(nameEl);
-    if (profile.tagline) {
-      var tagEl = document.createElement('div'); tagEl.className = 'sc-tagline'; tagEl.textContent = profile.tagline;
-      info.appendChild(tagEl);
-    }
-    var meta = document.createElement('div'); meta.className = 'sc-meta';
-    if (profile.location) {
-      var loc = document.createElement('span'); loc.className = 'sc-location'; loc.textContent = '📍 ' + profile.location;
-      meta.appendChild(loc);
-    }
-    if (profile.delivery_available === true) {
-      var del = document.createElement('span'); del.className = 'sc-delivery'; del.textContent = '🚚 Delivers';
-      meta.appendChild(del);
-    }
-    if (typeof productCount === 'number' && productCount > 0) {
-      var cnt = document.createElement('span'); cnt.className = 'sc-count'; cnt.textContent = productCount + ' product' + (productCount !== 1 ? 's' : '');
-      meta.appendChild(cnt);
-    }
-    info.appendChild(meta);
-    card.appendChild(info);
-
-    var action = document.createElement('span'); action.className = 'sc-action'; action.setAttribute('aria-hidden', 'true'); action.textContent = 'Browse →';
-    card.appendChild(action);
-    return card;
-  }
-
-  // ── Render store directory card (Option C — All Stores view only) ──────────
-  // Shows avatar + info header plus a 3-image product thumbnail strip.
-  // thumbnails: string[] — up to 3 https image URLs from the store's products.
+  // ── Render Store Directory Card (SDC) ─────────────────────────────────────
+  // Used for both category stores and the all-stores directory.
+  // thumbnails: up to 3 https image URLs from the store's products.
   function renderStoreDirectoryCard(profile, productCount, thumbnails) {
     var card = document.createElement('a');
     card.className = 'sdc';
@@ -1040,7 +933,7 @@
     var initial   = storeName.charAt(0).toUpperCase();
     card.href = '/?store=' + encodeURIComponent(profile.id);
 
-    // ── Header ─────────────────────────────────────────────────────────────
+    // Header
     var header = document.createElement('div');
     header.className = 'sdc-header';
 
@@ -1078,11 +971,11 @@
     info.appendChild(meta);
     header.appendChild(info);
 
-    var action = document.createElement('span'); action.className = 'sdc-action'; action.setAttribute('aria-hidden', 'true'); action.textContent = 'Shop now →';
+    var action = document.createElement('span'); action.className = 'sdc-action'; action.setAttribute('aria-hidden', 'true'); action.textContent = 'Browse →';
     header.appendChild(action);
     card.appendChild(header);
 
-    // ── Thumbnail strip ────────────────────────────────────────────────────
+    // Thumbnail strip
     var imgs = (thumbnails || []).filter(function (u) {
       return typeof u === 'string' && u.startsWith('https://');
     }).slice(0, 3);
@@ -1092,156 +985,253 @@
       strip.className = 'sdc-thumbs';
       if (imgs.length > 0) {
         imgs.forEach(function (url) {
-          var cell = document.createElement('div');
-          cell.className = 'sdc-thumb';
+          var cell = document.createElement('div'); cell.className = 'sdc-thumb';
           var tImg = document.createElement('img');
           tImg.src = url; tImg.alt = storeName + ' product'; tImg.loading = 'lazy';
-          tImg.onerror = function () {
-            cell.innerHTML = '<div class="sdc-thumb-placeholder">📦</div>';
-          };
+          tImg.onerror = function () { cell.innerHTML = '<div class="sdc-thumb-placeholder">📦</div>'; };
           cell.appendChild(tImg);
           strip.appendChild(cell);
         });
       } else {
-        // productCount > 0 but no image URLs — show placeholder cells
         for (var pi = 0; pi < 3; pi++) {
-          var cell = document.createElement('div');
-          cell.className = 'sdc-thumb';
-          var ph = document.createElement('div');
-          ph.className = 'sdc-thumb-placeholder';
-          ph.textContent = '📦';
-          cell.appendChild(ph);
-          strip.appendChild(cell);
+          var cell = document.createElement('div'); cell.className = 'sdc-thumb';
+          var ph = document.createElement('div'); ph.className = 'sdc-thumb-placeholder'; ph.textContent = '📦';
+          cell.appendChild(ph); strip.appendChild(cell);
         }
       }
       card.appendChild(strip);
     }
-
     return card;
   }
 
-  // ── Render store chip (landing strip) ─────────────────────────────────────
   // ── Empty state ───────────────────────────────────────────────────────────
   function renderEmpty(container, title, body) {
-    container.innerHTML =
-      '<div class="empty-state" style="grid-column:1/-1">' +
-        '<div class="es-icon">🔎</div>' +
-        '<h3>' + escHtml(title) + '</h3>' +
-        '<p>' + escHtml(body) + '</p>' +
-      '</div>';
+    var el = document.createElement('div');
+    el.className = 'empty-state';
+    el.style.gridColumn = '1/-1';
+    el.innerHTML =
+      '<div class="es-icon">🔎</div>' +
+      '<h3>' + escHtml(title) + '</h3>' +
+      '<p>' + escHtml(body) + '</p>';
+    container.appendChild(el);
+  }
+
+  // ── LOAD STORES (unified, lazy) ───────────────────────────────────────────
+  // categoryFilter: string (e.g. 'Fragrance') or null for all stores.
+  // Called when the Stores tab is first opened for the current context.
+  async function loadStores(categoryFilter) {
+    if (!sb) return;
+    renderStorePanelLoading();
+    storesHeading.hidden = true;
+
+    try {
+      var queryBuilder = sb
+        .from('public_catalog_profiles')
+        .select('id, business_name, name, tagline, avatar_url, location, delivery_available, slug');
+      if (categoryFilter) queryBuilder = queryBuilder.ilike('store_sector', categoryFilter);
+
+      var res = await queryBuilder;
+      var stores = res.data || [];
+
+      var countMap = {}, thumbMap = {};
+      if (stores.length > 0) {
+        var ids = stores.map(function (s) { return s.id; });
+        var prodRes = await sb
+          .from('qs_vendor_listings')
+          .select('vendor_store_id, image_url')
+          .in('vendor_store_id', ids);
+        if (prodRes.data) {
+          prodRes.data.forEach(function (r) {
+            countMap[r.vendor_store_id] = (countMap[r.vendor_store_id] || 0) + 1;
+            if (r.image_url && typeof r.image_url === 'string' && r.image_url.startsWith('https://')) {
+              if (!thumbMap[r.vendor_store_id]) thumbMap[r.vendor_store_id] = [];
+              if (thumbMap[r.vendor_store_id].length < 3) thumbMap[r.vendor_store_id].push(r.image_url);
+            }
+          });
+        }
+      }
+
+      // For "all stores" mode, exclude stores with no listings
+      if (!categoryFilter) {
+        stores = stores.filter(function (s) { return (countMap[s.id] || 0) > 0; });
+      }
+
+      // Sort: most products first, completeness tiebreaker
+      stores.sort(function (a, b) {
+        var ca = countMap[a.id] || 0, cb = countMap[b.id] || 0;
+        if (cb !== ca) return cb - ca;
+        var sa = (a.avatar_url?1:0) + (a.tagline?1:0) + (a.location?1:0);
+        var sb2= (b.avatar_url?1:0) + (b.tagline?1:0) + (b.location?1:0);
+        return sb2 - sa;
+      });
+
+      var count = stores.length;
+
+      // Heading
+      if (count === 0) {
+        storesHeading.innerHTML = categoryFilter
+          ? 'No stores selling <strong>' + escHtml(categoryFilter) + '</strong> yet'
+          : 'No active stores yet';
+      } else {
+        storesHeading.innerHTML = categoryFilter
+          ? '<strong>' + count + ' store' + (count !== 1 ? 's' : '') + '</strong> selling ' + escHtml(categoryFilter)
+          : '<strong>' + count + ' active store' + (count !== 1 ? 's' : '') + '</strong> on QuickShop';
+      }
+      storesHeading.hidden = false;
+
+      storesGrid.innerHTML = '';
+      if (!count) {
+        var emptyDiv = document.createElement('div');
+        emptyDiv.className = 'empty-state';
+        emptyDiv.innerHTML =
+          '<div class="es-icon">🏪</div>' +
+          '<h3>No stores yet</h3>' +
+          '<p>' + (categoryFilter ? 'No vendor sells ' + escHtml(categoryFilter) + ' yet.' : 'Be the first to list on QuickShop.') + '</p>';
+        storesGrid.appendChild(emptyDiv);
+        return;
+      }
+
+      stores.forEach(function (profile) {
+        storesGrid.appendChild(
+          renderStoreDirectoryCard(profile, countMap[profile.id] || 0, thumbMap[profile.id] || [])
+        );
+      });
+
+    } catch (e) {
+      console.error('[loadStores]', e);
+      storesGrid.innerHTML =
+        '<div class="empty-state"><div class="es-icon">⚠️</div>' +
+        '<h3>Failed to load</h3><p>Please refresh and try again.</p></div>';
+      storesHeading.hidden = true;
+    }
+  }
+
+  // ── LOAD HOME ─────────────────────────────────────────────────────────────
+  function loadHome() {
+    _mode         = 'home';
+    _catName      = '';
+    _lastQuery    = '';
+    _storesLoaded = false;
+    _storesFetcher = function () { loadStores(null); };
+
+    setTabLabels('Active Stores');
+    document.querySelectorAll('.cat-tile').forEach(function (t) { t.classList.remove('active'); });
+
+    productsHeading.hidden = true;
+    storesHeading.hidden   = true;
+    loadMoreBtn.hidden     = true;
+
+    _recentOffset  = 0;
+    productsGrid.innerHTML = '';
+    renderSkeletonGrid(productsGrid, 12);
+    loadRecent(false);
+
+    showState('main');
+    switchTab('products');
   }
 
   // ── SEARCH ────────────────────────────────────────────────────────────────
   async function runSearch(query) {
     if (!sb) return;
-    _lastQuery = query;
+    _mode         = 'search';
+    _lastQuery    = query;
+    _storesLoaded = false;
+    _storesFetcher = function () { loadStores(null); };
+
     var params = getParams();
-    params.set('q', query); params.delete('product'); params.delete('cat');
+    params.set('q', query); params.delete('product'); params.delete('cat'); params.delete('view');
     navigate(params, false);
 
-    showState('loading');
-    loadingLabel.textContent = 'Searching for "' + query + '"…';
+    setTabLabels('Stores');
+    document.querySelectorAll('.cat-tile').forEach(function (t) { t.classList.remove('active'); });
+
+    // Immediate skeleton feedback
+    productsGrid.innerHTML = '';
+    renderSkeletonGrid(productsGrid, 8);
+    productsHeading.innerHTML = 'Searching for <strong>"' + escHtml(query) + '"</strong>…';
+    productsHeading.hidden = false;
+    loadMoreBtn.hidden = true;
+
+    showState('main');
+    switchTab('products');
 
     try {
       var res = await sb.rpc('qs_find_canonical', { p_name: query, p_threshold: 0.25 });
       var data = res.data || [];
-      _lastResults = data;
-
-      showState('results');
-      vendorStoresSection.hidden = true;
-      productsSectionLabel.hidden = true;
 
       if (data.length === 0) {
-        resultsHead.innerHTML = 'No results for <strong>"' + escHtml(query) + '"</strong>';
-        renderEmpty(resultsGrid, 'Nothing found', 'Try a different spelling, or browse a category.');
+        productsHeading.innerHTML = 'No results for <strong>"' + escHtml(query) + '"</strong>';
+        productsGrid.innerHTML = '';
+        renderEmpty(productsGrid, 'Nothing found', 'Try a different spelling, or browse a category.');
         return;
       }
 
-      resultsHead.innerHTML =
-        'Found <strong>' + data.length + ' product' + (data.length !== 1 ? 's' : '') + '</strong>' +
-        ' matching "' + escHtml(query) + '"';
-
-      // Batch-fetch listing stats (count + min price) for all results
       var ids = data.map(function (d) { return d.id; });
       var stats = await fetchListingStats(ids);
 
-      // Fix 2: RPC (qs_find_canonical) does not return image_url.
-      // Fetch it separately from qs_canonical_products for all result IDs.
       var imageMap = {};
       try {
-        var imgRes = await sb
-          .from('qs_canonical_products')
-          .select('id, image_url')
-          .in('id', ids);
-        if (imgRes.data) {
-          imgRes.data.forEach(function (r) {
-            if (r.image_url) imageMap[r.id] = r.image_url;
-          });
-        }
-      } catch (_) { /* silent — images are non-critical */ }
+        var imgRes = await sb.from('qs_canonical_products').select('id, image_url').in('id', ids);
+        if (imgRes.data) imgRes.data.forEach(function (r) { if (r.image_url) imageMap[r.id] = r.image_url; });
+      } catch (_) { /* images non-critical */ }
 
       data.forEach(function (d) {
         d.vendor_count = d.vendor_count || stats.countMap[d.id] || 0;
         d.min_price    = stats.priceMap[d.id];
-        // image_url: prefer value from RPC; fall back to canonical products table
         d.image_url    = d.image_url || imageMap[d.id] || null;
       });
 
-      resultsGrid.innerHTML = '';
-      data.forEach(function (item) { resultsGrid.appendChild(renderProductCard(item)); });
+      productsHeading.innerHTML =
+        'Found <strong>' + data.length + ' product' + (data.length !== 1 ? 's' : '') + '</strong>' +
+        ' matching "' + escHtml(query) + '"';
+      productsGrid.innerHTML = '';
+      data.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
 
     } catch (e) {
       console.error('[search] error', e);
-      showState('results');
-      resultsHead.textContent = 'Something went wrong. Please try again.';
-      resultsGrid.innerHTML = '';
+      productsHeading.textContent = 'Something went wrong. Please try again.';
+      productsGrid.innerHTML = '';
     }
   }
 
-  // ── BROWSE BY CATEGORY ────────────────────────────────────────────────────
+  // ── BROWSE CATEGORY ───────────────────────────────────────────────────────
   async function browseCategory(cat, append) {
     if (!sb) return;
-    if (!append) {
-      _lastQuery = '';
-      _catName   = cat;
-      _catOffset = 0;
-      var params = getParams();
-      params.set('cat', cat); params.delete('q'); params.delete('product');
-      navigate(params, false);
-      input.value = '';
-      clearBtn.style.display = 'none';
 
-      // Highlight active category tile
+    if (!append) {
+      _mode         = 'category';
+      _catName      = cat;
+      _catOffset    = 0;
+      _storesLoaded = false;
+      _storesFetcher = function () { loadStores(cat); };
+
+      var params = getParams();
+      params.set('cat', cat); params.delete('q'); params.delete('product'); params.delete('view');
+      navigate(params, false);
+
+      setTabLabels('Stores');
+      input.value = ''; clearBtn.style.display = 'none';
+
       document.querySelectorAll('.cat-tile').forEach(function (t) {
         t.classList.toggle('active', t.dataset.cat === cat);
       });
+
+      productsHeading.hidden = true;
+      productsGrid.innerHTML = '';
+      loadMoreBtn.hidden = true;
+
+      // Reset stores panel for fresh context
+      storesHeading.hidden = true;
+      storesGrid.innerHTML = '';
+
+      // Show skeleton immediately
+      renderSkeletonGrid(productsGrid, _CAT_PAGE);
+
+      showState('main');
+      switchTab('products');
     }
 
-    showState('loading');
-    loadingLabel.textContent = (append ? 'Loading more ' : 'Loading ') + cat + '…';
-
     try {
-      // Stores section only on first page
-      var stores = [];
-      var storeProductCounts = {};
-      if (!append) {
-        var storeRes = await sb
-          .from('public_catalog_profiles')
-          .select('id, business_name, name, tagline, avatar_url, location, delivery_available, slug')
-          .ilike('store_sector', cat);
-        stores = storeRes.data || [];
-
-        if (stores.length > 0) {
-          var storeIds = stores.map(function (s) { return s.id; });
-          var cntRes = await sb.from('public_catalog_products').select('user_id').in('user_id', storeIds);
-          if (cntRes.data) {
-            cntRes.data.forEach(function (r) {
-              storeProductCounts[r.user_id] = (storeProductCounts[r.user_id] || 0) + 1;
-            });
-          }
-        }
-      }
-
       var canonRes = await sb
         .from('qs_canonical_products')
         .select('id, display_name, slug, category, image_url')
@@ -1251,16 +1241,13 @@
       var canonData = canonRes.data || [];
       _catHasMore = canonData.length === _CAT_PAGE;
 
-      if (!append) _lastResults = canonData;
-      else _lastResults = _lastResults.concat(canonData);
-
       if (canonData.length > 0) {
         var stats = await fetchListingStats(canonData.map(function (d) { return d.id; }));
         canonData.forEach(function (d) {
           d.vendor_count = stats.countMap[d.id] || 0;
           d.min_price    = stats.priceMap[d.id];
         });
-        // Completeness-first: photos up, then by store count
+        // Completeness-first sort: photos, then vendor count
         canonData.sort(function (a, b) {
           var ai = (a.image_url && a.image_url.startsWith('https://')) ? 0 : 1;
           var bi = (b.image_url && b.image_url.startsWith('https://')) ? 0 : 1;
@@ -1269,69 +1256,81 @@
         });
       }
 
-      showState('results');
+      if (!append) productsGrid.innerHTML = '';
 
-      var hasStores   = stores.length > 0;
-      var hasProducts = canonData.length > 0 || _catOffset > 0;
+      var totalShown = _catOffset + canonData.length;
 
-      if (!append) {
-        vendorStoresSection.hidden = true; storeCardsList.innerHTML = '';
-        productsSectionLabel.hidden = true; resultsGrid.innerHTML = '';
-        // Remove any existing cat load-more button
-        var oldLM = document.getElementById('cat-load-more-btn');
-        if (oldLM) oldLM.remove();
-      }
-
-      if (!hasStores && !hasProducts) {
-        resultsHead.innerHTML = '<strong>' + escHtml(cat) + '</strong> — no products yet';
-        renderEmpty(resultsGrid, 'Empty category', 'Be the first vendor to add products here.');
+      if (canonData.length === 0 && !append) {
+        productsHeading.innerHTML = '<strong>' + escHtml(cat) + '</strong> — no products yet';
+        productsHeading.hidden = false;
+        renderEmpty(productsGrid, 'Empty category', 'Be the first vendor to add products here.');
+        loadMoreBtn.hidden = true;
         return;
       }
 
-      var totalShown = _catOffset + canonData.length;
-      var parts = [];
-      if (hasStores)   parts.push(stores.length + ' store' + (stores.length !== 1 ? 's' : ''));
-      if (hasProducts) parts.push(totalShown + (_catHasMore ? '+' : '') + ' product' + (totalShown !== 1 ? 's' : ''));
-      resultsHead.innerHTML = '<strong>' + escHtml(cat) + '</strong> — ' + parts.join(', ');
+      productsHeading.innerHTML =
+        '<strong>' + escHtml(cat) + '</strong> — ' +
+        totalShown + (_catHasMore ? '+' : '') + ' product' + (totalShown !== 1 ? 's' : '');
+      productsHeading.hidden = false;
 
-      if (!append && hasStores) {
-        vendorStoresLabel.textContent = 'Stores selling ' + cat;
-        stores.forEach(function (p) { storeCardsList.appendChild(renderVendorStoreCard(p, storeProductCounts[p.id] || 0)); });
-        vendorStoresSection.hidden = false;
-      }
-
-      if (canonData.length > 0) {
-        if (!append && hasStores) { productsSectionLabel.textContent = 'Products in ' + cat; productsSectionLabel.hidden = false; }
-        canonData.forEach(function (item) { resultsGrid.appendChild(renderProductCard(item)); });
-      }
-
-      // Update/create Load More button
-      var catLMBtn = document.getElementById('cat-load-more-btn');
-      if (_catHasMore) {
-        if (!catLMBtn) {
-          catLMBtn = document.createElement('button');
-          catLMBtn.id = 'cat-load-more-btn';
-          catLMBtn.className = 'load-more-btn';
-          catLMBtn.addEventListener('click', function () {
-            catLMBtn.disabled = true;
-            catLMBtn.textContent = 'Loading…';
-            browseCategory(_catName, true);
-          });
-          productsSectionEl.appendChild(catLMBtn);
-        }
-        catLMBtn.disabled = false;
-        catLMBtn.textContent = 'View all ' + escHtml(cat) + ' products →';
-        catLMBtn.hidden = false;
-      } else if (catLMBtn) {
-        catLMBtn.hidden = true;
-      }
-
+      canonData.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
       _catOffset += canonData.length;
 
+      // Load more button
+      if (_catHasMore) {
+        loadMoreBtn.textContent = 'View all ' + cat + ' products →';
+        loadMoreBtn.hidden    = false;
+        loadMoreBtn.disabled  = false;
+      } else {
+        loadMoreBtn.hidden = true;
+      }
+
     } catch (e) {
-      console.error('[browse] error', e);
-      showState('landing');
+      console.error('[browseCategory] error', e);
+      if (!append) {
+        productsHeading.textContent = 'Something went wrong.';
+        productsHeading.hidden = false;
+        productsGrid.innerHTML = '';
+      }
     }
+  }
+
+  // ── BROWSE ALL STORES ─────────────────────────────────────────────────────
+  // Activates the Stores tab and loads the full store directory.
+  // Products tab retains/loads recent products for quick context-switch back.
+  function browseAllStores() {
+    var params = getParams();
+    params.set('view', 'stores'); params.delete('q'); params.delete('cat'); params.delete('product');
+    navigate(params, false);
+
+    setTabLabels('Active Stores');
+    document.querySelectorAll('.cat-tile').forEach(function (t) {
+      t.classList.toggle('active', t.dataset.cat === '__stores__');
+    });
+
+    // If coming from search/category, reset products panel to recent
+    var needsReset = (_mode !== 'home') || (_recentOffset === 0);
+    _mode         = 'home';
+    _catName      = '';
+    _lastQuery    = '';
+    _storesLoaded = false;
+    _storesFetcher = function () { loadStores(null); };
+
+    if (needsReset) {
+      productsHeading.hidden = true;
+      loadMoreBtn.hidden     = true;
+      _recentOffset  = 0;
+      productsGrid.innerHTML = '';
+      renderSkeletonGrid(productsGrid, 12);
+      loadRecent(false);
+    }
+
+    // Reset stores panel so fresh data is fetched
+    storesHeading.hidden = true;
+    storesGrid.innerHTML = '';
+
+    showState('main');
+    switchTab('stores'); // triggers _storesFetcher → loadStores(null)
   }
 
   // ── PRODUCT DETAIL ────────────────────────────────────────────────────────
@@ -1351,28 +1350,27 @@
         .eq('canonical_id', item.id).order('price', { ascending: true });
       var listings = listRes.data || [];
 
-      var vendorIds = listings.map(function (l) { return l.vendor_store_id; });
+      var vendorIds  = listings.map(function (l) { return l.vendor_store_id; });
       var profileMap = {};
       if (vendorIds.length > 0) {
-        var profRes = await sb.from('public_catalog_profiles').select('id, business_name, name, tagline, avatar_url').in('id', vendorIds);
+        var profRes = await sb.from('public_catalog_profiles')
+          .select('id, business_name, name, tagline, avatar_url').in('id', vendorIds);
         if (profRes.data) profRes.data.forEach(function (p) { profileMap[p.id] = p; });
       }
 
       detailName.textContent = item.display_name || item.name || '';
 
-      // ── Product image ────────────────────────────────────────────────────
+      // Product image
       detailImageWrap.innerHTML = '';
       detailImageWrap.hidden = true;
       if (item.image_url && typeof item.image_url === 'string' && item.image_url.startsWith('https://')) {
-        // Shimmer skeleton while the detail image loads
         var dShimmer = document.createElement('div');
         dShimmer.className = 'pc-image-shimmer';
         dShimmer.style.cssText = 'position:absolute;inset:0;z-index:1;';
-        detailImageWrap.style.position = 'relative';
         detailImageWrap.appendChild(dShimmer);
         var dImg = document.createElement('img');
         dImg.src = item.image_url;
-        dImg.alt = item.display_name || item.name || '';
+        dImg.alt = item.display_name || '';
         dImg.setAttribute('data-loading', '1');
         dImg.onload = function () {
           dImg.removeAttribute('data-loading');
@@ -1403,10 +1401,15 @@
       detailVLabel.textContent = storeCount === 0 ? '' : 'Where to buy';
       vendorList.innerHTML = '';
       if (storeCount === 0) {
-        vendorList.innerHTML = '<div class="empty-state"><div class="es-icon">📦</div><h3>Not available yet</h3><p>No vendor on QuickShop is selling this right now.</p></div>';
+        vendorList.innerHTML =
+          '<div class="empty-state"><div class="es-icon">📦</div>' +
+          '<h3>Not available yet</h3>' +
+          '<p>No vendor on QuickShop is selling this right now.</p></div>';
       } else {
         listings.forEach(function (listing, idx) {
-          vendorList.appendChild(renderVendorCard(listing, profileMap[listing.vendor_store_id] || null, idx === 0 && storeCount > 1));
+          vendorList.appendChild(
+            renderVendorCard(listing, profileMap[listing.vendor_store_id] || null, idx === 0 && storeCount > 1)
+          );
         });
       }
 
@@ -1416,7 +1419,7 @@
     } catch (e) {
       console.error('[product detail] error', e);
       _currentProduct = null;
-      showState('results');
+      showState('main');
     }
   }
 
@@ -1426,9 +1429,9 @@
     try {
       var res = await sb.from('qs_canonical_products')
         .select('id, display_name, slug, category, image_url').eq('slug', slug).single();
-      if (res.error || !res.data) { showState('landing'); return; }
+      if (res.error || !res.data) { showState('main'); return; }
       await openProduct(res.data);
-    } catch (e) { console.error('[load by slug] error', e); showState('landing'); }
+    } catch (e) { console.error('[load by slug]', e); showState('main'); }
   }
 
   // ── JSON-LD product schema ────────────────────────────────────────────────
@@ -1439,156 +1442,22 @@
       .filter(function (l) { return l.price !== null && l.price !== undefined; })
       .map(function (l) {
         var p = profileMap[l.vendor_store_id] || {};
-        return { '@type':'Offer', 'price':l.price, 'priceCurrency':'NGN', 'availability':'https://schema.org/InStock', 'seller':{'@type':'Organization','name':p.business_name||p.name||'QuickShop Vendor'} };
+        return { '@type':'Offer', 'price':l.price, 'priceCurrency':'NGN',
+          'availability':'https://schema.org/InStock',
+          'seller':{ '@type':'Organization', 'name': p.business_name || p.name || 'QuickShop Vendor' } };
       });
     if (!offers.length) return;
     var script = document.createElement('script');
     script.type = 'application/ld+json'; script.id = 'qs-product-ld';
-    script.textContent = JSON.stringify({'@context':'https://schema.org','@type':'Product','name':canonical.display_name,'offers':offers});
+    script.textContent = JSON.stringify({
+      '@context':'https://schema.org', '@type':'Product',
+      'name': canonical.display_name, 'offers': offers
+    });
     document.head.appendChild(script);
   }
 
-  // ── LOAD ALL STORES (landing) ─────────────────────────────────────────────
-  async function loadFeaturedStores() {
-    if (!sb) return;
-    try {
-      var res = await sb
-        .from('public_catalog_profiles')
-        .select('id, business_name, name, tagline, avatar_url, location, delivery_available, slug')
-        .order('created_at', { ascending: false });
-      if (res.error) { console.error('[stores landing]', res.error); return; }
-      var stores = res.data || [];
-      if (!stores.length) return;
-
-      // Batch: product counts + up to 3 thumbnail URLs per store in one query
-      var ids = stores.map(function (s) { return s.id; });
-      var countMap = {}, thumbMap = {};
-      var prodRes = await sb
-        .from('public_catalog_products')
-        .select('user_id, image_url')
-        .in('user_id', ids);
-      if (prodRes.data) {
-        prodRes.data.forEach(function (r) {
-          countMap[r.user_id] = (countMap[r.user_id] || 0) + 1;
-          if (r.image_url && typeof r.image_url === 'string' && r.image_url.startsWith('https://')) {
-            if (!thumbMap[r.user_id]) thumbMap[r.user_id] = [];
-            if (thumbMap[r.user_id].length < 3) thumbMap[r.user_id].push(r.image_url);
-          }
-        });
-      }
-
-      // Active stores only — profiles with at least one listed product
-      stores = stores.filter(function (s) { return (countMap[s.id] || 0) > 0; });
-      if (!stores.length) return;
-
-      // Sort: most products first, completeness tiebreaker
-      stores.sort(function (a, b) {
-        var ca = countMap[a.id] || 0, cb = countMap[b.id] || 0;
-        if (cb !== ca) return cb - ca;
-        var sa = (a.avatar_url?1:0)+(a.tagline?1:0)+(a.location?1:0);
-        var sb2= (b.avatar_url?1:0)+(b.tagline?1:0)+(b.location?1:0);
-        return sb2 - sa;
-      });
-
-      landingStoresGrid.innerHTML = '';
-      stores.forEach(function (profile) {
-        landingStoresGrid.appendChild(
-          renderStoreDirectoryCard(profile, countMap[profile.id] || 0, thumbMap[profile.id] || [])
-        );
-      });
-      storesSection.hidden = false;
-    } catch (e) { console.error('[loadFeaturedStores]', e); }
-  }
-
-  // ── ALL STORES DIRECTORY ──────────────────────────────────────────────────
-  async function browseAllStores() {
-    if (!sb) return;
-    var params = getParams();
-    params.set('view', 'stores'); params.delete('q'); params.delete('cat'); params.delete('product');
-    navigate(params, false);
-
-    document.querySelectorAll('.cat-tile').forEach(function (t) {
-      t.classList.toggle('active', t.dataset.cat === '__stores__');
-    });
-
-    showState('loading');
-    loadingLabel.textContent = 'Loading stores…';
-
-    try {
-      var res = await sb
-        .from('public_catalog_profiles')
-        .select('id, business_name, name, tagline, avatar_url, location, delivery_available, slug')
-        .order('created_at', { ascending: false });
-
-      if (res.error) { console.error('[all stores]', res.error); showState('landing'); return; }
-      var stores = res.data || [];
-
-      // Combined query: product counts + thumbnail URLs in one round-trip.
-      // countMap: { storeId: n }   thumbMap: { storeId: [url, url, url] }
-      var countMap = {};
-      var thumbMap = {};
-      if (stores.length > 0) {
-        var ids = stores.map(function (s) { return s.id; });
-        var prodRes = await sb
-          .from('public_catalog_products')
-          .select('user_id, image_url')
-          .in('user_id', ids);
-        if (prodRes.data) {
-          prodRes.data.forEach(function (r) {
-            countMap[r.user_id] = (countMap[r.user_id] || 0) + 1;
-            if (r.image_url && typeof r.image_url === 'string' && r.image_url.startsWith('https://')) {
-              if (!thumbMap[r.user_id]) thumbMap[r.user_id] = [];
-              if (thumbMap[r.user_id].length < 3) thumbMap[r.user_id].push(r.image_url);
-            }
-          });
-        }
-      }
-
-      // Active stores only — exclude ghost accounts with no products
-      stores = stores.filter(function (s) { return (countMap[s.id] || 0) > 0; });
-
-      // ── Rank: most products first, completeness tiebreaker ──────────────
-      stores.sort(function (a, b) {
-        var ca = countMap[a.id] || 0;
-        var cb = countMap[b.id] || 0;
-        if (cb !== ca) return cb - ca;
-        var sa = (a.avatar_url ? 1 : 0) + (a.tagline ? 1 : 0) + (a.location ? 1 : 0);
-        var sb2 = (b.avatar_url ? 1 : 0) + (b.tagline ? 1 : 0) + (b.location ? 1 : 0);
-        return sb2 - sa;
-      });
-
-      storesHeading.innerHTML =
-        '<strong>' + stores.length + ' active store' + (stores.length !== 1 ? 's' : '') + '</strong> on QuickShop';
-
-      allStoresGrid.innerHTML = '';
-      if (!stores.length) {
-        allStoresGrid.innerHTML =
-          '<div class="empty-state"><div class="es-icon">🏪</div>' +
-          '<h3>No active stores</h3><p>No vendors currently have products listed on QuickShop.</p></div>';
-        showState('stores');
-        return;
-      }
-      stores.forEach(function (profile) {
-        allStoresGrid.appendChild(
-          renderStoreDirectoryCard(profile, countMap[profile.id] || 0, thumbMap[profile.id] || [])
-        );
-      });
-      showState('stores');
-
-    } catch (e) {
-      console.error('[all stores]', e);
-      showState('landing');
-    }
-  }
-
-  // ── LOAD RECENT PRODUCTS (landing) ────────────────────────────────────────
-
-  // ── Weighted Fisher-Yates shuffle ────────────────────────────────────────
-  // Scores each product 0–3 by listing completeness, groups into buckets,
-  // shuffles randomly within each bucket, then concatenates highest→lowest.
-  // A product scores 3 (top) only if it has image + vendor + price — all three.
-  // This means every complete listing has equal random chance; no vendor
-  // gets positional advantage over another complete vendor.
+  // ── WEIGHTED SHUFFLE ──────────────────────────────────────────────────────
+  // Score products by completeness, shuffle randomly within each bucket.
   function weightedShuffle(items) {
     function score(item) {
       var hasImage  = !!(item.image_url && item.image_url.startsWith('https://'));
@@ -1596,12 +1465,12 @@
       var hasPrice  = item.min_price !== undefined && item.min_price !== null;
       if (hasImage && hasVendor && hasPrice) return 3;
       var s = 0;
-      if (hasImage)  s += 2;
-      if (hasPrice)  s += 1;
+      if (hasImage) s += 2;
+      if (hasPrice) s += 1;
       return Math.min(s, 2);
     }
-    var buckets = {3:[], 2:[], 1:[], 0:[]};
-    items.forEach(function(item) { buckets[score(item)].push(item); });
+    var buckets = { 3:[], 2:[], 1:[], 0:[] };
+    items.forEach(function (item) { buckets[score(item)].push(item); });
     function shuffle(arr) {
       for (var i = arr.length - 1; i > 0; i--) {
         var j = Math.floor(Math.random() * (i + 1));
@@ -1615,6 +1484,7 @@
       .concat(shuffle(buckets[0]));
   }
 
+  // ── LOAD RECENT PRODUCTS ──────────────────────────────────────────────────
   async function loadRecent(append) {
     if (!sb) return;
     try {
@@ -1627,8 +1497,7 @@
         .range(from, to);
 
       if (!res.data || !res.data.length) {
-        loadMoreBtn.hidden = true;
-        return;
+        loadMoreBtn.hidden = true; return;
       }
 
       var stats = await fetchListingStats(res.data.map(function (d) { return d.id; }));
@@ -1638,41 +1507,82 @@
       });
 
       var ordered = weightedShuffle(res.data);
-      if (!append) recentGrid.innerHTML = '';
-      ordered.forEach(function (item) { recentGrid.appendChild(renderProductCard(item)); });
+      if (!append) productsGrid.innerHTML = '';
+      ordered.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
 
       _recentOffset += res.data.length;
-      loadMoreBtn.hidden   = res.data.length < _RECENT_PAGE;
-      loadMoreBtn.disabled = false;
-      loadMoreBtn.textContent = 'Load more products';
+
+      if (res.data.length < _RECENT_PAGE) {
+        loadMoreBtn.hidden = true;
+      } else {
+        loadMoreBtn.textContent = 'Load more products';
+        loadMoreBtn.hidden    = false;
+        loadMoreBtn.disabled  = false;
+      }
 
     } catch (e) { console.error('[loadRecent]', e); }
   }
 
-  async function loadMoreProducts() {
+  // ── LOAD MORE (products panel) ────────────────────────────────────────────
+  loadMoreBtn.addEventListener('click', function () {
     loadMoreBtn.disabled    = true;
     loadMoreBtn.textContent = 'Loading…';
-    await loadRecent(true);
-  }
+    if (_mode === 'home') {
+      loadRecent(true);
+    } else if (_mode === 'category') {
+      browseCategory(_catName, true);
+    }
+  });
 
-  // ── BACK ──────────────────────────────────────────────────────────────────
+  // ── BACK from product detail ──────────────────────────────────────────────
   function goBack() {
     _currentProduct = null;
     var old = document.getElementById('qs-product-ld'); if (old) old.remove();
-    document.querySelectorAll('.cat-tile').forEach(function (t) { t.classList.remove('active'); });
-    if (_lastResults.length > 0) {
-      var params = getParams(); params.delete('product');
-      if (_lastQuery) params.set('q', _lastQuery);
-      navigate(params, false); showState('results');
-    } else {
-      var params2 = new URLSearchParams(); navigate(params2, false);
-      _recentOffset = 0;
-      showState('landing'); updateSEO(params2);
-      renderSkeletonGrid(recentGrid, 12); loadFeaturedStores(); loadRecent(false);
-    }
+    var params = getParams(); params.delete('product');
+    if (_mode === 'search' && _lastQuery) params.set('q', _lastQuery);
+    else if (_mode === 'category' && _catName) params.set('cat', _catName);
+    navigate(params, false);
+    showState('main');
   }
 
-  loadMoreBtn.addEventListener('click', loadMoreProducts);
+  detailBack.addEventListener('click', goBack);
+
+  // ── TAB CLICK EVENTS ──────────────────────────────────────────────────────
+  tabProducts.addEventListener('click', function () { switchTab('products'); });
+  tabStores.addEventListener('click',   function () { switchTab('stores'); });
+
+  // ── CATEGORY TILE CLICKS ──────────────────────────────────────────────────
+  catGrid.addEventListener('click', function (e) {
+    var tile = e.target.closest('.cat-tile');
+    if (!tile) return;
+    e.preventDefault();
+    var cat = tile.dataset.cat;
+    if (cat === '__stores__') browseAllStores();
+    else if (cat)             browseCategory(cat);
+  });
+
+  // ── SEARCH INPUT ──────────────────────────────────────────────────────────
+  input.addEventListener('input', function () {
+    var val = input.value.trim();
+    clearBtn.style.display = val ? 'block' : 'none';
+    clearTimeout(_debounceTimer);
+    if (!val) {
+      document.querySelectorAll('.cat-tile').forEach(function (t) { t.classList.remove('active'); });
+      navigate(new URLSearchParams(), true);
+      loadHome();
+      return;
+    }
+    if (val.length < 2) return;
+    _debounceTimer = setTimeout(function () { runSearch(val); }, 420);
+  });
+
+  clearBtn.addEventListener('click', function () {
+    input.value = ''; clearBtn.style.display = 'none'; input.focus();
+    document.querySelectorAll('.cat-tile').forEach(function (t) { t.classList.remove('active'); });
+    navigate(new URLSearchParams(), true);
+    _currentProduct = null;
+    loadHome();
+  });
 
   // ── ROUTER ────────────────────────────────────────────────────────────────
   window.addEventListener('popstate', function () { routeFromURL(); });
@@ -1684,49 +1594,12 @@
     var cat     = params.get('cat');
     var view    = params.get('view');
     updateSEO(params);
-    if (product)           loadProductBySlug(product);
-    else if (q)            { input.value = q; clearBtn.style.display = 'block'; runSearch(q); }
-    else if (cat)          browseCategory(cat);
+    if (product)               loadProductBySlug(product);
+    else if (q)                { input.value = q; clearBtn.style.display = 'block'; runSearch(q); }
+    else if (cat)              browseCategory(cat);
     else if (view === 'stores') browseAllStores();
-    else                   {
-      _recentOffset = 0;
-      showState('landing'); renderSkeletonGrid(recentGrid, 12); loadFeaturedStores(); loadRecent(false);
-    }
+    else                       loadHome();
   }
-
-  // ── INPUT EVENTS ──────────────────────────────────────────────────────────
-  input.addEventListener('input', function () {
-    var val = input.value.trim();
-    clearBtn.style.display = val ? 'block' : 'none';
-    clearTimeout(_debounceTimer);
-    if (!val) {
-      document.querySelectorAll('.cat-tile').forEach(function (t) { t.classList.remove('active'); });
-      navigate(new URLSearchParams(), true); showState('landing'); return;
-    }
-    if (val.length < 2) return;
-    _debounceTimer = setTimeout(function () { runSearch(val); }, 420);
-  });
-
-  clearBtn.addEventListener('click', function () {
-    input.value = ''; clearBtn.style.display = 'none'; input.focus();
-    document.querySelectorAll('.cat-tile').forEach(function (t) { t.classList.remove('active'); });
-    navigate(new URLSearchParams(), true);
-    _lastResults = []; _lastQuery = ''; _currentProduct = null;
-    showState('landing');
-  });
-
-
-
-  catGrid.addEventListener('click', function (e) {
-    var tile = e.target.closest('.cat-tile');
-    if (!tile) return;
-    e.preventDefault();
-    var cat = tile.dataset.cat;
-    if (cat === '__stores__') browseAllStores();
-    else if (cat)             browseCategory(cat);
-  });
-
-  detailBack.addEventListener('click', goBack);
 
   // ── INIT ──────────────────────────────────────────────────────────────────
   routeFromURL();
