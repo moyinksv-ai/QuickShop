@@ -1107,6 +1107,11 @@
   // UUID pattern — 8-4-4-4-12 hex chars
   var _uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+  // Profile cache — set by resolveStore when it fetches the full profile
+  // during slug resolution.  Consumed once by fetchProfile to skip a
+  // redundant network call.  UUID paths do not set this.
+  var _resolvedProfile = null;
+
   async function resolveStore(client) {
     if (STORE_ID) {
       if (!_validStoreId) {
@@ -1120,14 +1125,19 @@
       // Treat as business slug — try public_catalog_profiles view first
       // (anon SELECT granted on view), fall back to profiles table
       try {
-        // Try view first — anon readable
+        // Try view first — anon readable.
+        // SELECT * instead of SELECT id so we can cache the full profile
+        // and skip the subsequent fetchProfile network call (saves 1 RTT).
         var sr = await client
           .from('public_catalog_profiles')
-          .select('id')
+          .select('*')
           .eq('slug', STORE_ID)
           .maybeSingle();
 
-        if (!sr.error && sr.data && sr.data.id) return sr.data.id;
+        if (!sr.error && sr.data && sr.data.id) {
+          _resolvedProfile = sr.data; // cache — fetchProfile will consume this
+          return sr.data.id;
+        }
 
         // View failed or returned nothing — try profiles table directly
         // This works if anon SELECT policy exists on profiles
@@ -2476,6 +2486,15 @@
     }
 
     async function fetchProfile() {
+      // resolveStore fetches the full profile during slug resolution (SELECT *
+      // instead of SELECT id).  Consume it here to skip a redundant network
+      // call.  UUID paths don't set _resolvedProfile, so this is a no-op for
+      // them and the normal fetch path runs unchanged.
+      if (_resolvedProfile) {
+        var cached = { data: _resolvedProfile, error: null };
+        _resolvedProfile = null; // consume — prevent stale reuse
+        return cached;
+      }
       // Try view first
       var vr = await client
         .from('public_catalog_profiles')

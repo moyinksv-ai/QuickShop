@@ -5,7 +5,7 @@
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self'
-               'sha256-4odxneSlLlbCvZqeb5meVExeuyvV5DTdLl6abe3QELU='
+               'sha256-QIKYo6fw+EBlT/VwbT+gCuzBdXAE6Ax+/zqHH74Jyjk='
                https://cdn.jsdelivr.net;
     connect-src 'self'
                 https://*.supabase.co
@@ -530,6 +530,16 @@
     @media (prefers-reduced-motion: no-preference) { body { animation: qs-page-in 0.22s ease both; } }
     @keyframes qs-page-in { from { opacity: 0; } to { opacity: 1; } }
 
+    /* ── Product detail slide-in ───────────────────────────────────────────── */
+    /* Plays every time the detail panel is revealed — gives continuity between  */
+    /* the card tap and the detail view regardless of network speed.             */
+    @keyframes qs-detail-in {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0);    }
+    }
+    .qs-detail-enter { animation: qs-detail-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    @media (prefers-reduced-motion: reduce) { .qs-detail-enter { animation: none; } }
+
     /* ── Footer ────────────────────────────────────────────────────────────── */
     .qs-footer { margin-top: 64px; padding: 32px var(--px); border-top: 1px solid var(--border); text-align: center; }
     @media (min-width: 900px) { .qs-footer { grid-column: 1 / -1; } }
@@ -690,12 +700,24 @@
   var _lastQuery      = '';
   var _currentProduct = null;
   var _debounceTimer  = null;
+  // In-session memo: keyed by 'home' or 'cat:<cat>'. Cleared on page reload.
+  // Serves cached grid data instantly on return visits within the same session.
+  var _memo           = new Map();
+  // Prefetch cache: item.id → Promise<listRes>. Warmed on touchstart so vendor
+  // data is in-flight before the tap registers (~100-200ms head start).
+  var _prefetchCache  = new Map();
 
   // ── State machine ─────────────────────────────────────────────────────────
   function showState(name) {
     stateMain.hidden    = name !== 'main';
     stateLoading.hidden = name !== 'loading';
     stateDetail.hidden  = name !== 'detail';
+    if (name === 'detail') {
+      // Restart the slide-in animation each time detail is revealed
+      stateDetail.classList.remove('qs-detail-enter');
+      void stateDetail.offsetWidth; // force reflow to reset animation
+      stateDetail.classList.add('qs-detail-enter');
+    }
   }
 
   // ── Tab system ────────────────────────────────────────────────────────────
@@ -804,18 +826,24 @@
   }
 
   // ── Batch-fetch listing stats ─────────────────────────────────────────────
-  async function fetchListingStats(ids) {
-    var countMap = {}, priceMap = {};
-    if (!ids || !ids.length) return { countMap: countMap, priceMap: priceMap };
-    var res = await sb.from('qs_vendor_listings').select('canonical_id, price').in('canonical_id', ids);
-    if (res.data) {
-      res.data.forEach(function (row) {
-        countMap[row.canonical_id] = (countMap[row.canonical_id] || 0) + 1;
-        var cur = priceMap[row.canonical_id];
-        if (cur === undefined || row.price < cur) priceMap[row.canonical_id] = row.price;
-      });
+  // ── Prefetch vendor listings on touchstart ────────────────────────────────
+  // Starts the qs_vendor_listings fetch ~100-200ms before the tap registers.
+  // On most Nigerian 4G connections the data arrives before openProduct runs,
+  // eliminating the loading state entirely.  The same Promise is reused if
+  // the user taps after touchstart — never fetches twice for the same item.
+  function _prefetchProduct(item) {
+    if (!sb || _prefetchCache.has(item.id)) return;
+    var p = new Promise(function (resolve, reject) {
+      sb.from('qs_vendor_listings').select('*')
+        .eq('canonical_id', item.id)
+        .order('price', { ascending: true })
+        .then(resolve, reject);
+    });
+    _prefetchCache.set(item.id, p);
+    // Cap at 60 entries — one full home-page load — then evict oldest
+    if (_prefetchCache.size > 60) {
+      _prefetchCache.delete(_prefetchCache.keys().next().value);
     }
-    return { countMap: countMap, priceMap: priceMap };
   }
 
   // ── Render product card ───────────────────────────────────────────────────
@@ -893,6 +921,7 @@
     card.appendChild(body);
 
     function open() { openProduct(item); }
+    card.addEventListener('touchstart', function () { _prefetchProduct(item); }, { passive: true });
     card.addEventListener('click', open);
     card.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
@@ -1027,7 +1056,8 @@
     try {
       var queryBuilder = sb
         .from('public_catalog_profiles')
-        .select('id, business_name, name, tagline, avatar_url, location, delivery_available, slug');
+        .select('id, business_name, name, tagline, avatar_url, location, delivery_available, slug')
+        .limit(50);
       if (categoryFilter) queryBuilder = queryBuilder.ilike('store_sector', categoryFilter);
 
       var res = await queryBuilder;
@@ -1166,20 +1196,8 @@
         return;
       }
 
-      var ids = data.map(function (d) { return d.id; });
-      var stats = await fetchListingStats(ids);
-
-      var imageMap = {};
-      try {
-        var imgRes = await sb.from('qs_canonical_products').select('id, image_url').in('id', ids);
-        if (imgRes.data) imgRes.data.forEach(function (r) { if (r.image_url) imageMap[r.id] = r.image_url; });
-      } catch (_) { /* images non-critical */ }
-
-      data.forEach(function (d) {
-        d.vendor_count = d.vendor_count || stats.countMap[d.id] || 0;
-        d.min_price    = stats.priceMap[d.id];
-        d.image_url    = d.image_url || imageMap[d.id] || null;
-      });
+      // qs_find_canonical now returns vendor_count, min_price, image_url directly.
+      // No follow-up queries needed — data is fully populated from the RPC.
 
       productsHeading.innerHTML =
         'Found <strong>' + data.length + ' product' + (data.length !== 1 ? 's' : '') + '</strong>' +
@@ -1217,14 +1235,31 @@
       });
 
       productsHeading.hidden = true;
-      productsGrid.innerHTML = '';
       loadMoreBtn.hidden = true;
 
       // Reset stores panel for fresh context
       storesHeading.hidden = true;
       storesGrid.innerHTML = '';
 
-      // Show skeleton immediately
+      // In-session memo: serve first page instantly, skip network + skeleton
+      var _memoKey    = 'cat:' + cat.toLowerCase();
+      var _memoHit    = _memo.get(_memoKey);
+      if (_memoHit) {
+        productsGrid.innerHTML = '';
+        productsHeading.innerHTML =
+          '<strong>' + escHtml(cat) + '</strong> — ' +
+          _memoHit.length + ' product' + (_memoHit.length !== 1 ? 's' : '');
+        productsHeading.hidden = false;
+        _memoHit.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
+        _catOffset = _memoHit.length;
+        loadMoreBtn.hidden = true; // load-more fetches fresh beyond the cached page
+        showState('main');
+        switchTab('products');
+        return;
+      }
+
+      // Cache miss — show skeleton while fetching
+      productsGrid.innerHTML = '';
       renderSkeletonGrid(productsGrid, _CAT_PAGE);
 
       showState('main');
@@ -1233,20 +1268,16 @@
 
     try {
       var canonRes = await sb
-        .from('qs_canonical_products')
-        .select('id, display_name, slug, category, image_url')
+        .from('qs_market_products')
+        .select('id, display_name, slug, category, image_url, vendor_count, min_price')
         .ilike('category', cat)
+        .order('vendor_count', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false })
         .range(_catOffset, _catOffset + _CAT_PAGE - 1);
       var canonData = canonRes.data || [];
       _catHasMore = canonData.length === _CAT_PAGE;
 
       if (canonData.length > 0) {
-        var stats = await fetchListingStats(canonData.map(function (d) { return d.id; }));
-        canonData.forEach(function (d) {
-          d.vendor_count = stats.countMap[d.id] || 0;
-          d.min_price    = stats.priceMap[d.id];
-        });
         // Completeness-first sort: photos, then vendor count
         canonData.sort(function (a, b) {
           var ai = (a.image_url && a.image_url.startsWith('https://')) ? 0 : 1;
@@ -1254,9 +1285,14 @@
           if (ai !== bi) return ai - bi;
           return (b.vendor_count || 0) - (a.vendor_count || 0);
         });
+        // Cache first page so returning to this category is instant
+        if (!append) _memo.set('cat:' + cat.toLowerCase(), canonData);
       }
 
       if (!append) productsGrid.innerHTML = '';
+
+      // Remove load-more skeleton placeholders inserted by the button handler
+      if (append) productsGrid.querySelectorAll('.lm-skel').forEach(function (el) { el.remove(); });
 
       var totalShown = _catOffset + canonData.length;
 
@@ -1341,13 +1377,17 @@
     params.set('product', item.slug); params.delete('q'); params.delete('cat');
     navigate(params, false);
 
-    showState('loading');
-    loadingLabel.textContent = 'Loading product…';
+    // Use pre-fetched promise if touchstart warmed the cache.
+    // If not yet prefetched, start the fetch now and show loading state.
+    var _hadPrefetch = _prefetchCache.has(item.id);
+    if (!_hadPrefetch) {
+      showState('loading');
+      loadingLabel.textContent = 'Loading product…';
+      _prefetchProduct(item);
+    }
 
     try {
-      var listRes = await sb
-        .from('qs_vendor_listings').select('*')
-        .eq('canonical_id', item.id).order('price', { ascending: true });
+      var listRes = await _prefetchCache.get(item.id);
       var listings = listRes.data || [];
 
       var vendorIds  = listings.map(function (l) { return l.vendor_store_id; });
@@ -1490,9 +1530,28 @@
     try {
       var from = _recentOffset;
       var to   = from + _RECENT_PAGE - 1;
+
+      // In-session memo: first page only (append loads bypass cache)
+      if (!append) {
+        var _memoHome = _memo.get('home');
+        if (_memoHome) {
+          productsGrid.innerHTML = '';
+          _memoHome.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
+          _recentOffset = _memoHome.length;
+          if (_memoHome.length < _RECENT_PAGE) {
+            loadMoreBtn.hidden = true;
+          } else {
+            loadMoreBtn.textContent = 'Load more products';
+            loadMoreBtn.hidden    = false;
+            loadMoreBtn.disabled  = false;
+          }
+          return;
+        }
+      }
+
       var res  = await sb
-        .from('qs_canonical_products')
-        .select('id, display_name, slug, category, image_url')
+        .from('qs_market_products')
+        .select('id, display_name, slug, category, image_url, vendor_count, min_price')
         .order('created_at', { ascending: false })
         .range(from, to);
 
@@ -1500,14 +1559,13 @@
         loadMoreBtn.hidden = true; return;
       }
 
-      var stats = await fetchListingStats(res.data.map(function (d) { return d.id; }));
-      res.data.forEach(function (d) {
-        d.vendor_count = stats.countMap[d.id] || 0;
-        d.min_price    = stats.priceMap[d.id];
-      });
-
       var ordered = weightedShuffle(res.data);
-      if (!append) productsGrid.innerHTML = '';
+      if (!append) {
+        productsGrid.innerHTML = '';
+        _memo.set('home', ordered); // cache for instant return visits
+      }
+      // Remove load-more skeleton placeholders inserted by the button handler
+      if (append) productsGrid.querySelectorAll('.lm-skel').forEach(function (el) { el.remove(); });
       ordered.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
 
       _recentOffset += res.data.length;
@@ -1527,6 +1585,25 @@
   loadMoreBtn.addEventListener('click', function () {
     loadMoreBtn.disabled    = true;
     loadMoreBtn.textContent = 'Loading…';
+
+    // Immediate visual response: append 8 skeleton cards to the grid.
+    // Marked with .lm-skel so the fetch callback can remove them cleanly
+    // before inserting real cards — avoids a blank wait with no feedback.
+    var _frag = document.createDocumentFragment();
+    for (var _s = 0; _s < 8; _s++) {
+      var _sc = document.createElement('div');
+      _sc.className = 'skel-card lm-skel';
+      var _si = document.createElement('div'); _si.className = 'skel-card-img skel';
+      var _sb = document.createElement('div'); _sb.className = 'skel-card-body';
+      _sb.innerHTML =
+        '<div class="skel" style="height:10px;width:45%"></div>' +
+        '<div class="skel" style="height:14px;width:85%"></div>' +
+        '<div class="skel" style="height:12px;width:55%"></div>';
+      _sc.appendChild(_si); _sc.appendChild(_sb);
+      _frag.appendChild(_sc);
+    }
+    productsGrid.appendChild(_frag);
+
     if (_mode === 'home') {
       loadRecent(true);
     } else if (_mode === 'category') {
