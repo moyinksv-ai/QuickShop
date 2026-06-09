@@ -5,7 +5,7 @@
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self'
-               'sha256-QIKYo6fw+EBlT/VwbT+gCuzBdXAE6Ax+/zqHH74Jyjk='
+               'sha256-/S0qDK3MDAx4KzP/KnqJtScSWAnYZC2y+DQ8oiAoGVE='
                https://cdn.jsdelivr.net;
     connect-src 'self'
                 https://*.supabase.co
@@ -346,44 +346,74 @@
     /* ── Product detail ────────────────────────────────────────────────────── */
     #state-detail { padding: 0 var(--px); }
     @media (min-width: 900px) { #state-detail { padding: 0; max-width: 640px; } }
+
+    /* Back button — pill with context label, intentional touch target */
     .detail-back {
-      display: flex; align-items: center; gap: 6px;
-      font-size: 13px; font-weight: 600; color: var(--dim);
-      cursor: pointer; padding: 14px 0 12px;
-      background: none; border: none; width: 100%; text-align: left; transition: color .12s;
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 13px; font-weight: 700; color: var(--dim);
+      cursor: pointer; padding: 7px 14px 7px 10px; margin: 10px 0 16px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+      transition: color .12s, border-color .12s; min-height: 36px;
     }
-    .detail-back:hover { color: var(--text); }
-    .detail-back:active { color: var(--text); }
-    .detail-name { font-size: clamp(24px, 3vw, 36px); font-weight: 800; letter-spacing: -0.04em; line-height: 1.1; margin-bottom: 8px; }
-    .detail-meta { font-size: 14px; color: var(--muted); margin-bottom: 28px; }
-    .detail-meta span { color: var(--green); font-weight: 700; }
-    .detail-section-label { font-size: 10px; font-weight: 700; letter-spacing: 1.8px; text-transform: uppercase; color: var(--dim); margin-bottom: 12px; }
+    .detail-back:hover  { color: var(--text); border-color: rgba(255,255,255,0.18); }
+    .detail-back:active { color: var(--text); transform: scale(0.97); }
+
+    .detail-name { font-size: clamp(24px, 3vw, 36px); font-weight: 800; letter-spacing: -0.04em; line-height: 1.1; margin-bottom: 6px; }
+    .detail-meta { font-size: 14px; color: var(--muted); margin-bottom: 24px; }
+    .detail-meta .dm-stores { color: var(--green); font-weight: 700; }
+    .detail-meta .dm-price  { color: var(--text);  font-weight: 700; }
+
+    /* Section label */
+    .detail-section-label {
+      font-size: 11px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase;
+      color: var(--dim); margin-bottom: 14px;
+    }
     .vendor-list { display: flex; flex-direction: column; gap: 10px; }
+
+    /* Vendor card — column layout with full-width CTA at bottom */
     .vendor-card {
       background: var(--surface); border: 1px solid var(--border);
-      border-radius: 12px; padding: 16px 18px;
-      display: flex; align-items: center; gap: 14px; transition: border-color .12s;
+      border-radius: 12px; padding: 16px 16px 14px;
+      display: flex; flex-direction: column; gap: 12px; transition: border-color .12s;
     }
-    .vendor-card:hover { border-color: rgba(34,197,94,0.25); }
-    .vendor-card.best-price { border-color: rgba(34,197,94,0.3); }
+    .vendor-card:hover   { border-color: rgba(34,197,94,0.25); }
+    .vendor-card.best-price { border-color: rgba(34,197,94,0.35); }
+
+    /* Top row: avatar + info + price */
+    .vc-row { display: flex; align-items: flex-start; gap: 13px; }
+
+    /* Avatar — shows logo img if available, initial letter if not */
     .vc-avatar {
-      width: 38px; height: 38px; background: var(--lift);
-      border: 1px solid var(--border); border-radius: 9px;
+      width: 42px; height: 42px; background: var(--lift);
+      border: 1px solid var(--border); border-radius: 10px; flex-shrink: 0;
       display: flex; align-items: center; justify-content: center;
-      font-size: 14px; font-weight: 800; color: var(--green); flex-shrink: 0; text-transform: uppercase;
+      font-size: 15px; font-weight: 800; color: var(--green); text-transform: uppercase;
+      overflow: hidden;
     }
-    .vc-info { flex: 1; min-width: 0; }
-    .vc-store { font-size: 14px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .vc-tagline { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .vc-price { font-size: 16px; font-weight: 800; color: var(--green); flex-shrink: 0; text-align: right; }
-    .vc-view {
-      display: block; margin-top: 4px; font-size: 11px; font-weight: 700;
-      color: var(--text); background: var(--lift); border: 1px solid var(--border);
-      border-radius: 5px; padding: 4px 10px; text-align: center; text-decoration: none; transition: border-color .12s;
-      min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
+    .vc-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+    .vc-info { flex: 1; min-width: 0; padding-top: 1px; }
+    .vc-store  { font-size: 14px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* Tagline — 2 lines max, breaks at word boundary */
+    .vc-tagline {
+      font-size: 12px; color: var(--muted); margin-top: 2px;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     }
-    .vc-view:hover { border-color: var(--text); }
-    .vc-best-badge { font-size: 9.5px; font-weight: 700; color: var(--green); letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
+    .vc-best-badge { font-size: 9.5px; font-weight: 700; color: var(--green); letter-spacing: 1px; text-transform: uppercase; margin-top: 4px; }
+    .vc-price { font-size: 17px; font-weight: 800; color: var(--green); flex-shrink: 0; text-align: right; padding-top: 1px; }
+
+    /* Full-width Order CTA — the primary conversion action */
+    .vc-cta {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      width: 100%; min-height: 46px; box-sizing: border-box;
+      background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.3);
+      border-radius: 8px; font-size: 14px; font-weight: 700; color: var(--green);
+      text-decoration: none; transition: background .12s, border-color .12s, transform .1s;
+      letter-spacing: 0.01em;
+    }
+    .vc-cta:hover  { background: rgba(34,197,94,0.13); border-color: rgba(34,197,94,0.5); }
+    .vc-cta:active { transform: scale(0.99); }
 
     /* ── Store card (used in stores panel) ─────────────────────────────────── */
     .store-card {
@@ -933,22 +963,32 @@
   function renderVendorCard(listing, profile, isBest) {
     var card = document.createElement('div');
     card.className = 'vendor-card' + (isBest ? ' best-price' : '');
+
     var storeName = (profile && (profile.business_name || profile.name)) || 'QuickShop Vendor';
     var tagline   = (profile && profile.tagline) || '';
-    var initial   = storeName.charAt(0);
+    var initial   = storeName.charAt(0).toUpperCase();
     var storeUrl  = '/?store=' + encodeURIComponent(listing.vendor_store_id) +
       (listing.local_product_id ? '&pid=' + encodeURIComponent(listing.local_product_id) : '');
+
+    // Avatar: show logo image if vendor has uploaded one, fall back to initial
+    var avatarInner = (profile && profile.avatar_url &&
+      typeof profile.avatar_url === 'string' &&
+      profile.avatar_url.startsWith('https://'))
+      ? '<img src="' + profile.avatar_url + '" alt="' + escHtml(storeName) + '" loading="lazy">'
+      : escHtml(initial);
+
     card.innerHTML =
-      '<div class="vc-avatar">' + escHtml(initial) + '</div>' +
-      '<div class="vc-info">' +
-        '<div class="vc-store">' + escHtml(storeName) + '</div>' +
-        (tagline ? '<div class="vc-tagline">' + escHtml(tagline) + '</div>' : '') +
-        (isBest  ? '<div class="vc-best-badge">Best price</div>' : '') +
-      '</div>' +
-      '<div style="text-align:right;flex-shrink:0">' +
+      '<div class="vc-row">' +
+        '<div class="vc-avatar">' + avatarInner + '</div>' +
+        '<div class="vc-info">' +
+          '<div class="vc-store">'   + escHtml(storeName) + '</div>' +
+          (tagline ? '<div class="vc-tagline">' + escHtml(tagline) + '</div>' : '') +
+          (isBest  ? '<div class="vc-best-badge">Best price</div>' : '') +
+        '</div>' +
         '<div class="vc-price">' + fmt(listing.price) + '</div>' +
-        '<a class="vc-view" href="' + storeUrl + '">Order →</a>' +
-      '</div>';
+      '</div>' +
+      '<a class="vc-cta" href="' + storeUrl + '">Order on WhatsApp →</a>';
+
     return card;
   }
 
@@ -1398,7 +1438,13 @@
         if (profRes.data) profRes.data.forEach(function (p) { profileMap[p.id] = p; });
       }
 
-      detailName.textContent = item.display_name || item.name || '';
+    // Context-aware back label — tells the user exactly where they'll return to
+    var _backCtx = (_mode === 'category' && _catName) ? _catName
+                 : (_mode === 'search'   && _lastQuery) ? 'Search'
+                 : 'Browse';
+    detailBack.textContent = '← ' + _backCtx;
+
+    detailName.textContent = item.display_name || item.name || '';
 
       // Product image
       detailImageWrap.innerHTML = '';
@@ -1431,11 +1477,13 @@
       if (storeCount === 0) {
         detailMeta.textContent = 'No vendors currently selling this product.';
       } else if (minPrice === maxPrice) {
-        detailMeta.innerHTML = '<span>' + storeCount + ' store' + (storeCount !== 1 ? 's' : '') + '</span> · ' + fmt(minPrice);
+        detailMeta.innerHTML =
+          '<span class="dm-stores">' + storeCount + ' store' + (storeCount !== 1 ? 's' : '') + '</span>' +
+          ' · <span class="dm-price">' + fmt(minPrice) + '</span>';
       } else {
         detailMeta.innerHTML =
-          '<span>' + storeCount + ' store' + (storeCount !== 1 ? 's' : '') + '</span> · ' +
-          fmt(minPrice) + ' – ' + fmt(maxPrice);
+          '<span class="dm-stores">' + storeCount + ' store' + (storeCount !== 1 ? 's' : '') + '</span>' +
+          ' · <span class="dm-price">' + fmt(minPrice) + ' – ' + fmt(maxPrice) + '</span>';
       }
 
       detailVLabel.textContent = storeCount === 0 ? '' : 'Where to buy';
