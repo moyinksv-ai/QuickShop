@@ -5,7 +5,7 @@
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self'
-               'sha256-BI5jcoKXAYv0BQhsKQJoTuiAPTutyjGrt30PJhhbRIY='
+               'sha256-4odxneSlLlbCvZqeb5meVExeuyvV5DTdLl6abe3QELU='
                https://cdn.jsdelivr.net;
     connect-src 'self'
                 https://*.supabase.co
@@ -1330,7 +1330,7 @@
     storesGrid.innerHTML = '';
 
     showState('main');
-    switchTab('stores'); // triggers _storesFetcher → loadStores(null)
+    switchTab('products'); // default to Products tab; Stores tab lazy-loads on explicit click
   }
 
   // ── PRODUCT DETAIL ────────────────────────────────────────────────────────
