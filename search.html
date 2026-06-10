@@ -1029,7 +1029,7 @@
         '</div>' +
         '<div class="vc-price">' + fmt(listing.price) + '</div>' +
       '</div>' +
-      '<a class="vc-cta" href="' + storeUrl + '">Order on WhatsApp →</a>';
+      '<a class="vc-cta" href="' + storeUrl + '">View in Store →</a>';
 
     return card;
   }
@@ -1139,6 +1139,7 @@
       var queryBuilder = sb
         .from('public_catalog_profiles')
         .select('id, business_name, name, tagline, avatar_url, location, delivery_available, slug')
+        .eq('is_active', true)
         .limit(50);
       if (categoryFilter) queryBuilder = queryBuilder.ilike('store_sector', categoryFilter);
 
@@ -1542,7 +1543,9 @@
 
       if (vendorIds.length > 0) {
         var profRes = await sb.from('public_catalog_profiles')
-          .select('id, business_name, name, tagline, avatar_url').in('id', vendorIds);
+          .select('id, business_name, name, tagline, avatar_url')
+          .eq('is_active', true)
+          .in('id', vendorIds);
         if (seq !== _navSeq) return;  // check again after second await
         if (profRes.data) profRes.data.forEach(function (p) { profileMap[p.id] = p; });
       }
