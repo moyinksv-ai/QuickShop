@@ -31,7 +31,7 @@
  *      Ensures the app opens offline after first visit.
  */
 
-var CACHE_NAME    = 'qs-v1.77';
+var CACHE_NAME    = 'qs-v1.767';
 var IMAGE_CACHE   = 'qs-images-v4.0';
 var MARKET_CACHE  = 'qs-market-v1.0';
 /* ── Install ─────────────────────────────────────────────────────────────────
