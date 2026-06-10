@@ -5,7 +5,7 @@
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self'
-               'sha256-TgwxMV3p3zuNtS/Rtkw2liXvnR/nU+/XaFTPdt3WAco='
+               'sha256-TqrzsGp27MFdJPMWQy56u3Ov9sRpJGYneuEFETnfaXY='
                https://cdn.jsdelivr.net;
     connect-src 'self'
                 https://*.supabase.co
@@ -36,6 +36,8 @@
   <meta property="og:url"         content="https://quickshopper.vercel.app/search.html">
 
   <link rel="canonical" href="https://quickshopper.vercel.app/search.html">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
 
   <script type="application/ld+json">
   {
@@ -697,6 +699,19 @@
 (function () {
   'use strict';
 
+  // Preconnect to Supabase as early as possible — warms DNS+TCP+TLS
+  // before the first query fires. URL comes from supabase-config.js.
+  (function () {
+    var _url = window.__QS_SUPABASE && window.__QS_SUPABASE.url;
+    if (!_url) return;
+    var _pc = document.createElement('link');
+    _pc.rel = 'preconnect'; _pc.href = _url; _pc.crossOrigin = 'anonymous';
+    document.head.appendChild(_pc);
+    var _pcd = document.createElement('link');
+    _pcd.rel = 'dns-prefetch'; _pcd.href = _url;
+    document.head.appendChild(_pcd);
+  }());
+
   var sb = (window.__QS_SUPABASE && window.__QS_SUPABASE.client)
     ? window.__QS_SUPABASE.client : null;
   if (!sb) console.error('[QS Market] Supabase client not ready.');
@@ -735,7 +750,7 @@
   var _CAT_PAGE       = 16;
   var _catHasMore     = false;
   var _recentOffset   = 0;
-  var _RECENT_PAGE    = 60;
+  var _RECENT_PAGE    = 16;
   var _lastQuery      = '';
   var _currentProduct = null;
   var _debounceTimer  = null;
@@ -924,7 +939,7 @@
     beauty:'💄', electronics:'📱', food:'🍱', home:'🏠', others:'📦'
   };
 
-  function renderProductCard(item) {
+  function renderProductCard(item, priority) {
     var card = document.createElement('div');
     card.className = 'product-card';
     card.setAttribute('role', 'button');
@@ -947,7 +962,9 @@
       var img = document.createElement('img');
       img.alt = name;
       img.setAttribute('data-loading', '1');
-      img.src = imgTransform(imgUrl, 400, 75);
+      img.loading      = priority ? 'eager' : 'lazy';
+      img.decoding     = 'async';
+      if (priority) img.fetchPriority = 'high';
       img.onload = function () {
         img.removeAttribute('data-loading');
         if (shimmer.parentNode) shimmer.parentNode.removeChild(shimmer);
@@ -955,6 +972,7 @@
       img.onerror = function () {
         imgZone.innerHTML = '<div class="pc-image-placeholder">' + emoji + '<span>' + escHtml((item.category || 'product').toUpperCase()) + '</span></div>';
       };
+      img.src = imgTransform(imgUrl, 400, 75);
       imgZone.appendChild(img);
     } else {
       imgZone.innerHTML = '<div class="pc-image-placeholder">' + emoji + '<span>' + escHtml((item.category || 'product').toUpperCase()) + '</span></div>';
@@ -1098,7 +1116,7 @@
         imgs.forEach(function (url) {
           var cell = document.createElement('div'); cell.className = 'sdc-thumb';
           var tImg = document.createElement('img');
-          tImg.src = imgTransform(url, 200, 70); tImg.alt = storeName + ' product'; tImg.loading = 'lazy';
+          tImg.src = imgTransform(url, 200, 70); tImg.alt = storeName + ' product'; tImg.loading = 'lazy'; tImg.decoding = 'async';
           tImg.onerror = function () { cell.innerHTML = '<div class="sdc-thumb-placeholder">📦</div>'; };
           cell.appendChild(tImg);
           strip.appendChild(cell);
@@ -1288,7 +1306,7 @@
         'Found <strong>' + data.length + ' product' + (data.length !== 1 ? 's' : '') + '</strong>' +
         ' matching "' + escHtml(query) + '"';
       productsGrid.innerHTML = '';
-      data.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
+      data.forEach(function (item, i) { productsGrid.appendChild(renderProductCard(item, i < 4)); });
 
     } catch (e) {
       console.error('[search] error', e);
@@ -1335,7 +1353,7 @@
           '<strong>' + escHtml(cat) + '</strong> — ' +
           _memoHit.length + ' product' + (_memoHit.length !== 1 ? 's' : '');
         productsHeading.hidden = false;
-        _memoHit.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
+        _memoHit.forEach(function (item, i) { productsGrid.appendChild(renderProductCard(item, i < 4)); });
         _catOffset = _memoHit.length;
         loadMoreBtn.hidden = true;
         showState('main');
@@ -1393,7 +1411,7 @@
         totalShown + (_catHasMore ? '+' : '') + ' product' + (totalShown !== 1 ? 's' : '');
       productsHeading.hidden = false;
 
-      canonData.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
+      canonData.forEach(function (item, i) { productsGrid.appendChild(renderProductCard(item, !append && i < 4)); });
       _catOffset += canonData.length;
 
       // Load more button
@@ -1544,7 +1562,6 @@
       if (vendorIds.length > 0) {
         var profRes = await sb.from('public_catalog_profiles')
           .select('id, business_name, name, tagline, avatar_url')
-          .eq('is_active', true)
           .in('id', vendorIds);
         if (seq !== _navSeq) return;  // check again after second await
         if (profRes.data) profRes.data.forEach(function (p) { profileMap[p.id] = p; });
@@ -1669,7 +1686,7 @@
         var _memoHome = _memo.get('home');
         if (_memoHome) {
           productsGrid.innerHTML = '';
-          _memoHome.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
+          _memoHome.forEach(function (item, i) { productsGrid.appendChild(renderProductCard(item, i < 4)); });
           _recentOffset = _memoHome.length;
           if (_memoHome.length < _RECENT_PAGE) {
             loadMoreBtn.hidden = true;
@@ -1708,7 +1725,7 @@
         _memo.set('home', ordered);
       }
       if (append) productsGrid.querySelectorAll('.lm-skel').forEach(function (el) { el.remove(); });
-      ordered.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
+      ordered.forEach(function (item, i) { productsGrid.appendChild(renderProductCard(item, !append && i < 4)); });
 
       _recentOffset += res.data.length;
 
