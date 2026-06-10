@@ -15,9 +15,10 @@
 (function () {
   'use strict';
 
-  var BUTTON_ID         = 'shareCatalogBtn';
-  var PHONE_STORAGE_KEY = 'qs_seller_phone';
-  var BASE_URL          = window.location.origin;
+  var BUTTON_ID             = 'shareCatalogBtn';
+  var PHONE_STORAGE_KEY     = 'qs_seller_phone';
+  var BASE_URL              = window.location.origin;
+  var _phoneBackfillDone    = false; // session flag — backfill fires once per page load
 
   // ── Paywall config ───────────────────────────────────────────────────────────
   // Fill these in before deploying. Never commit real account details to a repo.
@@ -769,6 +770,13 @@
       // so it can skip its own redundant DB fetch when the data is already known.
       var slug = await getOrCreateSlug(sb, userId, businessName, existingSlug);
 
+      // Persist phone — validate at write site as defence-in-depth before
+      // touching the DB (getSellerPhone already validates, this is a second check).
+      var _phoneForDb = phone ? phone.replace(/\D/g, '').slice(0, 15) : '';
+      if (isValidPhone(_phoneForDb)) {
+        await sb.from('profiles').update({ phone_number: _phoneForDb }).eq('id', userId);
+      }
+
       var catalogUrl = BASE_URL
         + '/?store=' + encodeURIComponent(slug)
         + '&phone=' + encodeURIComponent(phone);
@@ -793,6 +801,35 @@
 
   // Expose handleShareClick for direct invocation from settings action row button
   window.__QS_SHARE_CLICK = function() { handleShareClick(null); };
+
+  // ── One-time backfill for existing vendors ──────────────────────────────────
+  // Vendors who saved their phone in localStorage before the phone_number DB
+  // column existed will never trigger the upsert in handleShareCatalog unless
+  // they re-share. This runs silently once when the Settings panel opens —
+  // no UI, no vendor action required. Fire-and-forget: errors are swallowed so
+  // they can never surface to the user or block the button render.
+  // ── Phone backfill for existing vendors ────────────────────────────────────
+  // Runs once per session when Settings opens. Always syncs localStorage→DB:
+  // localStorage is the vendor's most recent explicit input on this device.
+  // Session flag prevents repeated DB writes on subsequent Settings opens.
+  (function _backfillPhoneIfNeeded() {
+    if (_phoneBackfillDone) return;
+    _phoneBackfillDone = true;
+    try {
+      var raw    = localStorage.getItem(PHONE_STORAGE_KEY);
+      var digits = raw ? raw.replace(/\D/g, '').slice(0, 15) : '';
+      if (!isValidPhone(digits)) return;
+      var userId = getCurrentUserId();
+      if (!userId) return;
+      var sb = window.__QS_SUPABASE && window.__QS_SUPABASE.client;
+      if (!sb) return;
+      sb.from('profiles')
+        .update({ phone_number: digits })
+        .eq('id', userId)
+        .then(function () {})
+        .catch(function () {});
+    } catch (_) {}
+  })();
 
   window.renderShareButton = function renderShareButton(container) {
     if (!container) return;

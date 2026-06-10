@@ -2513,6 +2513,12 @@
         .maybeSingle();
     }
 
+    // If no phone arrived via URL param, fetch from DB via secure RPC.
+    // Fired here so it runs concurrently with the profile+products fetch below —
+    // zero extra latency on the critical path.
+    var _phoneFetchPromise = (SELLER_PHONE || !storeId) ? null
+      : client.rpc('get_vendor_phone', { store_id: storeId });
+
     var profileResult, productsResult;
     try {
       var results = await Promise.all([ fetchProfile(), fetchProducts() ]);
@@ -2521,6 +2527,17 @@
     } catch (e) {
       showError('Failed to load catalog data. Please try again.');
       return;
+    }
+
+    // Resolve phone from RPC now that both fetches are done.
+    // The RPC promise was already in-flight — this await is near-instant.
+    if (!SELLER_PHONE && _phoneFetchPromise) {
+      try {
+        var _phoneRes = await _phoneFetchPromise;
+        var _rpcPhone = (_phoneRes && _phoneRes.data)
+          ? String(_phoneRes.data).replace(/\D/g, '').slice(0, 15) : '';
+        if (/^\d{7,15}$/.test(_rpcPhone)) SELLER_PHONE = _rpcPhone;
+      } catch (_) { /* non-fatal — checkout falls back gracefully */ }
     }
 
     if (productsResult.error) {

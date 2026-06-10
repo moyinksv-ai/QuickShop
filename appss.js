@@ -5862,6 +5862,9 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       // Pre-fill location
       const locationInput = settingsPanel.querySelector('#qs-location-input');
       if (locationInput && profile.location) locationInput.value = profile.location;
+      // Pre-fill phone number
+      const phoneInput = settingsPanel.querySelector('#qs-account-phone');
+      if (phoneInput && profile.phone_number) phoneInput.value = profile.phone_number;
       // Pre-fill delivery radio
       if (typeof profile.delivery_available === 'boolean') {
         const radioId = profile.delivery_available ? '#qs-delivery-yes' : '#qs-delivery-no';
@@ -5926,7 +5929,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
                 <div class="qs-row-icon">✏️</div>
                 <div class="qs-action-label">
                   <div>Edit Account</div>
-                  <div class="qs-action-sub">Name, business name</div>
+                  <div class="qs-action-sub">Name, business name, phone</div>
                 </div>
                 <div class="qs-row-chevron">
                   <svg width="7" height="12" viewBox="0 0 7 12" fill="none">
@@ -5952,6 +5955,12 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
                       <input id="qs-account-business" class="qs-input" type="text" maxlength="80"
                         placeholder="Your store or business name"
                         value="${escapeHtml(businessName)}" />
+                    </div>
+                    <div>
+                      <div class="qs-field-label">WhatsApp Number</div>
+                      <div class="qs-field-sub">Include country code, digits only — e.g. 2348012345678</div>
+                      <input id="qs-account-phone" class="qs-input" type="tel" maxlength="15"
+                        placeholder="e.g. 2348012345678" />
                     </div>
                     <button id="qs-account-save" class="qs-save-btn">Save Changes</button>
                   </div>
@@ -6373,8 +6382,11 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       accountSaveBtn.addEventListener('click', async function () {
         const nameInput     = settingsPanel.querySelector('#qs-account-name');
         const businessInput = settingsPanel.querySelector('#qs-account-business');
+        const phoneInput    = settingsPanel.querySelector('#qs-account-phone');
         const newName     = (nameInput     ? nameInput.value     : '').trim().slice(0, 80);
         const newBusiness = (businessInput ? businessInput.value : '').trim().slice(0, 80);
+        const rawPhone    = (phoneInput    ? phoneInput.value    : '').replace(/\D/g, '').slice(0, 15);
+        const newPhone    = /^\d{7,15}$/.test(rawPhone) ? rawPhone : '';
         const u  = getUser();
         const sb = getClient();
         if (!u || !sb) { toast('Not logged in', 'error'); return; }
@@ -6396,6 +6408,12 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
           const oldBusiness = (u.user_metadata && u.user_metadata.business_name) || '';
           if (newBusiness && newBusiness !== oldBusiness) {
             await sb.from('profiles').update({ slug: null }).eq('id', u.id);
+          }
+          // Phone: DB is authoritative on profile edit. Write directly, then
+          // sync localStorage so this device stays consistent without re-entry.
+          if (newPhone) {
+            await sb.from('profiles').update({ phone_number: newPhone }).eq('id', u.id);
+            try { localStorage.setItem('qs_seller_phone', newPhone); } catch (_) {}
           }
           if (authData && authData.user) currentUser = authData.user;
           toast('Account updated ✓', 'success');
