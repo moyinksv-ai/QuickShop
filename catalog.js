@@ -66,18 +66,49 @@
       if (window.__QS_SUPABASE && window.__QS_SUPABASE.client)
         return resolve(window.__QS_SUPABASE.client);
       var waited = 0;
+      // Poll every 100ms for the first 3 seconds (CDN usually loads by then),
+      // then every 500ms up to timeoutMs — reduces CPU on very slow connections.
       var iv = setInterval(function () {
         if (window.__QS_SUPABASE && window.__QS_SUPABASE.client) {
           clearInterval(iv);
           return resolve(window.__QS_SUPABASE.client);
         }
         waited += 100;
-        if (waited >= (timeoutMs || 5000)) {
+        if (waited >= (timeoutMs || 20000)) {
           clearInterval(iv);
           return resolve(null);
         }
+        // After 3s, slow the polling — the library is taking a long time to load
+        if (waited === 3000) {
+          clearInterval(iv);
+          iv = setInterval(function () {
+            if (window.__QS_SUPABASE && window.__QS_SUPABASE.client) {
+              clearInterval(iv); return resolve(window.__QS_SUPABASE.client);
+            }
+            waited += 500;
+            if (waited >= (timeoutMs || 20000)) {
+              clearInterval(iv); return resolve(null);
+            }
+          }, 500);
+        }
       }, 100);
     });
+  }
+
+  // Navigation token — prevents stale async results writing to DOM after
+  // the user has navigated away. Every async function increments _navSeq
+  // at entry and checks it before any DOM write after an await.
+  var _navSeq  = 0;
+  var _scrollY = 0;  // saved before detail open, restored on back
+
+  // Image transform — rewrites Supabase Storage URLs to use the render
+  // endpoint, serving vendor photos at the right size for each context.
+  // 4MB phone photos → 80-120KB at point of use.
+  function imgTransform(url, width, quality) {
+    if (!url || typeof url !== 'string' || !url.startsWith('https://')) return url;
+    if (!url.includes('/storage/v1/object/public/')) return url;
+    return url.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/')
+      + '?width=' + width + '&quality=' + quality + '&resize=cover';
   }
 
   /* ── 2. CART STATE ────────────────────────────────────────────────────── */
@@ -167,10 +198,12 @@
   // Validates image URL before setting as img.src.
   // Prevents javascript: URI injection on older browsers.
   // Only accepts https:// URLs or data: URIs (for compressed blobs).
-  function safeImgSrc(url) {
+  // width/quality optional — when provided, also applies imgTransform.
+  function safeImgSrc(url, width, quality) {
     if (typeof url !== 'string') return '';
-    if (url.startsWith('https://') || url.startsWith('data:image/')) return url;
-    return '';
+    if (url.startsWith('data:image/')) return url;
+    if (!url.startsWith('https://')) return '';
+    return (width && quality) ? imgTransform(url, width, quality) : url;
   }
 
   /* ── 4. CSS INJECTION — scoped under #qs-catalog, injected once ────────── */
@@ -868,7 +901,18 @@
     var errs = document.createElement('div'); errs.className = 'cat-state-sub';
     errs.id = 'cat-error-msg';
     errs.textContent = 'This link may have expired or the store may be offline.';
-    err.appendChild(erri); err.appendChild(errt); err.appendChild(errs);
+    var errBtn = document.createElement('button');
+    errBtn.id = 'cat-error-retry';
+    errBtn.textContent = 'Retry';
+    errBtn.style.cssText =
+      'margin-top:20px;padding:11px 28px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);' +
+      'background:rgba(255,255,255,0.07);color:#fff;font-size:14px;font-weight:700;cursor:pointer;';
+    errBtn.addEventListener('click', function () {
+      err.classList.remove('show');
+      _catalogInitDone = false;
+      initCatalog();
+    });
+    err.appendChild(erri); err.appendChild(errt); err.appendChild(errs); err.appendChild(errBtn);
     root.appendChild(err);
 
     // Soft gate (vendor not yet active — shows identity + WhatsApp CTA)
@@ -1460,7 +1504,7 @@
         var slide = document.createElement('div');
         slide.className = 'cat-swipe-slide';
         var img = document.createElement('img');
-        img.src = safeImgSrc(src);
+        img.src = safeImgSrc(src, 800, 82);
         img.alt = (product.name || '') + ' photo ' + (i + 1);
         img.loading = i === 0 ? 'eager' : 'lazy';
         img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;';
@@ -1480,7 +1524,7 @@
     } else if (images.length === 1) {
       var singleImg = document.createElement('img');
       singleImg.id = 'cat-detail-hero-single';
-      singleImg.src = images[0];
+      singleImg.src = safeImgSrc(images[0], 800, 82);
       singleImg.alt = product.name || '';
       singleImg.loading = 'eager';
       singleImg.addEventListener('click', function () {
@@ -1641,7 +1685,7 @@
         var slide = document.createElement('div');
         slide.className = 'cat-swipe-slide';
         var img = document.createElement('img');
-        img.src     = safeImgSrc(src);
+        img.src     = safeImgSrc(src, 400, 75);
         img.alt     = (p.name || '') + (images.length > 1 ? ' — photo ' + (i + 1) : '');
         img.loading = i === 0 ? 'eager' : 'lazy';
         slide.appendChild(img);
@@ -1918,7 +1962,7 @@
     cthumb.className = 'ci-thumb';
     if (p.image_url) {
       var cimg = document.createElement('img');
-      cimg.src = p.image_url; cimg.alt = p.name || ''; cimg.loading = 'lazy';
+      cimg.src = safeImgSrc(p.image_url, 120, 75); cimg.alt = p.name || ''; cimg.loading = 'lazy';
       cthumb.appendChild(cimg);
     } else {
       var cm = document.createElement('span');
@@ -2432,50 +2476,74 @@
     document.body.classList.add('qs-cat');
     buildShell();
 
-    // Wait for Supabase
-    var client = await waitForClient(6000);
+    // Wait for Supabase — up to 20s to handle slow Nigerian 4G connections
+    // where the CDN JS (~200KB) can take 10-30s to fully load.
+    var client = await waitForClient(20000);
     if (!client) {
-      showError('Could not connect to the database. Please check your internet connection.');
+      showError(
+        navigator.onLine === false
+          ? 'No internet connection. Please connect and try again.'
+          : 'Could not connect to the database. Your connection may be too slow — please wait a moment and refresh.'
+      );
       return;
     }
 
-    // Resolve store ID
-    var storeId = await resolveStore(client);
-    if (!storeId) {
-      showError('This catalog link is invalid or has expired.');
-      return;
+    // ── Store resolution + data fetch ──────────────────────────────────────
+    // Fast path: qs_get_store RPC — 1 round trip, resolves slug/UUID and
+    // returns profile + products together.
+    // Fallback: resolveStore → fetchProfile + fetchProducts — original path,
+    // runs if the RPC is not yet deployed or returns an error.
+
+    var seq = ++_navSeq;
+    var storeId;
+    var profile;
+    var _productsPayload;
+    var _rpcDone = false;
+
+    if (STORE_ID && _validStoreId) {
+      try {
+        var _rpc = await client.rpc('qs_get_store', { p_slug_or_id: STORE_ID });
+        if (seq !== _navSeq) return;
+        if (!_rpc.error && _rpc.data) {
+          if (_rpc.data.length === 0) {
+            showError('This catalog link is invalid or has expired.');
+            return;
+          }
+          var _row        = _rpc.data[0];
+          storeId         = _row.id;
+          profile         = _row;
+          _productsPayload = Array.isArray(_row.products) ? _row.products : [];
+          _rpcDone        = true;
+        }
+      } catch (_rpcErr) {
+        console.warn('[Catalog] qs_get_store unavailable, falling back:', _rpcErr);
+      }
+    }
+
+    if (!_rpcDone) {
+      storeId = await resolveStore(client);
+      if (seq !== _navSeq) return;
+      if (!storeId) {
+        showError('This catalog link is invalid or has expired.');
+        return;
+      }
     }
 
     // ── Referral growth loop ────────────────────────────────────────────────
-    // Patch the branding CTA link to include ?ref=<storeId> so any buyer
-    // who taps "Create yours free" arrives at signup pre-tagged with this
-    // vendor as referrer. The link is on the static branding footer built in
-    // buildShell() — storeId is only available here after resolveStore().
     var _brandingLink = document.getElementById('cat-branding-link');
     if (_brandingLink) {
       _brandingLink.href = window.location.origin + '/?ref=' + encodeURIComponent(storeId);
     }
     // ── End referral growth loop ────────────────────────────────────────────
 
-    // Fetch profile + products.
-    // Strategy: try the security-scoped views first (post-migration).
-    // If either view is missing ("not in schema cache"), fall back to querying
-    // the underlying tables directly with explicit safe-column selects —
-    // this matches the behaviour of the original working catalog code and
-    // keeps the catalog functional before the migration is applied.
-
+    // Fetch profile + products (fallback path only).
     async function fetchProducts() {
-      // Try view first
       var vr = await client
         .from('public_catalog_products')
         .select('*')
         .eq('user_id', storeId)
         .order('name', { ascending: true });
       if (!vr.error) return vr;
-
-      // View missing — fall back to products table directly.
-      // Only select public-safe columns (no cost, no internal fields).
-      // qty > 0 filter mirrors the view WHERE clause.
       console.warn('[Catalog] View missing, falling back to products table:', vr.error.message);
       return client
         .from('products')
@@ -2486,25 +2554,17 @@
     }
 
     async function fetchProfile() {
-      // resolveStore fetches the full profile during slug resolution (SELECT *
-      // instead of SELECT id).  Consume it here to skip a redundant network
-      // call.  UUID paths don't set _resolvedProfile, so this is a no-op for
-      // them and the normal fetch path runs unchanged.
       if (_resolvedProfile) {
         var cached = { data: _resolvedProfile, error: null };
-        _resolvedProfile = null; // consume — prevent stale reuse
+        _resolvedProfile = null;
         return cached;
       }
-      // Try view first
       var vr = await client
         .from('public_catalog_profiles')
         .select('*')
         .eq('id', storeId)
         .maybeSingle();
       if (!vr.error) return vr;
-
-      // View missing — fall back to profiles table.
-      // Explicit columns only — never expose email.
       console.warn('[Catalog] Profile view missing, falling back to profiles table:', vr.error.message);
       return client
         .from('profiles')
@@ -2513,17 +2573,18 @@
         .maybeSingle();
     }
 
-    // If no phone arrived via URL param, fetch from DB via secure RPC.
-    // Fired here so it runs concurrently with the profile+products fetch below —
-    // zero extra latency on the critical path.
-    var _phoneFetchPromise = (SELLER_PHONE || !storeId) ? null
+    // Phone RPC — fires concurrently, non-blocking, non-fatal.
+    var _phoneFetchPromise = (SELLER_PHONE || !storeId || _rpcDone) ? null
       : client.rpc('get_vendor_phone', { store_id: storeId });
 
-    var profileResult, productsResult;
-    try {
-      var results = await Promise.all([ fetchProfile(), fetchProducts() ]);
-      profileResult  = results[0];
-      productsResult = results[1];
+    if (!_rpcDone) {
+      var profileResult, productsResult;
+      try {
+        var results = await Promise.all([ fetchProfile(), fetchProducts() ]);
+        if (seq !== _navSeq) return;
+        profileResult  = results[0];
+        productsResult = results[1];
+
     } catch (e) {
       showError('Failed to load catalog data. Please try again.');
       return;
@@ -2540,15 +2601,18 @@
       } catch (_) { /* non-fatal — checkout falls back gracefully */ }
     }
 
-    if (productsResult.error) {
-      var errMsg = (productsResult.error && productsResult.error.message) || String(productsResult.error);
-      console.error('[Catalog] Products fetch error:', productsResult.error);
-      showError('Could not load products. (' + errMsg + ')');
-      return;
+      if (productsResult.error) {
+        var errMsg = (productsResult.error && productsResult.error.message) || String(productsResult.error);
+        console.error('[Catalog] Products fetch error:', productsResult.error);
+        showError('Could not load products. (' + errMsg + ')');
+        return;
+      }
+
+      profile          = profileResult.data;
+      _productsPayload = productsResult.data || [];
     }
 
-    // Profile
-    var profile   = profileResult.data;
+    // ── From here: profile and _productsPayload are set by both paths ───────
 
     // ── SECURITY GATE ────────────────────────────────────────────────────────
     // If vendor is inactive, render their identity in the header (name, avatar)
@@ -2604,7 +2668,7 @@
     }
 
     if (profile && profile.avatar_url) {
-      var _src = safeImgSrc(profile.avatar_url);
+      var _src = safeImgSrc(profile.avatar_url, 160, 85);
       _setAvatar(avatar, _src, storeName, false);
       _setAvatar(avatarSm, _src, storeName, true);
       if (banner) {
@@ -2666,7 +2730,7 @@
     if (skels) skels.style.display = 'none';
 
     // Load product data
-    allProducts = productsResult.data || [];
+    allProducts = _productsPayload;
     _restoreCart(allProducts); // re-hydrate cart from sessionStorage if present
     var _ssub = document.getElementById('cat-store-sub');
     if (_ssub) _ssub.textContent = allProducts.length + ' product' + (allProducts.length !== 1 ? 's' : '') + ' · WhatsApp orders';
