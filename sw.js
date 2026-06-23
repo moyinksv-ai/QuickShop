@@ -31,9 +31,9 @@
  *      Ensures the app opens offline after first visit.
  */
 
-var CACHE_NAME    = 'qs-v1.85';
+var CACHE_NAME    = 'qs-v1.76';
 var IMAGE_CACHE   = 'qs-images-v4.0';
-var MARKET_CACHE  = 'qs-market-v1.0';
+var MARKET_CACHE  = 'qs-market-v1.1';
 /* ── Install ─────────────────────────────────────────────────────────────────
  * Nothing to pre-cache. Skip waiting so this SW activates immediately
  * without waiting for existing tabs to close. */
@@ -99,20 +99,32 @@ self.addEventListener('fetch', function (event) {
 
   if (isMarketplaceTable) {
     /* Stale-while-revalidate for public marketplace data.
-     * Serve cached immediately; fetch fresh and update cache in background. */
+     * Serve cached immediately; fetch fresh and update cache in background.
+     * Cache validation: only store non-empty JSON arrays — an empty []
+     * cached during a bad network moment would cause a permanent blank page
+     * until the SW is updated. */
     event.respondWith(
       caches.open(MARKET_CACHE).then(function (cache) {
         return cache.match(request).then(function (cached) {
           var fetchPromise = fetch(request).then(function (response) {
             if (response && response.status === 200) {
-              cache.put(request, response.clone());
+              /* Validate before caching: clone twice — one to read for
+               * validation, one to store.  Never cache an empty array. */
+              var toStore    = response.clone();
+              var toValidate = response.clone();
+              toValidate.json().then(function (data) {
+                var valid = Array.isArray(data) ? data.length > 0
+                          : (data !== null && data !== undefined);
+                if (valid) cache.put(request, toStore);
+              }).catch(function () { /* non-JSON — skip cache */ });
             }
             return response;
           }).catch(function () {
+            /* Network failure — return empty array so UI can show error */
             return new Response(JSON.stringify([]),
               { status: 200, headers: { 'Content-Type': 'application/json' } });
           });
-          /* Cached hit: return instantly, refresh in background.
+          /* Cache hit: serve instantly, revalidate in background.
            * Cache miss: wait for network (first visit). */
           return cached || fetchPromise;
         });
@@ -172,7 +184,13 @@ self.addEventListener('fetch', function (event) {
   }
 
   /* 6. App shell (JS, CSS, icons, manifest, local images)
-   *    Stale-while-revalidate: serve cached instantly, update in background */
+   *    Stale-while-revalidate: serve cached instantly, update in background.
+   *
+   *    CRITICAL: no synthetic 408 on network failure. A 408 from the SW is
+   *    treated as a real server response — scripts get silently dropped, the
+   *    app goes blank, and nothing retries. Without a catch block, a failed
+   *    fetch rejects the Promise naturally (ERR_FAILED), which the browser
+   *    handles correctly and does not cache. */
   event.respondWith(
     caches.open(CACHE_NAME).then(function (cache) {
       return cache.match(request).then(function (cached) {
@@ -181,12 +199,10 @@ self.addEventListener('fetch', function (event) {
             cache.put(request, response.clone());
           }
           return response;
-        }).catch(function () {
-          /* Network failed — cached version already returned above if it existed */
-          return new Response('', { status: 408, statusText: 'Offline' });
         });
-
-        /* Return cached immediately if available, otherwise wait for network */
+        /* Cached hit: return instantly, revalidation runs in background.
+         * Cache miss: wait for network. Network failure → Promise rejects →
+         * browser handles natively. No synthetic error injected. */
         return cached || fetchPromise;
       });
     })
