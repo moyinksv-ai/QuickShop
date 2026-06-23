@@ -5,7 +5,7 @@
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self'
-               'sha256-TqrzsGp27MFdJPMWQy56u3Ov9sRpJGYneuEFETnfaXY='
+               'sha256-pietIMYf2Bz0Yfy5CwuR+IgwazP2bIOMX4U13Oa8JvI='
                https://cdn.jsdelivr.net;
     connect-src 'self'
                 https://*.supabase.co
@@ -36,8 +36,6 @@
   <meta property="og:url"         content="https://quickshopper.vercel.app/search.html">
 
   <link rel="canonical" href="https://quickshopper.vercel.app/search.html">
-  <link rel="preconnect" href="https://cdn.jsdelivr.net">
-  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
 
   <script type="application/ld+json">
   {
@@ -699,19 +697,6 @@
 (function () {
   'use strict';
 
-  // Preconnect to Supabase as early as possible — warms DNS+TCP+TLS
-  // before the first query fires. URL comes from supabase-config.js.
-  (function () {
-    var _url = window.__QS_SUPABASE && window.__QS_SUPABASE.url;
-    if (!_url) return;
-    var _pc = document.createElement('link');
-    _pc.rel = 'preconnect'; _pc.href = _url; _pc.crossOrigin = 'anonymous';
-    document.head.appendChild(_pc);
-    var _pcd = document.createElement('link');
-    _pcd.rel = 'dns-prefetch'; _pcd.href = _url;
-    document.head.appendChild(_pcd);
-  }());
-
   var sb = (window.__QS_SUPABASE && window.__QS_SUPABASE.client)
     ? window.__QS_SUPABASE.client : null;
   if (!sb) console.error('[QS Market] Supabase client not ready.');
@@ -750,7 +735,7 @@
   var _CAT_PAGE       = 16;
   var _catHasMore     = false;
   var _recentOffset   = 0;
-  var _RECENT_PAGE    = 16;
+  var _RECENT_PAGE    = 60;
   var _lastQuery      = '';
   var _currentProduct = null;
   var _debounceTimer  = null;
@@ -939,7 +924,7 @@
     beauty:'💄', electronics:'📱', food:'🍱', home:'🏠', others:'📦'
   };
 
-  function renderProductCard(item, priority) {
+  function renderProductCard(item) {
     var card = document.createElement('div');
     card.className = 'product-card';
     card.setAttribute('role', 'button');
@@ -962,17 +947,22 @@
       var img = document.createElement('img');
       img.alt = name;
       img.setAttribute('data-loading', '1');
-      img.loading      = priority ? 'eager' : 'lazy';
-      img.decoding     = 'async';
-      if (priority) img.fetchPriority = 'high';
+      img.src = imgTransform(imgUrl, 400, 75);
       img.onload = function () {
         img.removeAttribute('data-loading');
         if (shimmer.parentNode) shimmer.parentNode.removeChild(shimmer);
       };
       img.onerror = function () {
-        imgZone.innerHTML = '<div class="pc-image-placeholder">' + emoji + '<span>' + escHtml((item.category || 'product').toUpperCase()) + '</span></div>';
+        // Render endpoint failed (free plan) — retry with original URL
+        if (img.src !== imgUrl) {
+          img.onerror = function () {
+            imgZone.innerHTML = '<div class="pc-image-placeholder">' + emoji + '<span>' + escHtml((item.category || 'product').toUpperCase()) + '</span></div>';
+          };
+          img.src = imgUrl;
+        } else {
+          imgZone.innerHTML = '<div class="pc-image-placeholder">' + emoji + '<span>' + escHtml((item.category || 'product').toUpperCase()) + '</span></div>';
+        }
       };
-      img.src = imgTransform(imgUrl, 400, 75);
       imgZone.appendChild(img);
     } else {
       imgZone.innerHTML = '<div class="pc-image-placeholder">' + emoji + '<span>' + escHtml((item.category || 'product').toUpperCase()) + '</span></div>';
@@ -1030,24 +1020,43 @@
     var storeUrl  = '/?store=' + encodeURIComponent(listing.vendor_store_id) +
       (listing.local_product_id ? '&pid=' + encodeURIComponent(listing.local_product_id) : '');
 
-    // Avatar: show logo image if vendor has uploaded one, fall back to initial
-    var avatarInner = (profile && profile.avatar_url &&
-      typeof profile.avatar_url === 'string' &&
-      profile.avatar_url.startsWith('https://'))
-      ? '<img src="' + imgTransform(profile.avatar_url, 80, 85) + '" alt="' + escHtml(storeName) + '" loading="lazy">'
-      : escHtml(initial);
+    var avatarEl = document.createElement('div');
+    avatarEl.className = 'vc-avatar';
+    if (profile && profile.avatar_url &&
+        typeof profile.avatar_url === 'string' &&
+        profile.avatar_url.startsWith('https://')) {
+      var avImg = document.createElement('img');
+      avImg.src = imgTransform(profile.avatar_url, 80, 85);
+      avImg.alt = storeName;
+      avImg.loading = 'lazy';
+      avImg.onerror = function () {
+        if (avImg.src !== profile.avatar_url) { avImg.onerror = null; avImg.src = profile.avatar_url; }
+        else { avatarEl.textContent = initial; }
+      };
+      avatarEl.appendChild(avImg);
+    } else {
+      avatarEl.textContent = initial;
+    }
 
     card.innerHTML =
-      '<div class="vc-row">' +
-        '<div class="vc-avatar">' + avatarInner + '</div>' +
-        '<div class="vc-info">' +
-          '<div class="vc-store">'   + escHtml(storeName) + '</div>' +
-          (tagline ? '<div class="vc-tagline">' + escHtml(tagline) + '</div>' : '') +
-          (isBest  ? '<div class="vc-best-badge">Best price</div>' : '') +
-        '</div>' +
-        '<div class="vc-price">' + fmt(listing.price) + '</div>' +
-      '</div>' +
-      '<a class="vc-cta" href="' + storeUrl + '">View in Store →</a>';
+      '<div class="vc-row"></div>' +
+      '<a class="vc-cta" href="' + storeUrl + '">Order on WhatsApp →</a>';
+
+    var row = card.querySelector('.vc-row');
+    row.appendChild(avatarEl);
+
+    var info = document.createElement('div');
+    info.className = 'vc-info';
+    info.innerHTML =
+      '<div class="vc-store">'   + escHtml(storeName) + '</div>' +
+      (tagline ? '<div class="vc-tagline">' + escHtml(tagline) + '</div>' : '') +
+      (isBest  ? '<div class="vc-best-badge">Best price</div>' : '');
+    row.appendChild(info);
+
+    var price = document.createElement('div');
+    price.className = 'vc-price';
+    price.textContent = fmt(listing.price);
+    row.appendChild(price);
 
     return card;
   }
@@ -1071,6 +1080,10 @@
     if (profile.avatar_url && typeof profile.avatar_url === 'string' && profile.avatar_url.startsWith('https://')) {
       var avImg = document.createElement('img');
       avImg.src = imgTransform(profile.avatar_url, 80, 85); avImg.alt = storeName;
+      avImg.onerror = function () {
+        if (avImg.src !== profile.avatar_url) { avImg.onerror = null; avImg.src = profile.avatar_url; }
+        else { avatarEl.innerHTML = ''; avatarEl.textContent = initial; }
+      };
       avatarEl.appendChild(avImg);
     } else {
       avatarEl.textContent = initial;
@@ -1116,7 +1129,7 @@
         imgs.forEach(function (url) {
           var cell = document.createElement('div'); cell.className = 'sdc-thumb';
           var tImg = document.createElement('img');
-          tImg.src = imgTransform(url, 200, 70); tImg.alt = storeName + ' product'; tImg.loading = 'lazy'; tImg.decoding = 'async';
+          tImg.src = imgTransform(url, 200, 70); tImg.alt = storeName + ' product'; tImg.loading = 'lazy';
           tImg.onerror = function () { cell.innerHTML = '<div class="sdc-thumb-placeholder">📦</div>'; };
           cell.appendChild(tImg);
           strip.appendChild(cell);
@@ -1157,7 +1170,6 @@
       var queryBuilder = sb
         .from('public_catalog_profiles')
         .select('id, business_name, name, tagline, avatar_url, location, delivery_available, slug')
-        .eq('is_active', true)
         .limit(50);
       if (categoryFilter) queryBuilder = queryBuilder.ilike('store_sector', categoryFilter);
 
@@ -1306,7 +1318,7 @@
         'Found <strong>' + data.length + ' product' + (data.length !== 1 ? 's' : '') + '</strong>' +
         ' matching "' + escHtml(query) + '"';
       productsGrid.innerHTML = '';
-      data.forEach(function (item, i) { productsGrid.appendChild(renderProductCard(item, i < 4)); });
+      data.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
 
     } catch (e) {
       console.error('[search] error', e);
@@ -1353,7 +1365,7 @@
           '<strong>' + escHtml(cat) + '</strong> — ' +
           _memoHit.length + ' product' + (_memoHit.length !== 1 ? 's' : '');
         productsHeading.hidden = false;
-        _memoHit.forEach(function (item, i) { productsGrid.appendChild(renderProductCard(item, i < 4)); });
+        _memoHit.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
         _catOffset = _memoHit.length;
         loadMoreBtn.hidden = true;
         showState('main');
@@ -1411,7 +1423,7 @@
         totalShown + (_catHasMore ? '+' : '') + ' product' + (totalShown !== 1 ? 's' : '');
       productsHeading.hidden = false;
 
-      canonData.forEach(function (item, i) { productsGrid.appendChild(renderProductCard(item, !append && i < 4)); });
+      canonData.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
       _catOffset += canonData.length;
 
       // Load more button
@@ -1523,8 +1535,16 @@
         if (dShimmer.parentNode) dShimmer.parentNode.removeChild(dShimmer);
       };
       dImg.onerror = function () {
-        detailImageWrap.hidden = true;
-        if (dShimmer.parentNode) dShimmer.parentNode.removeChild(dShimmer);
+        if (dImg.src !== item.image_url) {
+          dImg.onerror = function () {
+            detailImageWrap.hidden = true;
+            if (dShimmer.parentNode) dShimmer.parentNode.removeChild(dShimmer);
+          };
+          dImg.src = item.image_url;
+        } else {
+          detailImageWrap.hidden = true;
+          if (dShimmer.parentNode) dShimmer.parentNode.removeChild(dShimmer);
+        }
       };
       detailImageWrap.appendChild(dImg);
       detailImageWrap.hidden = false;
@@ -1561,8 +1581,7 @@
 
       if (vendorIds.length > 0) {
         var profRes = await sb.from('public_catalog_profiles')
-          .select('id, business_name, name, tagline, avatar_url')
-          .in('id', vendorIds);
+          .select('id, business_name, name, tagline, avatar_url').in('id', vendorIds);
         if (seq !== _navSeq) return;  // check again after second await
         if (profRes.data) profRes.data.forEach(function (p) { profileMap[p.id] = p; });
       }
@@ -1686,7 +1705,7 @@
         var _memoHome = _memo.get('home');
         if (_memoHome) {
           productsGrid.innerHTML = '';
-          _memoHome.forEach(function (item, i) { productsGrid.appendChild(renderProductCard(item, i < 4)); });
+          _memoHome.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
           _recentOffset = _memoHome.length;
           if (_memoHome.length < _RECENT_PAGE) {
             loadMoreBtn.hidden = true;
@@ -1725,7 +1744,7 @@
         _memo.set('home', ordered);
       }
       if (append) productsGrid.querySelectorAll('.lm-skel').forEach(function (el) { el.remove(); });
-      ordered.forEach(function (item, i) { productsGrid.appendChild(renderProductCard(item, !append && i < 4)); });
+      ordered.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
 
       _recentOffset += res.data.length;
 
