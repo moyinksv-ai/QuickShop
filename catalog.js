@@ -912,7 +912,7 @@
     var sgi = document.createElement('div'); sgi.id = 'cat-soft-gate-icon'; sgi.textContent = '🔒';
     var sgt = document.createElement('div'); sgt.id = 'cat-soft-gate-title'; sgt.textContent = 'Store not yet open';
     var sgs = document.createElement('div'); sgs.id = 'cat-soft-gate-sub';
-    sgs.textContent = 'This vendor hasn\'t activated their catalog yet. You can still reach them directly on WhatsApp.';
+    sgs.textContent = 'This vendor hasn\'t activated their catalog yet. If you can, kindly reach them directly on WhatsApp.';
     sg.appendChild(sgi); sg.appendChild(sgt); sg.appendChild(sgs);
     // WhatsApp CTA appended dynamically by showSoftGate() once we have phone + store name
     root.appendChild(sg);

@@ -5,7 +5,7 @@
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self'
-               'sha256-pietIMYf2Bz0Yfy5CwuR+IgwazP2bIOMX4U13Oa8JvI='
+               'sha256-V7XbyktKV/2QAcc3mW9wNUZq+UxD0uhubu96uh3WDAo='
                https://cdn.jsdelivr.net;
     connect-src 'self'
                 https://*.supabase.co
@@ -747,6 +747,13 @@
   var _scrollY        = 0;
   var _memo           = new Map();
   var _prefetchCache  = new Map();
+  // Background next-page prefetch.
+  // Fired after every successful page render so the next page is already
+  // in-flight when the user taps Load more.
+  // _nextPageMeta records the context the prefetch was fired in so stale
+  // results (wrong mode, category or offset) are discarded automatically.
+  var _nextPagePromise = null;
+  var _nextPageMeta    = null;  // { mode, cat, offset }
 
   // ── State machine ─────────────────────────────────────────────────────────
   function showState(name) {
@@ -898,7 +905,68 @@
   }
 
   // ── Batch-fetch listing stats ─────────────────────────────────────────────
-  // ── Prefetch vendor listings on touchstart ────────────────────────────────
+  // ── Background next-page prefetch ─────────────────────────────────────────
+  // Called at the end of every successful page render. Fires the next-page
+  // query immediately and stores the raw Promise. No await, no DOM work.
+  // If the user taps Load more before the Promise resolves, they wait only
+  // the remaining network time (usually near-zero). If already resolved,
+  // render is instant.
+  //
+  // _nextPageMeta guards against stale results: if mode, cat, or offset has
+  // changed since the prefetch fired, the result is discarded and the normal
+  // fetch path runs instead.
+  function _prefetchNextPage() {
+    if (!sb) return;
+
+    var meta = {
+      mode:   _mode,
+      cat:    _catName,
+      offset: _mode === 'home' ? _recentOffset : _catOffset
+    };
+
+    // Don't prefetch if we already know there's no next page
+    if (_mode === 'home' && _recentOffset < _RECENT_PAGE) return;
+    if (_mode === 'category' && !_catHasMore) return;
+
+    _nextPageMeta = meta;
+
+    if (_mode === 'home') {
+      var from = _recentOffset;
+      var to   = from + _RECENT_PAGE - 1;
+      _nextPagePromise = sb
+        .from('qs_market_products')
+        .select('id, display_name, slug, category, image_url, vendor_count, min_price')
+        .not('image_url', 'is', null)
+        .order('created_at', { ascending: false })
+        .range(from, to)
+        .then(function (r) { return r; })
+        .catch(function (e) { console.warn('[prefetch]', e); return null; });
+
+    } else if (_mode === 'category') {
+      var cFrom = _catOffset;
+      var cTo   = cFrom + _CAT_PAGE - 1;
+      var cat   = _catName;
+      _nextPagePromise = sb
+        .from('qs_market_products')
+        .select('id, display_name, slug, category, image_url, vendor_count, min_price')
+        .not('image_url', 'is', null)
+        .ilike('category', cat)
+        .order('vendor_count', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .range(cFrom, cTo)
+        .then(function (r) { return r; })
+        .catch(function (e) { console.warn('[prefetch]', e); return null; });
+    }
+  }
+
+  // Invalidate prefetch when user navigates away (mode/cat change).
+  // Called at the start of browseCategory, browseAllStores, loadHome, runSearch.
+  function _invalidatePrefetch() {
+    _nextPagePromise = null;
+    _nextPageMeta    = null;
+  }
+
+  // ── Prefetch product vendor listings on touchstart ────────────────────────
   // Starts the qs_vendor_listings fetch ~100-200ms before the tap registers.
   // On most Nigerian 4G connections the data arrives before openProduct runs,
   // eliminating the loading state entirely.  The same Promise is reused if
@@ -1251,6 +1319,7 @@
 
   // ── LOAD HOME ─────────────────────────────────────────────────────────────
   function loadHome() {
+    _invalidatePrefetch();
     _mode         = 'home';
     _catName      = '';
     _lastQuery    = '';
@@ -1277,6 +1346,7 @@
   async function runSearch(query) {
     if (!sb) return;
     var seq = ++_navSeq;
+    _invalidatePrefetch();
     _mode         = 'search';
     _lastQuery    = query;
     _storesLoaded = false;
@@ -1333,6 +1403,7 @@
     var seq = ++_navSeq;
 
     if (!append) {
+      _invalidatePrefetch();
       _mode         = 'category';
       _catName      = cat;
       _catOffset    = 0;
@@ -1431,6 +1502,8 @@
         loadMoreBtn.textContent = 'View all ' + cat + ' products →';
         loadMoreBtn.hidden    = false;
         loadMoreBtn.disabled  = false;
+        // Prefetch the next page while the user browses this one
+        _prefetchNextPage();
       } else {
         loadMoreBtn.hidden = true;
       }
@@ -1462,6 +1535,7 @@
   // Activates the Stores tab and loads the full store directory.
   // Products tab retains/loads recent products for quick context-switch back.
   function browseAllStores() {
+    _invalidatePrefetch();
     var params = getParams();
     params.set('view', 'stores'); params.delete('q'); params.delete('cat'); params.delete('product');
     navigate(params, false);
@@ -1754,6 +1828,8 @@
         loadMoreBtn.textContent = 'Load more products';
         loadMoreBtn.hidden    = false;
         loadMoreBtn.disabled  = false;
+        // Prefetch the next page while the user browses this one
+        _prefetchNextPage();
       }
 
     } catch (e) {
@@ -1783,9 +1859,80 @@
     loadMoreBtn.disabled    = true;
     loadMoreBtn.textContent = 'Loading…';
 
-    // Immediate visual response: append 8 skeleton cards to the grid.
-    // Marked with .lm-skel so the fetch callback can remove them cleanly
-    // before inserting real cards — avoids a blank wait with no feedback.
+    // ── Fast path: use prefetched next-page data ───────────────────────────
+    // _nextPagePromise was fired in the background after the previous render.
+    // If the meta still matches current state, the data is already in-flight
+    // or fully resolved — no skeleton shown, render is instant or near-instant.
+    var _meta = _nextPageMeta;
+    var _metaValid = _meta &&
+      _meta.mode === _mode &&
+      _meta.cat  === _catName &&
+      ((_mode === 'home'     && _meta.offset === _recentOffset) ||
+       (_mode === 'category' && _meta.offset === _catOffset));
+
+    if (_metaValid && _nextPagePromise) {
+      var _promise = _nextPagePromise;
+      _nextPagePromise = null;
+      _nextPageMeta    = null;
+
+      _promise.then(function (res) {
+        if (!res || !res.data || !res.data.length) {
+          loadMoreBtn.hidden = true;
+          return;
+        }
+
+        if (_mode === 'home') {
+          var ordered = weightedShuffle(res.data);
+          ordered.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
+          _recentOffset += res.data.length;
+          if (res.data.length < _RECENT_PAGE) {
+            loadMoreBtn.hidden = true;
+          } else {
+            loadMoreBtn.textContent = 'Load more products';
+            loadMoreBtn.hidden    = false;
+            loadMoreBtn.disabled  = false;
+            _prefetchNextPage();
+          }
+
+        } else if (_mode === 'category') {
+          var catData = res.data;
+          _catHasMore = catData.length === _CAT_PAGE;
+          catData.sort(function (a, b) {
+            var ai = (a.image_url && a.image_url.startsWith('https://')) ? 0 : 1;
+            var bi = (b.image_url && b.image_url.startsWith('https://')) ? 0 : 1;
+            if (ai !== bi) return ai - bi;
+            return (b.vendor_count || 0) - (a.vendor_count || 0);
+          });
+          catData.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
+          var totalShown = _catOffset + catData.length;
+          _catOffset += catData.length;
+          productsHeading.innerHTML =
+            '<strong>' + escHtml(_catName) + '</strong> — ' +
+            totalShown + (_catHasMore ? '+' : '') + ' product' + (totalShown !== 1 ? 's' : '');
+          if (_catHasMore) {
+            loadMoreBtn.textContent = 'View all ' + _catName + ' products \u2192';
+            loadMoreBtn.hidden    = false;
+            loadMoreBtn.disabled  = false;
+            _prefetchNextPage();
+          } else {
+            loadMoreBtn.hidden = true;
+          }
+        }
+
+      }).catch(function () {
+        // Prefetch errored — fall back to slow path gracefully
+        loadMoreBtn.textContent = 'Load more products';
+        loadMoreBtn.disabled    = false;
+        if (_mode === 'home')          loadRecent(true);
+        else if (_mode === 'category') browseCategory(_catName, true);
+      });
+
+      return; // fast path handled — skip slow path below
+    }
+
+    // ── Slow path: no valid prefetch — show skeletons, then fetch ─────────
+    // Runs on: first load-more tap (no prefetch yet), stale prefetch (user
+    // navigated then came back), or if _prefetchNextPage couldn't fire.
     var _frag = document.createDocumentFragment();
     for (var _s = 0; _s < 8; _s++) {
       var _sc = document.createElement('div');
