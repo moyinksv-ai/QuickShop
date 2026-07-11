@@ -104,13 +104,6 @@
   // Image transform — rewrites Supabase Storage URLs to use the render
   // endpoint, serving vendor photos at the right size for each context.
   // 4MB phone photos → 80-120KB at point of use.
-  function imgTransform(url, width, quality) {
-    if (!url || typeof url !== 'string' || !url.startsWith('https://')) return url;
-    if (!url.includes('/storage/v1/object/public/')) return url;
-    return url.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/')
-      + '?width=' + width + '&quality=' + quality + '&resize=cover';
-  }
-
   /* ── 2. CART STATE ────────────────────────────────────────────────────── */
   //  Map<productId: string, { product: Object, qty: number }>
   //  Persisted to sessionStorage so cart survives accidental refreshes.
@@ -195,15 +188,12 @@
       .slice(0, 2).join('').toUpperCase() || '?';
   }
 
-  // Validates image URL before setting as img.src.
-  // Prevents javascript: URI injection on older browsers.
-  // Only accepts https:// URLs or data: URIs (for compressed blobs).
-  // width/quality optional — when provided, also applies imgTransform.
-  function safeImgSrc(url, width, quality) {
+  // Validates image URL — rejects javascript: URIs on older browsers.
+  function safeImgSrc(url) {
     if (typeof url !== 'string') return '';
     if (url.startsWith('data:image/')) return url;
     if (!url.startsWith('https://')) return '';
-    return (width && quality) ? imgTransform(url, width, quality) : url;
+    return url;
   }
 
   /* ── 4. CSS INJECTION — scoped under #qs-catalog, injected once ────────── */
@@ -1504,8 +1494,8 @@
         var slide = document.createElement('div');
         slide.className = 'cat-swipe-slide';
         var img = document.createElement('img');
-        img.src = safeImgSrc(src, 800, 82);
-        img.alt = (product.name || '') + ' photo ' + (i + 1);
+        img.src = safeImgSrc(src);
+        img.alt = product.name || '';
         img.loading = i === 0 ? 'eager' : 'lazy';
         img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;';
         slide.appendChild(img);
@@ -1524,7 +1514,7 @@
     } else if (images.length === 1) {
       var singleImg = document.createElement('img');
       singleImg.id = 'cat-detail-hero-single';
-      singleImg.src = safeImgSrc(images[0], 800, 82);
+      singleImg.src = safeImgSrc(images[0]);
       singleImg.alt = product.name || '';
       singleImg.loading = 'eager';
       singleImg.addEventListener('click', function () {
@@ -1685,8 +1675,8 @@
         var slide = document.createElement('div');
         slide.className = 'cat-swipe-slide';
         var img = document.createElement('img');
-        img.src     = safeImgSrc(src, 400, 75);
-        img.alt     = (p.name || '') + (images.length > 1 ? ' — photo ' + (i + 1) : '');
+        img.src     = safeImgSrc(src);
+        img.alt     = p.name || '';
         img.loading = i === 0 ? 'eager' : 'lazy';
         slide.appendChild(img);
         track.appendChild(slide);
@@ -1962,7 +1952,7 @@
     cthumb.className = 'ci-thumb';
     if (p.image_url) {
       var cimg = document.createElement('img');
-      cimg.src = safeImgSrc(p.image_url, 120, 75); cimg.alt = p.name || ''; cimg.loading = 'lazy';
+      cimg.src = safeImgSrc(p.image_url); cimg.alt = p.name || ''; cimg.loading = 'lazy';
       cthumb.appendChild(cimg);
     } else {
       var cm = document.createElement('span');
@@ -2668,9 +2658,13 @@
     }
 
     if (profile && profile.avatar_url) {
-      var _src = safeImgSrc(profile.avatar_url, 160, 85);
+      var _src = safeImgSrc(profile.avatar_url);
       _setAvatar(avatar, _src, storeName, false);
       _setAvatar(avatarSm, _src, storeName, true);
+      [avatar, avatarSm].forEach(function (el) {
+        var _img = el.querySelector('img');
+        if (_img) _img.style.objectFit = 'contain';
+      });
       if (banner) {
         banner.style.backgroundImage = 'url(' + _src + ')';
         banner.classList.remove('no-image');
