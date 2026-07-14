@@ -30,8 +30,8 @@
  *    → Network-first with cache fallback to index.html.
  *      Ensures the app opens offline after first visit.
  */
+var CACHE_NAME    = 'qs-v2.221';
 
-var CACHE_NAME    = 'qs-v2.21';
 var IMAGE_CACHE   = 'qs-images-v4.0';
 var MARKET_CACHE  = 'qs-market-v1.1';
 /* ── Install ─────────────────────────────────────────────────────────────────
