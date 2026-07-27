@@ -1179,16 +1179,20 @@
       var countMap = {}, thumbMap = {};
       if (stores.length > 0) {
         var ids = stores.map(function (s) { return s.id; });
+        // Count from public_catalog_products (same view catalog.js reads for
+        // the storefront itself) instead of qs_vendor_listings. The listings
+        // ledger never drops a row on delete and has no stock awareness, so
+        // it drifted from what a buyer actually sees on the storefront.
         var prodRes = await sb
-          .from('qs_vendor_listings')
-          .select('vendor_store_id, image_url')
-          .in('vendor_store_id', ids);
+          .from('public_catalog_products')
+          .select('user_id, image_url')
+          .in('user_id', ids);
         if (prodRes.data) {
           prodRes.data.forEach(function (r) {
-            countMap[r.vendor_store_id] = (countMap[r.vendor_store_id] || 0) + 1;
+            countMap[r.user_id] = (countMap[r.user_id] || 0) + 1;
             if (r.image_url && typeof r.image_url === 'string' && r.image_url.startsWith('https://')) {
-              if (!thumbMap[r.vendor_store_id]) thumbMap[r.vendor_store_id] = [];
-              if (thumbMap[r.vendor_store_id].length < 3) thumbMap[r.vendor_store_id].push(r.image_url);
+              if (!thumbMap[r.user_id]) thumbMap[r.user_id] = [];
+              if (thumbMap[r.user_id].length < 3) thumbMap[r.user_id].push(r.image_url);
             }
           });
         }

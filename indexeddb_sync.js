@@ -387,7 +387,18 @@
           var r2 = await supabase.from('products').delete()
             .in('id', productDeleteIds).eq('user_id', userId);
           if (r2.error) { console.error('[qsdb] Product delete failed:', r2.error); }
-          else { doneActIds = doneActIds.concat(productDeleteActIds); log('Product delete OK.'); }
+          else {
+            doneActIds = doneActIds.concat(productDeleteActIds); log('Product delete OK.');
+            // ── Delist from marketplace ──────────────────────────────────
+            // Deleting a product here never removed its row from
+            // qs_vendor_listings, so the marketplace kept counting it
+            // forever. Fire-and-forget cleanup — mirrors registerListing's
+            // pattern (canonical.js): never blocks, never throws.
+            try {
+              await supabase.from('qs_vendor_listings').delete()
+                .eq('vendor_store_id', userId).in('local_product_id', productDeleteIds);
+            } catch (_) { /* best-effort: marketplace cleanup isn't fatal */ }
+          }
         } catch (e) { console.error('[qsdb] Product delete threw:', e); }
       }
 
