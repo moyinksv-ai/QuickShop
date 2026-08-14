@@ -214,11 +214,17 @@
   // ── syncPendingToSupabase (BATCHED) ──────────────────────────────────
   async function syncPendingToSupabase() {
 
-    if (isSyncing) { log('Sync in progress — skipping.'); return; }
-    if (!navigator.onLine) { log('Offline — skipping sync.'); return; }
+    if (isSyncing) { log('Sync in progress — skipping.'); return { ok: true, skipped: true, reason: 'already-syncing' }; }
+    if (!navigator.onLine) { log('Offline — skipping sync.'); return { ok: true, skipped: true, reason: 'offline' }; }
 
     isSyncing = true;
     log('Sync started.');
+
+    // Callers (btnSyncNow, syncCloudData) need to know whether this actually
+    // succeeded instead of assuming it did — every failure below is recorded
+    // here instead of only console-logged, and reported in the return value.
+    var failedBatches = [];
+    var fatalError = null;
 
     try {
       var pending = await window.qsdb.getAllPending();
@@ -226,11 +232,11 @@
       // stayed true forever, permanently killing the sync queue.
       // All guard conditions now use early-exit via a local flag so the
       // outer try/finally always runs and isSyncing is always reset.
-      if (!pending || pending.length === 0) { log('Nothing pending.'); isSyncing = false; return; }
+      if (!pending || pending.length === 0) { log('Nothing pending.'); isSyncing = false; return { ok: true, skipped: true, reason: 'nothing-pending' }; }
       log('Pending actions:', pending.length);
 
       var sb = await waitForSupabaseReady(3000);
-      if (!sb || !sb.client) { warn('Supabase not ready — deferred.'); isSyncing = false; return; }
+      if (!sb || !sb.client) { warn('Supabase not ready — deferred.'); isSyncing = false; return { ok: false, skipped: true, reason: 'not-ready' }; }
       var supabase = sb.client;
       // __QS_SUPABASE is frozen so sb.user is always null.
       // Read the authoritative user from __QS_APP.getUser() instead —
@@ -238,7 +244,7 @@
       var user = (window.__QS_APP && typeof window.__QS_APP.getUser === 'function')
         ? window.__QS_APP.getUser()
         : sb.user;
-      if (!user || !user.id) { warn('No user — deferred.'); isSyncing = false; return; }
+      if (!user || !user.id) { warn('No user — deferred.'); isSyncing = false; return { ok: false, skipped: true, reason: 'no-user' }; }
       var userId = user.id;
 
       // ── Group by type ──────────────────────────────────────────────
@@ -354,7 +360,7 @@
         try {
           var r1 = await supabase.from('products')
             .upsert(productUpsertRows, { onConflict: 'id' });
-          if (r1.error) { console.error('[qsdb] Product upsert failed:', r1.error); }
+          if (r1.error) { console.error('[qsdb] Product upsert failed:', r1.error); failedBatches.push('products'); }
           else {
             doneActIds = doneActIds.concat(productUpsertActIds);
             log('Product upsert OK.');
@@ -377,7 +383,7 @@
               });
             }
           }
-        } catch (e) { console.error('[qsdb] Product upsert threw:', e); }
+        } catch (e) { console.error('[qsdb] Product upsert threw:', e); failedBatches.push('products'); }
       }
 
       // ── Product deletes ──────────────────────────────────────────
@@ -386,7 +392,7 @@
         try {
           var r2 = await supabase.from('products').delete()
             .in('id', productDeleteIds).eq('user_id', userId);
-          if (r2.error) { console.error('[qsdb] Product delete failed:', r2.error); }
+          if (r2.error) { console.error('[qsdb] Product delete failed:', r2.error); failedBatches.push('product-deletes'); }
           else {
             doneActIds = doneActIds.concat(productDeleteActIds); log('Product delete OK.');
             // ── Delist from marketplace ──────────────────────────────────
@@ -399,7 +405,7 @@
                 .eq('vendor_store_id', userId).in('local_product_id', productDeleteIds);
             } catch (_) { /* best-effort: marketplace cleanup isn't fatal */ }
           }
-        } catch (e) { console.error('[qsdb] Product delete threw:', e); }
+        } catch (e) { console.error('[qsdb] Product delete threw:', e); failedBatches.push('product-deletes'); }
       }
 
       // ── Sale inserts (upsert so retries are idempotent) ──────────
@@ -408,9 +414,9 @@
         try {
           var r3 = await supabase.from('sales')
             .upsert(saleInsertRows, { onConflict: 'id', ignoreDuplicates: true });
-          if (r3.error) { console.error('[qsdb] Sale insert failed:', r3.error); }
+          if (r3.error) { console.error('[qsdb] Sale insert failed:', r3.error); failedBatches.push('sales'); }
           else { doneActIds = doneActIds.concat(saleInsertActIds); log('Sale insert OK.'); }
-        } catch (e) { console.error('[qsdb] Sale insert threw:', e); }
+        } catch (e) { console.error('[qsdb] Sale insert threw:', e); failedBatches.push('sales'); }
       }
 
       // ── Sale deletes ─────────────────────────────────────────────
@@ -419,9 +425,9 @@
         try {
           var r4 = await supabase.from('sales').delete()
             .in('id', saleDeleteIds).eq('user_id', userId);
-          if (r4.error) { console.error('[qsdb] Sale delete failed:', r4.error); }
+          if (r4.error) { console.error('[qsdb] Sale delete failed:', r4.error); failedBatches.push('sale-deletes'); }
           else { doneActIds = doneActIds.concat(saleDeleteActIds); log('Sale delete OK.'); }
-        } catch (e) { console.error('[qsdb] Sale delete threw:', e); }
+        } catch (e) { console.error('[qsdb] Sale delete threw:', e); failedBatches.push('sale-deletes'); }
       }
 
       // ── Note upserts ─────────────────────────────────────────────
@@ -440,9 +446,9 @@
         try {
           var rn1 = await supabase.from('notes')
             .upsert(noteUpsertRows, { onConflict: 'id', ignoreDuplicates: false });
-          if (rn1.error) { console.error('[qsdb] Note upsert failed:', rn1.error); }
+          if (rn1.error) { console.error('[qsdb] Note upsert failed:', rn1.error); failedBatches.push('notes'); }
           else { doneActIds = doneActIds.concat(noteUpsertActIds); log('Note upsert OK.'); }
-        } catch (e) { console.error('[qsdb] Note upsert threw:', e); }
+        } catch (e) { console.error('[qsdb] Note upsert threw:', e); failedBatches.push('notes'); }
       }
 
       // ── Note deletes ──────────────────────────────────────────────
@@ -451,9 +457,9 @@
         try {
           var rn2 = await supabase.from('notes').delete()
             .in('id', noteDeleteIds).eq('user_id', userId);
-          if (rn2.error) { console.error('[qsdb] Note delete failed:', rn2.error); }
+          if (rn2.error) { console.error('[qsdb] Note delete failed:', rn2.error); failedBatches.push('note-deletes'); }
           else { doneActIds = doneActIds.concat(noteDeleteActIds); log('Note delete OK.'); }
-        } catch (e) { console.error('[qsdb] Note delete threw:', e); }
+        } catch (e) { console.error('[qsdb] Note delete threw:', e); failedBatches.push('note-deletes'); }
       }
 
       // ── addStock: serial with optimistic locking ─────────────────
@@ -523,6 +529,7 @@
         }
         if (!stockOk) {
           warn('[qsdb] addStock action id=' + act.id + ' left in queue for next sync.');
+          if (failedBatches.indexOf('stock-adjustments') === -1) failedBatches.push('stock-adjustments');
         }
       }
 
@@ -538,11 +545,20 @@
 
     } catch (e) {
       warn('syncPendingToSupabase error:', e);
+      fatalError = e;
     }
     // FIXED: isSyncing reset happens here — after the try/catch — so it fires
     // on every code path: normal completion, thrown exception, and the early
     // returns above (which set isSyncing = false then return before this line).
     isSyncing = false;
+
+    return {
+      ok: !fatalError && failedBatches.length === 0,
+      synced: (typeof doneActIds !== 'undefined' && doneActIds) ? doneActIds.length : 0,
+      total: (typeof pending !== 'undefined' && pending) ? pending.length : 0,
+      failedBatches: failedBatches,
+      fatalError: fatalError ? (fatalError.message || String(fatalError)) : null
+    };
   }
 
   qsdb.syncPendingToSupabase = syncPendingToSupabase;

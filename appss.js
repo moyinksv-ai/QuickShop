@@ -443,10 +443,12 @@ function handleTouchEnd() {
       pullToRefresh.spinner.style.animation = 'spin 0.8s linear infinite';
     }
     if (currentUser && navigator.onLine) {
-      await syncCloudData(currentUser);
+      const refreshResult = await syncCloudData(currentUser);
       setTimeout(() => { 
         resetPullToRefresh(); 
-        toast('Refreshed', 'info', 1500); 
+        // Only claim "Refreshed" if it actually succeeded — syncCloudData
+        // already shows its own "Failed to sync cloud data" toast otherwise.
+        if (!refreshResult || refreshResult.ok !== false) toast('Refreshed', 'info', 1500);
       }, 300);
     } else {
       const currentView = document.querySelector('.panel.active')?.id;
@@ -761,7 +763,7 @@ function handleTouchEnd() {
     const supabase = getClient();
     if (!supabase) return null;
     try {
-      const { data, error } = await supabase.from('profiles').select('*').eq('id', uid).single();
+      const { data, error } = await supabase.rpc('get_my_profile').single();
       if (error) throw error;
       return data;
     } catch (e) { errlog('getUserProfile', e); return null; }
@@ -951,18 +953,22 @@ function handleTouchEnd() {
   async function syncCloudData(user) {
     if (!user || !getClient() || !navigator.onLine) {
       if (!navigator.onLine) log('Offline, skipping cloud sync.');
-      return;
+      return { ok: true, skipped: true, reason: !navigator.onLine ? 'offline' : 'not-ready' };
     }
-    if (isSyncInProgress) return;
+    if (isSyncInProgress) return { ok: true, skipped: true, reason: 'already-syncing' };
     isSyncInProgress = true;
     showLoading(true, 'Syncing data...');
+    // Callers (Sync Now, pull-to-refresh) need the real outcome instead of
+    // assuming success — record it here instead of only toasting internally.
+    let pendingResult = null;
+    let syncError = null;
     try {
-      if (window.qsdb && window.qsdb.syncPendingToSupabase) await window.qsdb.syncPendingToSupabase();
+      if (window.qsdb && window.qsdb.syncPendingToSupabase) pendingResult = await window.qsdb.syncPendingToSupabase();
       const supabase = getClient();
       // products and notes use fetchAllRows to page past Supabase's 1 000-row
       // silent cap. sales/categories/logs are range-bounded or small by design.
       const [cloudProductRows, salesRes, cloudNoteRows, categoriesRes, logsRes] = await Promise.all([
-        fetchAllRows(supabase.from('products').select('*').eq('user_id', user.id)),
+        fetchAllRows(supabase.rpc('get_my_products')),
         supabase.from('sales').select('*').eq('user_id', user.id)
           .gte('sale_date', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()),
         fetchAllRows(supabase.from('notes').select('*').eq('user_id', user.id)),
@@ -1028,7 +1034,7 @@ function handleTouchEnd() {
       }
       // else: cloud returned nothing — keep local state.logs unchanged
       toast('Data synced from cloud', 'info', 1500);
-    } catch (e) { errlog('syncCloudData failed', e); toast('Failed to sync cloud data', 'error'); }
+    } catch (e) { errlog('syncCloudData failed', e); toast('Failed to sync cloud data', 'error'); syncError = e; }
     finally {
       showLoading(false);
       isSyncInProgress = false;
@@ -1036,6 +1042,16 @@ function handleTouchEnd() {
     }
     initAppUI();
     await saveState();
+
+    const pendingOk = !pendingResult || pendingResult.ok !== false;
+    const reasons = [];
+    if (pendingResult && pendingResult.failedBatches && pendingResult.failedBatches.length) reasons.push(pendingResult.failedBatches.join(', '));
+    if (pendingResult && pendingResult.fatalError) reasons.push(pendingResult.fatalError);
+    return {
+      ok: !syncError && pendingOk,
+      error: syncError ? (syncError.message || String(syncError)) : (reasons.length ? ('upload failed: ' + reasons.join('; ')) : null),
+      pendingResult: pendingResult
+    };
   }
 
 
@@ -2594,10 +2610,22 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
             }
           }
           // Push everything pending
-          if (window.qsdb && window.qsdb.syncPendingToSupabase) await window.qsdb.syncPendingToSupabase();
+          let pushResult = null;
+          if (window.qsdb && window.qsdb.syncPendingToSupabase) pushResult = await window.qsdb.syncPendingToSupabase();
           // Pull from cloud
-          await syncCloudData(currentUser);
-          toast('Sync complete — catalog is now live', 'success');
+          const pullResult = await syncCloudData(currentUser);
+
+          const pushOk = !pushResult || pushResult.ok !== false;
+          const pullOk = !pullResult || pullResult.ok !== false;
+          if (pushOk && pullOk) {
+            toast('Sync complete — catalog is now live', 'success');
+          } else {
+            const reasons = [];
+            if (pushResult && pushResult.failedBatches && pushResult.failedBatches.length) reasons.push(pushResult.failedBatches.join(', '));
+            if (pushResult && pushResult.fatalError) reasons.push(pushResult.fatalError);
+            if (pullResult && pullResult.error) reasons.push(pullResult.error);
+            toast('Sync incomplete' + (reasons.length ? ' — ' + reasons.join('; ') : ' — some data may not be up to date'), 'error');
+          }
         } catch(e) {
           toast('Sync failed: ' + (e.message || 'check connection'), 'error');
         } finally {
