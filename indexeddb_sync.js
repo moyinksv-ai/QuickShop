@@ -358,8 +358,13 @@
         }
         log('Product upsert batch:', productUpsertRows.length);
         try {
-          var r1 = await supabase.from('products')
-            .upsert(productUpsertRows, { onConflict: 'id' });
+          // Routed through upsert_my_products RPC instead of a direct
+          // .upsert() -- ON CONFLICT DO UPDATE requires SELECT privilege
+          // on the table even with return=minimal, and `authenticated`
+          // deliberately lacks SELECT on cost/barcode (see upsert_my_products
+          // migration comment). The RPC is SECURITY DEFINER and enforces
+          // ownership itself, so it works without broadening that grant.
+          var r1 = await supabase.rpc('upsert_my_products', { rows: productUpsertRows });
           if (r1.error) { console.error('[qsdb] Product upsert failed:', r1.error); failedBatches.push('products'); }
           else {
             doneActIds = doneActIds.concat(productUpsertActIds);

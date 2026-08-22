@@ -749,10 +749,19 @@ function handleTouchEnd() {
     const supabase = getClient();
     if (!supabase) return false;
     try {
-      const { error } = await supabase.from('profiles').upsert({
-        id: uid, name: profile.name, business_name: profile.businessName,
-        email: profile.email, created_at: profile.createdAt ? new Date(profile.createdAt).toISOString() : new Date().toISOString(),
-        avatar_url: profile.avatarUrl !== undefined ? profile.avatarUrl : undefined
+      // Routed through upsert_my_profile RPC -- the upsert writes
+      // id/email/created_at, which authenticated deliberately lacks
+      // INSERT/UPDATE on (profiles_authenticated_read is USING(true), so
+      // any column grant there is visible to every other logged-in user).
+      // SECURITY DEFINER bypasses that; id is always auth.uid() inside the
+      // function, so this can never target another user's row even though
+      // the `uid` argument here is no longer sent to the database.
+      const { error } = await supabase.rpc('upsert_my_profile', {
+        p: {
+          name: profile.name, business_name: profile.businessName,
+          email: profile.email, created_at: profile.createdAt ? new Date(profile.createdAt).toISOString() : new Date().toISOString(),
+          avatar_url: profile.avatarUrl !== undefined ? profile.avatarUrl : undefined
+        }
       });
       if (error) throw error;
       return true;
@@ -1214,7 +1223,9 @@ function handleTouchEnd() {
           // ── Referral attribution ────────────────────────────────────────
           // Consume the pending referral captured at boot or from catalog.js.
           // Written once — never overwritten. Self-referral blocked here and
-          // at DB level (trigger also checks referred_by !== id).
+          // at DB level (set_my_referrer RPC re-checks ref_id <> auth.uid()
+          // and only ever sets referred_by once — WHERE referred_by IS NULL —
+          // so this can't be re-attributed via a direct API call either).
           try {
             var _pendingRef = sessionStorage.getItem('qs_referrer_id');
             if (
@@ -1224,9 +1235,11 @@ function handleTouchEnd() {
             ) {
               const supabaseRef = getClient();
               if (supabaseRef) {
-                await supabaseRef.from('profiles')
-                  .update({ referred_by: _pendingRef })
-                  .eq('id', user.id);
+                // Routed through set_my_referrer RPC -- authenticated has no
+                // direct UPDATE grant on referred_by (profiles_authenticated_read
+                // is USING(true), so a plain column grant would let any
+                // logged-in user rewrite anyone's referred_by, not just their own).
+                await supabaseRef.rpc('set_my_referrer', { ref_id: _pendingRef });
               }
             }
             sessionStorage.removeItem('qs_referrer_id');
