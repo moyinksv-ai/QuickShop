@@ -2564,7 +2564,10 @@
     }
 
     // Phone RPC — fires concurrently, non-blocking, non-fatal.
-    var _phoneFetchPromise = (SELLER_PHONE || !storeId || _rpcDone) ? null
+    // Always attempt when the phone is missing, regardless of which
+    // store-resolution path is used below — the qs_get_store fast path
+    // does not return a phone number, so it must not skip this fetch.
+    var _phoneFetchPromise = (SELLER_PHONE || !storeId) ? null
       : client.rpc('get_vendor_phone', { store_id: storeId });
 
     if (!_rpcDone) {
@@ -2580,17 +2583,6 @@
       return;
     }
 
-    // Resolve phone from RPC now that both fetches are done.
-    // The RPC promise was already in-flight — this await is near-instant.
-    if (!SELLER_PHONE && _phoneFetchPromise) {
-      try {
-        var _phoneRes = await _phoneFetchPromise;
-        var _rpcPhone = (_phoneRes && _phoneRes.data)
-          ? String(_phoneRes.data).replace(/\D/g, '').slice(0, 15) : '';
-        if (/^\d{7,15}$/.test(_rpcPhone)) SELLER_PHONE = _rpcPhone;
-      } catch (_) { /* non-fatal — checkout falls back gracefully */ }
-    }
-
       if (productsResult.error) {
         var errMsg = (productsResult.error && productsResult.error.message) || String(productsResult.error);
         console.error('[Catalog] Products fetch error:', productsResult.error);
@@ -2600,6 +2592,18 @@
 
       profile          = profileResult.data;
       _productsPayload = productsResult.data || [];
+    }
+
+    // Resolve phone from RPC — runs on BOTH the fast path (qs_get_store)
+    // and the fallback path. The RPC promise was already in-flight, so
+    // this await is near-instant on the fallback path.
+    if (!SELLER_PHONE && _phoneFetchPromise) {
+      try {
+        var _phoneRes = await _phoneFetchPromise;
+        var _rpcPhone = (_phoneRes && _phoneRes.data)
+          ? String(_phoneRes.data).replace(/\D/g, '').slice(0, 15) : '';
+        if (/^\d{7,15}$/.test(_rpcPhone)) SELLER_PHONE = _rpcPhone;
+      } catch (_) { /* non-fatal — checkout falls back gracefully */ }
     }
 
     // ── From here: profile and _productsPayload are set by both paths ───────
