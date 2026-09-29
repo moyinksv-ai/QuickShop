@@ -30,10 +30,10 @@
  *    → Network-first with cache fallback to index.html.
  *      Ensures the app opens offline after first visit.
  */
-var CACHE_NAME    = 'qs-v2.1.6';
+var CACHE_NAME    = 'qs-v2.1.7';
 
 var IMAGE_CACHE   = 'qs-images-v4.0';
-var MARKET_CACHE  = 'qs-market-v1.1';
+var MARKET_CACHE  = 'qs-market-v2.0';
 /* ── Install ─────────────────────────────────────────────────────────────────
  * Nothing to pre-cache. Skip waiting so this SW activates immediately
  * without waiting for existing tabs to close. */
@@ -75,22 +75,18 @@ self.addEventListener('fetch', function (event) {
    *    Without this exception, all product photos go network-only and the
    *    catalog cannot display images offline.
    *
-   *    EXCEPTION 2: Public marketplace REST tables — stale-while-revalidate.
-   *    qs_market_products, public_catalog_profiles, and qs_canonical_products
-   *    are public read-only views with no personal data.  Serving a cached
-   *    response instantly while refreshing in the background means:
-   *      • Return visits and back-navigation feel instant.
-   *      • Supabase read count drops ~50-60% at scale.
-   *      • Auth, vendor data, and personal queries are unaffected.
-   *    Stale window: up to the next SW fetch (typically seconds on a live
-   *    connection).  Acceptable for a product catalogue that changes rarely. */
+   *    EXCEPTION 2: Public marketplace REST views are network-first.
+   *    While online, buyers must see current sellable inventory. The last
+   *    successful marketplace response is retained only as an offline fallback.
+   *    This keeps the public market resilient without allowing a connected
+   *    browser cache to override authoritative product state. */
   var isSupabase = url.includes('supabase.co') || url.includes('supabase.in');
   var isSupabaseStorage = isSupabase && url.includes('/storage/v1/object/');
 
   var MARKET_TABLES = [
-    '/rest/v1/qs_market_products',
-    '/rest/v1/public_catalog_profiles',
-    '/rest/v1/qs_canonical_products'
+    '/rest/v1/qs_market_products_v2',
+    '/rest/v1/qs_market_offers_v2',
+    '/rest/v1/qs_active_stores_v2'
   ];
   var isMarketplaceTable = isSupabase &&
     !isSupabaseStorage &&
@@ -98,35 +94,25 @@ self.addEventListener('fetch', function (event) {
     MARKET_TABLES.some(function (t) { return url.includes(t); });
 
   if (isMarketplaceTable) {
-    /* Stale-while-revalidate for public marketplace data.
-     * Serve cached immediately; fetch fresh and update cache in background.
-     * Cache validation: only store non-empty JSON arrays — an empty []
-     * cached during a bad network moment would cause a permanent blank page
-     * until the SW is updated. */
+    /* Live marketplace reads are network-first while online.
+     * Cached JSON is fallback only when the network genuinely fails.
+     * This prevents a connected buyer from being served yesterday's stock,
+     * while still allowing the last-known marketplace to render offline. */
     event.respondWith(
       caches.open(MARKET_CACHE).then(function (cache) {
-        return cache.match(request).then(function (cached) {
-          var fetchPromise = fetch(request).then(function (response) {
-            if (response && response.status === 200) {
-              /* Validate before caching: clone twice — one to read for
-               * validation, one to store.  Never cache an empty array. */
-              var toStore    = response.clone();
-              var toValidate = response.clone();
-              toValidate.json().then(function (data) {
-                var valid = Array.isArray(data) ? data.length > 0
-                          : (data !== null && data !== undefined);
-                if (valid) cache.put(request, toStore);
-              }).catch(function () { /* non-JSON — skip cache */ });
-            }
-            return response;
-          }).catch(function () {
-            /* Network failure — return empty array so UI can show error */
-            return new Response(JSON.stringify([]),
-              { status: 200, headers: { 'Content-Type': 'application/json' } });
+        return fetch(request).then(function (response) {
+          if (response && response.ok) {
+            cache.put(request, response.clone());
+          }
+          return response;
+        }).catch(function () {
+          return cache.match(request).then(function (cached) {
+            if (cached) return cached;
+            return new Response(JSON.stringify({ message: 'Offline and no cached marketplace data' }), {
+              status: 503,
+              headers: { 'Content-Type': 'application/json' }
+            });
           });
-          /* Cache hit: serve instantly, revalidate in background.
-           * Cache miss: wait for network (first visit). */
-          return cached || fetchPromise;
         });
       })
     );

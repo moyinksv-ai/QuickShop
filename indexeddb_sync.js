@@ -144,6 +144,7 @@
       image:     p.image    != null ? safeStr(p.image,  4096)   : null,
       image2:    p.image2   != null ? safeStr(p.image2, 4096)   : null,
       icon:      p.icon     != null ? safeStr(p.icon,   10)     : null,
+      canonicalId: (typeof p.canonicalId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(p.canonicalId)) ? p.canonicalId : null,
       createdAt: typeof p.createdAt === 'number' ? p.createdAt : Date.now(),
       updatedAt: typeof p.updatedAt === 'number' ? p.updatedAt : Date.now()
     };
@@ -177,6 +178,11 @@
         req.onerror   = function (ev) {
           console.error('[qsdb] addPendingChange failed:', ev.target.error);
           reject(ev.target.error);
+        };
+        tx.oncomplete = function () {
+          if (navigator.onLine) {
+            setTimeout(function () { syncPendingToSupabase(); }, 0);
+          }
         };
       });
     },
@@ -274,6 +280,7 @@
               image_url:  p.image  || null,
               image_url2: p.image2 || null,
               icon: p.icon || null,
+              canonical_id: p.canonicalId || null,
               created_at: new Date(p.createdAt).toISOString(),
               updated_at: new Date(p.updatedAt || p.createdAt).toISOString()
             });
@@ -341,6 +348,8 @@
       }
 
       var doneActIds = [];
+      var productSupersededActIds = [];
+      var noteSupersededActIds = [];
 
       // ── Product upserts ──────────────────────────────────────────
       if (productUpsertRows.length > 0) {
@@ -350,6 +359,7 @@
         var seenProductIds = {};
         for (var pi = productUpsertRows.length - 1; pi >= 0; pi--) {
           if (seenProductIds[productUpsertRows[pi].id]) {
+            productSupersededActIds.push(productUpsertActIds[pi]);
             productUpsertRows.splice(pi, 1);
             productUpsertActIds.splice(pi, 1);
           } else {
@@ -358,35 +368,14 @@
         }
         log('Product upsert batch:', productUpsertRows.length);
         try {
-          // Routed through upsert_my_products RPC instead of a direct
-          // .upsert() -- ON CONFLICT DO UPDATE requires SELECT privilege
-          // on the table even with return=minimal, and `authenticated`
-          // deliberately lacks SELECT on cost/barcode (see upsert_my_products
-          // migration comment). The RPC is SECURITY DEFINER and enforces
-          // ownership itself, so it works without broadening that grant.
-          var r1 = await supabase.rpc('upsert_my_products', { rows: productUpsertRows });
+          // One DB transaction now owns both product truth and its marketplace
+          // mapping. A successful sync can no longer leave one side updated
+          // while the other side silently fails.
+          var r1 = await supabase.rpc('qs_upsert_products_and_listings_v2', { rows: productUpsertRows });
           if (r1.error) { console.error('[qsdb] Product upsert failed:', r1.error); failedBatches.push('products'); }
           else {
-            doneActIds = doneActIds.concat(productUpsertActIds);
-            log('Product upsert OK.');
-            // ── Register/update marketplace listings ──────────────────────
-            // canonical.js::registerListing() calls qs_register_listing RPC which
-            // populates qs_vendor_listings + qs_canonical_products for search.html.
-            // The old inventory.js did this inline on save; the new sync path
-            // (appss.js → indexeddb_sync.js) skipped it, leaving the marketplace
-            // tables empty. Fix: fire-and-forget for every successfully upserted product.
-            if (window.__QS_CANONICAL && typeof window.__QS_CANONICAL.registerListing === 'function') {
-              productUpsertRows.forEach(function(row) {
-                try {
-                  window.__QS_CANONICAL.registerListing({
-                    id:       row.id,
-                    name:     row.name,
-                    price:    row.price,
-                    category: row.category || null
-                  });
-                } catch (_) { /* fire-and-forget: never block sync */ }
-              });
-            }
+            doneActIds = doneActIds.concat(productUpsertActIds, productSupersededActIds);
+            log('Product + marketplace upsert OK.');
           }
         } catch (e) { console.error('[qsdb] Product upsert threw:', e); failedBatches.push('products'); }
       }
@@ -395,20 +384,11 @@
       if (productDeleteIds.length > 0) {
         log('Product delete batch:', productDeleteIds.length);
         try {
-          var r2 = await supabase.from('products').delete()
-            .in('id', productDeleteIds).eq('user_id', userId);
+          var r2 = await supabase.rpc('qs_delete_products_v2', { product_ids: productDeleteIds });
           if (r2.error) { console.error('[qsdb] Product delete failed:', r2.error); failedBatches.push('product-deletes'); }
           else {
-            doneActIds = doneActIds.concat(productDeleteActIds); log('Product delete OK.');
-            // ── Delist from marketplace ──────────────────────────────────
-            // Deleting a product here never removed its row from
-            // qs_vendor_listings, so the marketplace kept counting it
-            // forever. Fire-and-forget cleanup — mirrors registerListing's
-            // pattern (canonical.js): never blocks, never throws.
-            try {
-              await supabase.from('qs_vendor_listings').delete()
-                .eq('vendor_store_id', userId).in('local_product_id', productDeleteIds);
-            } catch (_) { /* best-effort: marketplace cleanup isn't fatal */ }
+            doneActIds = doneActIds.concat(productDeleteActIds);
+            log('Product + marketplace delete OK.');
           }
         } catch (e) { console.error('[qsdb] Product delete threw:', e); failedBatches.push('product-deletes'); }
       }
@@ -441,6 +421,7 @@
         var seenNoteIds = {};
         for (var ni = noteUpsertRows.length - 1; ni >= 0; ni--) {
           if (seenNoteIds[noteUpsertRows[ni].id]) {
+            noteSupersededActIds.push(noteUpsertActIds[ni]);
             noteUpsertRows.splice(ni, 1);
             noteUpsertActIds.splice(ni, 1);
           } else {
@@ -452,7 +433,7 @@
           var rn1 = await supabase.from('notes')
             .upsert(noteUpsertRows, { onConflict: 'id', ignoreDuplicates: false });
           if (rn1.error) { console.error('[qsdb] Note upsert failed:', rn1.error); failedBatches.push('notes'); }
-          else { doneActIds = doneActIds.concat(noteUpsertActIds); log('Note upsert OK.'); }
+          else { doneActIds = doneActIds.concat(noteUpsertActIds, noteSupersededActIds); log('Note upsert OK.'); }
         } catch (e) { console.error('[qsdb] Note upsert threw:', e); failedBatches.push('notes'); }
       }
 
@@ -574,6 +555,12 @@
     log('Network restored — syncing.'); syncPendingToSupabase();
   });
   document.addEventListener('qs:user:auth', function () { syncPendingToSupabase(); });
+  window.addEventListener('pageshow', function () {
+    if (navigator.onLine) syncPendingToSupabase();
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && navigator.onLine) syncPendingToSupabase();
+  });
   // Only attempt on load if a session is already present — avoids wasted
   // round-trip + 3-second delay on unauthenticated / first-ever loads.
   window.addEventListener('load', function () {

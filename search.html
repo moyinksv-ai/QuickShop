@@ -322,6 +322,11 @@
       line-height: 1.35; flex: 1;
       display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     }
+    .pc-seller {
+      margin-top: 2px;
+      font-size: 10px; font-weight: 650; color: var(--muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
     .pc-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; gap: 4px; }
     .pc-price { font-size: 13px; font-weight: 800; color: var(--green); letter-spacing: -0.3px; }
     .pc-stores {
@@ -794,8 +799,11 @@
     var url = params.toString()
       ? window.location.pathname + '?' + params.toString()
       : window.location.pathname;
-    if (replace) history.replaceState(null, '', url);
-    else         history.pushState(null, '', url);
+    var currentUrl = window.location.pathname + window.location.search;
+    if (url !== currentUrl) {
+      if (replace) history.replaceState(null, '', url);
+      else         history.pushState(null, '', url);
+    }
     updateSEO(params);
   }
 
@@ -906,13 +914,13 @@
   function _prefetchProduct(item) {
     if (!sb || _prefetchCache.has(item.id)) return;
     var p = new Promise(function (resolve, reject) {
-      sb.from('qs_vendor_listings').select('*')
+      sb.from('qs_market_offers_v2')
+        .select('canonical_id, product_id, vendor_id, storefront_name, storefront_slug, storefront_avatar_url, storefront_location, storefront_tagline, delivery_available, product_name, price, qty, category, image_url, image_url2, description, offer_updated_at')
         .eq('canonical_id', item.id)
         .order('price', { ascending: true })
         .then(resolve, reject);
     });
     _prefetchCache.set(item.id, p);
-    // Cap at 60 entries — one full home-page load — then evict oldest
     if (_prefetchCache.size > 60) {
       _prefetchCache.delete(_prefetchCache.keys().next().value);
     }
@@ -982,6 +990,17 @@
     nameEl.className = 'pc-name';
     nameEl.textContent = name;
     body.appendChild(nameEl);
+
+    var sellerNames = Array.isArray(item.storefront_names) ? item.storefront_names.filter(Boolean) : [];
+    if (sellerNames.length > 0) {
+      var sellerEl = document.createElement('div');
+      sellerEl.className = 'pc-seller';
+      sellerEl.textContent = sellerNames.length === 1
+        ? sellerNames[0]
+        : sellerNames[0] + ' +' + (sellerNames.length - 1) + ' more';
+      sellerEl.title = sellerNames.join(', ');
+      body.appendChild(sellerEl);
+    }
 
     var footer = document.createElement('div');
     footer.className = 'pc-footer';
@@ -1168,53 +1187,18 @@
 
     try {
       var queryBuilder = sb
-        .from('public_catalog_profiles')
-        .select('id, business_name, name, tagline, avatar_url, location, delivery_available, slug')
+        .from('qs_active_stores_v2')
+        .select('id, storefront_name, business_name, name, tagline, avatar_url, location, delivery_available, slug, store_sector, product_count, thumbnail_urls')
+        .order('product_count', { ascending: false })
         .limit(50);
+
       if (categoryFilter) queryBuilder = queryBuilder.ilike('store_sector', categoryFilter);
 
       var res = await queryBuilder;
+      if (res.error) throw res.error;
       var stores = res.data || [];
-
-      var countMap = {}, thumbMap = {};
-      if (stores.length > 0) {
-        var ids = stores.map(function (s) { return s.id; });
-        // Count from public_catalog_products (same view catalog.js reads for
-        // the storefront itself) instead of qs_vendor_listings. The listings
-        // ledger never drops a row on delete and has no stock awareness, so
-        // it drifted from what a buyer actually sees on the storefront.
-        var prodRes = await sb
-          .from('public_catalog_products')
-          .select('user_id, image_url')
-          .in('user_id', ids);
-        if (prodRes.data) {
-          prodRes.data.forEach(function (r) {
-            countMap[r.user_id] = (countMap[r.user_id] || 0) + 1;
-            if (r.image_url && typeof r.image_url === 'string' && r.image_url.startsWith('https://')) {
-              if (!thumbMap[r.user_id]) thumbMap[r.user_id] = [];
-              if (thumbMap[r.user_id].length < 3) thumbMap[r.user_id].push(r.image_url);
-            }
-          });
-        }
-      }
-
-      // For "all stores" mode, exclude stores with no listings
-      if (!categoryFilter) {
-        stores = stores.filter(function (s) { return (countMap[s.id] || 0) > 0; });
-      }
-
-      // Sort: most products first, completeness tiebreaker
-      stores.sort(function (a, b) {
-        var ca = countMap[a.id] || 0, cb = countMap[b.id] || 0;
-        if (cb !== ca) return cb - ca;
-        var sa = (a.avatar_url?1:0) + (a.tagline?1:0) + (a.location?1:0);
-        var sb2= (b.avatar_url?1:0) + (b.tagline?1:0) + (b.location?1:0);
-        return sb2 - sa;
-      });
-
       var count = stores.length;
 
-      // Heading
       if (count === 0) {
         storesHeading.innerHTML = categoryFilter
           ? 'No stores selling <strong>' + escHtml(categoryFilter) + '</strong> yet'
@@ -1240,7 +1224,11 @@
 
       stores.forEach(function (profile) {
         storesGrid.appendChild(
-          renderStoreDirectoryCard(profile, countMap[profile.id] || 0, thumbMap[profile.id] || [])
+          renderStoreDirectoryCard(
+            profile,
+            Number(profile.product_count) || 0,
+            Array.isArray(profile.thumbnail_urls) ? profile.thumbnail_urls : []
+          )
         );
       });
 
@@ -1248,7 +1236,7 @@
       console.error('[loadStores]', e);
       storesGrid.innerHTML =
         '<div class="empty-state"><div class="es-icon">⚠️</div>' +
-        '<h3>Failed to load</h3><p>Please refresh and try again.</p></div>';
+        '<h3>Failed to load</h3><p>Check your connection and try again.</p></div>';
       storesHeading.hidden = true;
     }
   }
@@ -1304,7 +1292,7 @@
     switchTab('products');
 
     try {
-      var res = await sb.rpc('qs_find_canonical', { p_name: query, p_threshold: 0.25 });
+      var res = await sb.rpc('qs_find_canonical_v2', { p_name: query, p_threshold: 0.25 });
       if (seq !== _navSeq) return;
       var data = res.data || [];
 
@@ -1386,8 +1374,8 @@
 
     try {
       var canonRes = await sb
-        .from('qs_market_products')
-        .select('id, display_name, slug, category, image_url, vendor_count, min_price')
+        .from('qs_market_products_v2')
+        .select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names')
         .ilike('category', cat)
         .order('vendor_count', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false })
@@ -1395,17 +1383,7 @@
 
       if (seq !== _navSeq) return;
 
-      if (canonRes.error) {
-        console.warn('[browseCategory] qs_market_products unavailable, using fallback:', canonRes.error.message);
-        canonRes = await sb
-          .from('qs_canonical_products')
-          .select('id, display_name, slug, category, image_url')
-          .ilike('category', cat)
-          .order('created_at', { ascending: false })
-          .range(_catOffset, _catOffset + _CAT_PAGE - 1);
-        if (canonRes.data) canonRes.data.forEach(function (d) { d.vendor_count = 0; d.min_price = null; });
-        if (seq !== _navSeq) return;
-      }
+      if (canonRes.error) throw canonRes.error;
 
       var canonData = canonRes.data || [];
       _catHasMore = canonData.length === _CAT_PAGE;
@@ -1588,18 +1566,21 @@
 
     try {
       var listRes = await _prefetchCache.get(item.id);
-      if (seq !== _navSeq) return;  // user navigated away — discard
+      if (seq !== _navSeq) return;
+      if (!listRes || listRes.error) throw (listRes && listRes.error) || new Error('Offer lookup failed');
 
       var listings  = listRes.data || [];
-      var vendorIds = listings.map(function (l) { return l.vendor_store_id; });
       var profileMap = {};
-
-      if (vendorIds.length > 0) {
-        var profRes = await sb.from('public_catalog_profiles')
-          .select('id, business_name, name, tagline, avatar_url').in('id', vendorIds);
-        if (seq !== _navSeq) return;  // check again after second await
-        if (profRes.data) profRes.data.forEach(function (p) { profileMap[p.id] = p; });
-      }
+      listings.forEach(function (listing) {
+        listing.vendor_store_id = listing.vendor_id;
+        listing.local_product_id = listing.product_id;
+        profileMap[listing.vendor_id] = {
+          business_name: listing.storefront_name,
+          name: listing.storefront_name,
+          tagline: listing.storefront_tagline || '',
+          avatar_url: listing.storefront_avatar_url || null
+        };
+      });
 
       // Update meta with precise listing data
       var storeCount = listings.length;
@@ -1650,8 +1631,9 @@
     if (!sb) return;
     showState('loading'); loadingLabel.textContent = 'Loading…';
     try {
-      var res = await sb.from('qs_canonical_products')
-        .select('id, display_name, slug, category, image_url').eq('slug', slug).single();
+      var res = await sb.from('qs_market_products_v2')
+        .select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names')
+        .eq('slug', slug).single();
       if (res.error || !res.data) { showState('main'); return; }
       await openProduct(res.data);
     } catch (e) { console.error('[load by slug]', e); showState('main'); }
@@ -1734,24 +1716,14 @@
       }
 
       var res = await sb
-        .from('qs_market_products')
-        .select('id, display_name, slug, category, image_url, vendor_count, min_price')
+        .from('qs_market_products_v2')
+        .select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names')
         .order('created_at', { ascending: false })
         .range(from, to);
 
       if (seq !== _navSeq) return;
 
-      // If view doesn't exist yet, fall back to qs_canonical_products
-      if (res.error) {
-        console.warn('[loadRecent] qs_market_products unavailable, using fallback:', res.error.message);
-        res = await sb
-          .from('qs_canonical_products')
-          .select('id, display_name, slug, category, image_url')
-          .order('created_at', { ascending: false })
-          .range(from, to);
-        if (res.data) res.data.forEach(function (d) { d.vendor_count = 0; d.min_price = null; });
-        if (seq !== _navSeq) return;
-      }
+      if (res.error) throw res.error;
 
       if (!res.data || !res.data.length) {
         if (!append) {
@@ -1886,6 +1858,64 @@
     loadHome();
   });
 
+  // ── LIVE MARKET FRESHNESS ─────────────────────────────────────────────────
+  var _marketLiveChannel = null;
+  var _marketRefreshTimer = null;
+  var _lastLifecycleRefresh = 0;
+
+  function invalidateMarketCaches() {
+    _memo.clear();
+    _prefetchCache.clear();
+    _storesLoaded = false;
+  }
+
+  function scheduleMarketRefresh(reason) {
+    invalidateMarketCaches();
+    if (!sb || !navigator.onLine || document.hidden) return;
+    clearTimeout(_marketRefreshTimer);
+    _marketRefreshTimer = setTimeout(function () {
+      var restoreTab = _activeTab;
+      routeFromURL();
+      if (restoreTab === 'stores') {
+        setTimeout(function () { switchTab('stores'); }, 0);
+      }
+    }, 220);
+  }
+
+  function wireMarketFreshness() {
+    if (!sb || _marketLiveChannel) return;
+
+    _marketLiveChannel = sb
+      .channel('qs-market-products-live-v2')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'products' },
+        function () { scheduleMarketRefresh('products'); }
+      )
+      .subscribe();
+
+    window.addEventListener('online', function () {
+      scheduleMarketRefresh('online');
+    });
+
+    window.addEventListener('pageshow', function (event) {
+      var now = Date.now();
+      if (event.persisted || now - _lastLifecycleRefresh > 5000) {
+        _lastLifecycleRefresh = now;
+        scheduleMarketRefresh('pageshow');
+      }
+    });
+
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') {
+        var now = Date.now();
+        if (now - _lastLifecycleRefresh > 5000) {
+          _lastLifecycleRefresh = now;
+          scheduleMarketRefresh('visible');
+        }
+      }
+    });
+  }
+
   // ── ROUTER ────────────────────────────────────────────────────────────────
   window.addEventListener('popstate', function () { routeFromURL(); });
 
@@ -1921,6 +1951,7 @@
     productsGrid.appendChild(errDiv);
   } else {
     routeFromURL();
+    wireMarketFreshness();
   }
 
 })();

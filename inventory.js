@@ -40,14 +40,16 @@
 
   const $ = id => document.getElementById(id);
 
-  function syncToCanonical(product) {
+  function selectedCanonicalId() {
     try {
-      if (window.__QS_CANONICAL && window.__QS_CANONICAL.registerListing) {
-        window.__QS_CANONICAL.registerListing(product);
+      if (window.__QS_CANONICAL && typeof window.__QS_CANONICAL.getSelectedId === 'function') {
+        var selected = window.__QS_CANONICAL.getSelectedId();
+        return typeof selected === 'string' ? selected : null;
       }
     } catch (e) {
-      errlog('syncToCanonical error', e);
+      errlog('selectedCanonicalId error', e);
     }
+    return null;
   }
 
   // ── Scanner state ──────────────────────────────────────────────────────────
@@ -542,6 +544,7 @@
 
         try {
           let product, syncType;
+          const canonicalId = selectedCanonicalId();
 
           if (editingId) {
             // Snapshot the existing product BEFORE updateProduct mutates it in-place.
@@ -557,7 +560,6 @@
             const updated = app().updateProduct(editingId, patch);
             if (!updated) { toast('Product not found', 'error'); return; }
             product = Object.assign({}, _existing, patch);
-            syncToCanonical(product);
             syncType = 'updateProduct';
             addActivityLog('Edit', 'Updated product: ' + name);
             toast('Product updated ✓');
@@ -570,7 +572,6 @@
               barcode: barcode || null, createdAt: Date.now(), updatedAt: Date.now()
             };
             app().addProduct(product);
-            syncToCanonical(product);
             syncType = 'addProduct';
             addActivityLog('Create', 'Created product: ' + name);
             toast('Product saved! Keep adding product orTap X to cancel.', 'success');
@@ -591,7 +592,9 @@
           renderDashboard();
           renderChips();
           if (window.qsdb && window.qsdb.addPendingChange) {
-            await window.qsdb.addPendingChange({ type: syncType, item: product });
+            const queuedProduct = Object.assign({}, product);
+            if (canonicalId) queuedProduct.canonicalId = canonicalId;
+            await window.qsdb.addPendingChange({ type: syncType, item: queuedProduct });
           }
           saveState().catch(e => errlog('addProduct sync', e));
         } finally {
@@ -1010,7 +1013,6 @@
             image: null, image2: null, icon: null, createdAt: Date.now(), updatedAt: Date.now()
           };
           app().importProduct(product, row.category);
-          syncToCanonical(product);
           if (window.qsdb && window.qsdb.addPendingChange) {
             await window.qsdb.addPendingChange({ type: 'addProduct', item: product });
           }
