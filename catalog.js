@@ -2558,7 +2558,7 @@
       console.warn('[Catalog] Profile view missing, falling back to profiles table:', vr.error.message);
       return client
         .from('profiles')
-               .select('id, name, business_name, tagline, is_active, location, delivery_available')
+               .select('id, name, business_name, tagline, is_active, is_founder, subscription_expires, location, delivery_available')
         .eq('id', storeId)
         .maybeSingle();
     }
@@ -2609,10 +2609,16 @@
     // ── From here: profile and _productsPayload are set by both paths ───────
 
     // ── SECURITY GATE ────────────────────────────────────────────────────────
-    // If vendor is inactive, render their identity in the header (name, avatar)
-    // so the buyer knows whose store this is, then show the soft gate panel
-    // with a WhatsApp CTA instead of a dead-end error screen.
-    var _isGated = (profile && profile.is_active === false);
+    // Apply the same effective entitlement rule as the server fast path.
+    // Founders remain eligible; a non-founder with an expired subscription is
+    // gated even if a legacy is_active flag was not cleared yet.
+    var _expiresAt = (profile && profile.subscription_expires)
+      ? Date.parse(profile.subscription_expires)
+      : NaN;
+    var _isExpired = Number.isFinite(_expiresAt) && _expiresAt < Date.now();
+    var _isGated = !profile
+      || profile.is_active === false
+      || (profile.is_founder !== true && _isExpired);
 
     var _rawName = (profile && (profile.business_name || profile.name)) || '';
 

@@ -1186,13 +1186,21 @@
     storesHeading.hidden = true;
 
     try {
+      var storeSource = categoryFilter
+        ? 'qs_market_stores_by_category_v2'
+        : 'qs_active_stores_v2';
+
+      var storeColumns = categoryFilter
+        ? 'id, storefront_name, business_name, name, tagline, avatar_url, location, delivery_available, slug, store_sector, market_category, product_count, thumbnail_urls'
+        : 'id, storefront_name, business_name, name, tagline, avatar_url, location, delivery_available, slug, store_sector, product_count, thumbnail_urls';
+
       var queryBuilder = sb
-        .from('qs_active_stores_v2')
-        .select('id, storefront_name, business_name, name, tagline, avatar_url, location, delivery_available, slug, store_sector, product_count, thumbnail_urls')
+        .from(storeSource)
+        .select(storeColumns)
         .order('product_count', { ascending: false })
         .limit(50);
 
-      if (categoryFilter) queryBuilder = queryBuilder.ilike('store_sector', categoryFilter);
+      if (categoryFilter) queryBuilder = queryBuilder.eq('market_category', categoryFilter);
 
       var res = await queryBuilder;
       if (res.error) throw res.error;
@@ -1374,9 +1382,9 @@
 
     try {
       var canonRes = await sb
-        .from('qs_market_products_v2')
-        .select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names')
-        .ilike('category', cat)
+        .from('qs_market_products_by_category_v2')
+        .select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names, market_category')
+        .eq('market_category', cat)
         .order('vendor_count', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false })
         .range(_catOffset, _catOffset + _CAT_PAGE - 1);

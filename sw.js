@@ -30,10 +30,10 @@
  *    → Network-first with cache fallback to index.html.
  *      Ensures the app opens offline after first visit.
  */
-var CACHE_NAME    = 'qs-v2.1.7';
+var CACHE_NAME    = 'qs-v2.1.8';
 
 var IMAGE_CACHE   = 'qs-images-v4.0';
-var MARKET_CACHE  = 'qs-market-v2.0';
+var MARKET_CACHE  = 'qs-market-v2.1';
 /* ── Install ─────────────────────────────────────────────────────────────────
  * Nothing to pre-cache. Skip waiting so this SW activates immediately
  * without waiting for existing tabs to close. */
@@ -86,7 +86,9 @@ self.addEventListener('fetch', function (event) {
   var MARKET_TABLES = [
     '/rest/v1/qs_market_products_v2',
     '/rest/v1/qs_market_offers_v2',
-    '/rest/v1/qs_active_stores_v2'
+    '/rest/v1/qs_active_stores_v2',
+    '/rest/v1/qs_market_products_by_category_v2',
+    '/rest/v1/qs_market_stores_by_category_v2'
   ];
   var isMarketplaceTable = isSupabase &&
     !isSupabaseStorage &&
