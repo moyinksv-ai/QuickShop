@@ -1339,7 +1339,11 @@
 
     back.addEventListener('click', function () {
       if (_detailReturnMode === 'market') {
-        window.location.assign(MARKET_RETURN_URL || '/search.html');
+        if (history.state && history.state.detailOpen) {
+          history.back();
+        } else {
+          window.location.replace(MARKET_RETURN_URL || '/search.html');
+        }
         return;
       }
 
@@ -1538,6 +1542,12 @@
       if (detail && detail.classList.contains('open')) {
         var returnMode = _detailReturnMode;
         closeDetailOverlay();
+
+        if (returnMode === 'market') {
+          window.location.replace(MARKET_RETURN_URL || '/search.html');
+          return;
+        }
+
         if (returnMode === 'cart') setTimeout(openCartDrawer, 0);
       }
     });
@@ -2570,10 +2580,8 @@
           } else if (action === 'view-details') {
             var detailEntry = cart.get(pid);
             if (detailEntry && detailEntry.product) {
+              openDetailOverlay(detailEntry.product, 'cart');
               closeCartDrawer(false);
-              requestAnimationFrame(function () {
-                openDetailOverlay(detailEntry.product, 'cart');
-              });
             }
           }
         });
