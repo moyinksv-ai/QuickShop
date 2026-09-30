@@ -5,7 +5,7 @@
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self'
-               'sha256-rhd7RHmlMnrIGFLe1cKk6B9H4THelY/NMJOmZJ/vrWs='
+               'sha256-K93y85qV6y4/tmn9/sajBVH3LQIIUYWWtrlStpypOkk='
                https://cdn.jsdelivr.net;
     connect-src 'self'
                 https://*.supabase.co
@@ -1036,8 +1036,13 @@
     var storeName = (profile && (profile.business_name || profile.name)) || 'QuickShop Vendor';
     var tagline   = (profile && profile.tagline) || '';
     var initial   = storeName.charAt(0).toUpperCase();
+    var marketProductSlug = (_currentProduct && _currentProduct.slug)
+      ? String(_currentProduct.slug).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 200)
+      : '';
     var storeUrl  = '/?store=' + encodeURIComponent(listing.vendor_store_id) +
-      (listing.local_product_id ? '&pid=' + encodeURIComponent(listing.local_product_id) : '');
+      (listing.local_product_id ? '&pid=' + encodeURIComponent(listing.local_product_id) : '') +
+      '&from=market' +
+      (marketProductSlug ? '&market_product=' + encodeURIComponent(marketProductSlug) : '');
 
     var avatarEl = document.createElement('div');
     avatarEl.className = 'vc-avatar';

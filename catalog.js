@@ -32,6 +32,17 @@
   // Enforce minimum 7 digits — shorter strings produce broken wa.me links
   var SELLER_PHONE = (_rawPhone.length >= 7) ? _rawPhone : '';
 
+  // Marketplace-origin context is deliberately constrained. We accept only a
+  // boolean origin marker and a sanitized canonical slug, never an arbitrary
+  // return URL.
+  var MARKET_ORIGIN = _p.get('from') === 'market';
+  var MARKET_PRODUCT = (_p.get('market_product') || '')
+    .replace(/[^a-zA-Z0-9_-]/g, '')
+    .slice(0, 200);
+  var MARKET_RETURN_URL = MARKET_ORIGIN
+    ? '/search.html' + (MARKET_PRODUCT ? '?product=' + encodeURIComponent(MARKET_PRODUCT) : '')
+    : '';
+
   // Validate STORE_ID — must be 3-64 alphanumeric/hyphen chars.
   // Rejects obviously garbage params without hitting the DB.
   var _validStoreId = /^[a-zA-Z0-9\-]{1,64}$/.test(STORE_ID);
@@ -101,6 +112,55 @@
   var _navSeq  = 0;
   var _scrollY = 0;  // saved before detail open, restored on back
 
+  // Shared scroll lock for nested overlays (detail -> lightbox, cart -> detail).
+  // The storefront stays fixed until the final overlay closes.
+  var _overlayLockDepth = 0;
+  var _overlayScrollY = 0;
+  var _bodyLockSnapshot = null;
+
+  function lockCatalogScroll() {
+    _overlayLockDepth += 1;
+    if (_overlayLockDepth !== 1) return;
+
+    _overlayScrollY = window.scrollY || window.pageYOffset || 0;
+    _bodyLockSnapshot = {
+      position: document.body.style.position,
+      top: document.body.style.top,
+      left: document.body.style.left,
+      right: document.body.style.right,
+      width: document.body.style.width,
+      overflow: document.body.style.overflow
+    };
+
+    document.body.style.position = 'fixed';
+    document.body.style.top = '-' + _overlayScrollY + 'px';
+    document.body.style.left = '0';
+    document.body.style.right = '0';
+    document.body.style.width = '100%';
+    document.body.style.overflow = 'hidden';
+  }
+
+  function unlockCatalogScroll() {
+    if (_overlayLockDepth <= 0) {
+      _overlayLockDepth = 0;
+      return;
+    }
+
+    _overlayLockDepth -= 1;
+    if (_overlayLockDepth !== 0) return;
+
+    var snap = _bodyLockSnapshot || {};
+    document.body.style.position = snap.position || '';
+    document.body.style.top = snap.top || '';
+    document.body.style.left = snap.left || '';
+    document.body.style.right = snap.right || '';
+    document.body.style.width = snap.width || '';
+    document.body.style.overflow = snap.overflow || '';
+    _bodyLockSnapshot = null;
+
+    window.scrollTo(0, _overlayScrollY);
+  }
+
   // Image transform — rewrites Supabase Storage URLs to use the render
   // endpoint, serving vendor photos at the right size for each context.
   // 4MB phone photos → 80-120KB at point of use.
@@ -110,7 +170,18 @@
   //  Restored after allProducts is loaded (needs product objects to re-hydrate).
 
   var cart = new Map();
-  var CART_KEY = 'qs_cart_v1';
+  var LEGACY_CART_KEY = 'qs_cart_v1';
+  var CART_KEY = LEGACY_CART_KEY;
+
+  function scopeCartToStore(storeId) {
+    CART_KEY = 'qs_cart_v2:' + String(storeId || '').slice(0, 80);
+    try {
+      if (!sessionStorage.getItem(CART_KEY)) {
+        var legacy = sessionStorage.getItem(LEGACY_CART_KEY);
+        if (legacy) sessionStorage.setItem(CART_KEY, legacy);
+      }
+    } catch (_) {}
+  }
 
   function _saveCart() {
     try {
@@ -130,11 +201,14 @@
       if (!Array.isArray(entries)) return;
       entries.forEach(function (e) {
         var product = products.find(function (p) { return p.id === e.id; });
-        if (!product) return; // product may have been removed
+        if (!product) return; // another store or removed product
         var maxStock = typeof product.qty === 'number' ? product.qty : Infinity;
         var qty = Math.min(Math.max(1, Math.floor(Number(e.qty) || 1)), maxStock);
         if (qty > 0) cart.set(e.id, { product: product, qty: qty });
       });
+
+      _saveCart();
+      if (CART_KEY !== LEGACY_CART_KEY) sessionStorage.removeItem(LEGACY_CART_KEY);
     } catch (_) { /* corrupt data — start fresh */ }
   }
 
@@ -522,6 +596,10 @@
       '.qty-btn:active{background:rgba(255,255,255,0.15);}',
       '.qty-btn[disabled]{opacity:0.28;cursor:not-allowed;pointer-events:none;}',
       '.ci-stock-max{font-size:10px;color:#f87171;font-weight:600;margin-top:3px;}',
+      '.ci-details{display:inline-flex;margin-top:5px;padding:0;border:none;background:none;',
+        'color:#a78bfa;font-size:10.5px;font-weight:800;cursor:pointer;',
+        'text-decoration:underline;text-underline-offset:2px;-webkit-tap-highlight-color:transparent;}',
+      '.ci-details:active{opacity:.7;}',
       '.qty-val{font-size:14px;font-weight:700;color:#fff;min-width:20px;text-align:center;}',
       '.ci-remove{width:28px;height:28px;border-radius:8px;border:none;cursor:pointer;',
         'background:rgba(239,68,68,0.12);color:#f87171;',
@@ -644,7 +722,8 @@
         'background:#0e0e14;',
         'transform:translateY(100%);',
         'transition:transform .32s cubic-bezier(.16,1,.3,1);',
-        'display:flex;flex-direction:column;overflow:hidden;}',
+        'display:flex;flex-direction:column;overflow:hidden;',
+        'overscroll-behavior:none;}',
       '#cat-detail.open{transform:translateY(0);}',
       '#cat-detail-hdr{display:flex;align-items:center;gap:10px;',
         'padding:12px 16px;flex-shrink:0;',
@@ -654,8 +733,12 @@
         'cursor:pointer;padding:7px 14px;display:flex;align-items:center;gap:6px;',
         '-webkit-tap-highlight-color:transparent;}',
       '#cat-detail-back:active{background:rgba(255,255,255,0.14);}',
+      '#cat-detail-context{margin-left:auto;max-width:48%;font-size:10px;',
+        'font-weight:650;color:rgba(240,240,246,0.42);text-align:right;',
+        'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
       '#cat-detail-scroll{flex:1;overflow-y:auto;',
         '-webkit-overflow-scrolling:touch;',
+        'overscroll-behavior:contain;',
         /* pan-y: scroll container only responds to vertical gestures.
          * Horizontal swipes inside the hero are handled by pointer events. */
         'touch-action:pan-y;}',
@@ -1230,6 +1313,7 @@
   var _detailProduct = null; // currently displayed product
   var _detailQty     = 1;    // quantity selector state
   var _detailSwipe   = null; // active swipe gesture state on hero
+  var _detailReturnMode = 'store'; // store | market | cart
 
   function buildDetailOverlay() {
     if (document.getElementById('cat-detail')) return;
@@ -1247,9 +1331,30 @@
     back.id = 'cat-detail-back';
     back.type = 'button';
     back.setAttribute('aria-label', 'Back to store');
-    back.innerHTML = '← Back to store'; // ← arrow
-    back.addEventListener('click', closeDetailOverlay);
+    back.textContent = '← Back to store';
+
+    var context = document.createElement('div');
+    context.id = 'cat-detail-context';
+    context.hidden = true;
+
+    back.addEventListener('click', function () {
+      if (_detailReturnMode === 'market') {
+        window.location.assign(MARKET_RETURN_URL || '/search.html');
+        return;
+      }
+
+      if (history.state && history.state.detailOpen) {
+        history.back();
+        return;
+      }
+
+      var returnMode = _detailReturnMode;
+      closeDetailOverlay();
+      if (returnMode === 'cart') setTimeout(openCartDrawer, 0);
+    });
+
     hdr.appendChild(back);
+    hdr.appendChild(context);
     overlay.appendChild(hdr);
 
     // Scrollable body
@@ -1429,9 +1534,11 @@
 
     // Close on Android back gesture (popstate)
     window.addEventListener('popstate', function () {
-      if (document.getElementById('cat-detail') &&
-          document.getElementById('cat-detail').classList.contains('open')) {
+      var detail = document.getElementById('cat-detail');
+      if (detail && detail.classList.contains('open')) {
+        var returnMode = _detailReturnMode;
         closeDetailOverlay();
+        if (returnMode === 'cart') setTimeout(openCartDrawer, 0);
       }
     });
 
@@ -1474,10 +1581,34 @@
     addBtn.disabled = !inStock;
   }
 
-  function openDetailOverlay(product) {
+  function openDetailOverlay(product, returnMode) {
     buildDetailOverlay(); // idempotent
     _detailProduct = product;
+    _detailReturnMode = returnMode || 'store';
     _detailQty = cart.has(product.id) ? (cart.get(product.id).qty || 1) : 1;
+
+    var backBtn = document.getElementById('cat-detail-back');
+    var contextEl = document.getElementById('cat-detail-context');
+
+    if (backBtn) {
+      if (_detailReturnMode === 'market') {
+        backBtn.textContent = '← Marketplace';
+        backBtn.setAttribute('aria-label', 'Back to Marketplace');
+      } else if (_detailReturnMode === 'cart') {
+        backBtn.textContent = '← Cart';
+        backBtn.setAttribute('aria-label', 'Back to cart');
+      } else {
+        backBtn.textContent = '← Back to store';
+        backBtn.setAttribute('aria-label', 'Back to store');
+      }
+    }
+
+    if (contextEl) {
+      contextEl.hidden = _detailReturnMode !== 'market';
+      contextEl.textContent = _detailReturnMode === 'market'
+        ? 'Cart & checkout · this store only'
+        : '';
+    }
 
     var hero = document.getElementById('cat-detail-hero');
     var images = [product.image_url, product.image_url2].filter(Boolean);
@@ -1584,6 +1715,7 @@
     // Use pushState on first open so Android back button closes the overlay.
     var overlay = document.getElementById('cat-detail');
     var alreadyOpen = overlay.classList.contains('open');
+    if (!alreadyOpen) lockCatalogScroll();
     overlay.classList.add('open');
     overlay.setAttribute('aria-hidden', 'false');
     if (alreadyOpen) {
@@ -1600,11 +1732,14 @@
   function closeDetailOverlay() {
     var overlay = document.getElementById('cat-detail');
     if (!overlay) return;
+    var wasOpen = overlay.classList.contains('open');
     overlay.classList.remove('open');
     overlay.setAttribute('aria-hidden', 'true');
     _detailProduct = null;
     _detailQty = 1;
     _detailSwipe = null;
+    _detailReturnMode = 'store';
+    if (wasOpen) unlockCatalogScroll();
   }
 
   /* ── 8. RENDER CATEGORY CHIPS ───────────────────────────────────────── */
@@ -1974,6 +2109,16 @@
       : fmt(p.price);
     cinfo.appendChild(cname);
     cinfo.appendChild(cprice);
+
+    var detailsBtn = document.createElement('button');
+    detailsBtn.className = 'ci-details';
+    detailsBtn.type = 'button';
+    detailsBtn.dataset.action = 'view-details';
+    detailsBtn.dataset.productId = p.id;
+    detailsBtn.textContent = 'View details';
+    detailsBtn.setAttribute('aria-label', 'View details for ' + (p.name || 'product'));
+    cinfo.appendChild(detailsBtn);
+
     if (atMax && maxStock !== Infinity) {
       var hint = document.createElement('div');
       hint.className = 'ci-stock-max';
@@ -2076,9 +2221,10 @@
 
   function openCartDrawer() {
     var overlay = document.getElementById('cat-cart-overlay');
-    if (!overlay) return;
+    if (!overlay || overlay.classList.contains('open')) return;
     _lastFocusBeforeDrawer = document.activeElement;
     renderCartItems();
+    lockCatalogScroll();
     overlay.classList.add('open');
     overlay.setAttribute('aria-hidden', 'false');
     // Focus first interactive element
@@ -2086,12 +2232,15 @@
     if (close) setTimeout(function () { close.focus(); }, 310);
   }
 
-  function closeCartDrawer() {
+  function closeCartDrawer(restoreFocus) {
     var overlay = document.getElementById('cat-cart-overlay');
     if (!overlay) return;
+    var wasOpen = overlay.classList.contains('open');
     overlay.classList.remove('open');
     overlay.setAttribute('aria-hidden', 'true');
-    if (_lastFocusBeforeDrawer && _lastFocusBeforeDrawer.focus) {
+    if (wasOpen) unlockCatalogScroll();
+
+    if (restoreFocus !== false && _lastFocusBeforeDrawer && _lastFocusBeforeDrawer.focus) {
       setTimeout(function () { _lastFocusBeforeDrawer.focus(); }, 50);
     }
   }
@@ -2154,6 +2303,7 @@
     _lbIdx    = startIdx || 0;
     lbimg.alt = alt || '';
     lb.classList.toggle('multi', _lbImages.length > 1);
+    if (!lb.classList.contains('open')) lockCatalogScroll();
     lb.classList.add('open');
     lb.setAttribute('aria-hidden', 'false');
     lbShow(_lbIdx);
@@ -2163,7 +2313,9 @@
 
   function closeLightbox() {
     var lb = document.getElementById('cat-lightbox');
+    var wasOpen = !!(lb && lb.classList.contains('open'));
     if (lb) { lb.classList.remove('open', 'multi'); lb.setAttribute('aria-hidden', 'true'); }
+    if (wasOpen) unlockCatalogScroll();
     var lbimg = document.getElementById('cat-lb-img');
     if (lbimg) { lbimg.src = ''; lbimg.alt = ''; }
     _lbImages = [];
@@ -2294,7 +2446,7 @@
           e.stopPropagation();
           var pid = seeMoreBtn.dataset.productId;
           var product = allProducts.find(function (p) { return p.id === pid; });
-          if (product) openDetailOverlay(product);
+          if (product) openDetailOverlay(product, 'store');
           return;
         }
 
@@ -2303,7 +2455,7 @@
         if (card) {
           var pid = card.dataset.id;
           var product = allProducts.find(function (p) { return p.id === pid; });
-          if (product) openDetailOverlay(product);
+          if (product) openDetailOverlay(product, 'store');
         }
       });
 
@@ -2415,6 +2567,14 @@
           } else if (action === 'cart-remove') {
             // cartRemove → refreshCartUI → renderCartItems (if drawer open).
             cartRemove(pid);
+          } else if (action === 'view-details') {
+            var detailEntry = cart.get(pid);
+            if (detailEntry && detailEntry.product) {
+              closeCartDrawer(false);
+              requestAnimationFrame(function () {
+                openDetailOverlay(detailEntry.product, 'cart');
+              });
+            }
           }
         });
       }
@@ -2518,6 +2678,8 @@
         return;
       }
     }
+
+    scopeCartToStore(storeId);
 
     // ── Referral growth loop ────────────────────────────────────────────────
     var _brandingLink = document.getElementById('cat-branding-link');
@@ -2737,7 +2899,10 @@
     allProducts = _productsPayload;
     _restoreCart(allProducts); // re-hydrate cart from sessionStorage if present
     var _ssub = document.getElementById('cat-store-sub');
-    if (_ssub) _ssub.textContent = allProducts.length + ' product' + (allProducts.length !== 1 ? 's' : '') + ' · WhatsApp orders';
+    if (_ssub) {
+      _ssub.textContent = allProducts.length + ' product' + (allProducts.length !== 1 ? 's' : '') +
+        (MARKET_ORIGIN ? ' · this store only · WhatsApp checkout' : ' · WhatsApp orders');
+    }
 
     // Build category list (unique, sorted)
     var catSet = {};
@@ -2760,7 +2925,9 @@
       var _target = allProducts.find(function (p) { return p.id === _pidParam; });
       if (_target) {
         // Short delay so DOM and events are fully settled before overlay opens
-        setTimeout(function () { openDetailOverlay(_target); }, 120);
+        setTimeout(function () {
+          openDetailOverlay(_target, MARKET_ORIGIN ? 'market' : 'store');
+        }, 120);
       }
     })();
 
@@ -2795,7 +2962,10 @@
 
               // Update product count in header
               var ssub2 = document.getElementById('cat-store-sub');
-              if (ssub2) ssub2.textContent = allProducts.length + ' product' + (allProducts.length !== 1 ? 's' : '') + ' · WhatsApp orders';
+              if (ssub2) {
+                ssub2.textContent = allProducts.length + ' product' + (allProducts.length !== 1 ? 's' : '') +
+                  (MARKET_ORIGIN ? ' · this store only · WhatsApp checkout' : ' · WhatsApp orders');
+              }
 
               // Sync cart — remove items no longer in stock or deleted
               var validIds = new Set(allProducts.map(function(p) { return p.id; }));
