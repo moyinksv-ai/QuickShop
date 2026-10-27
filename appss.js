@@ -1431,12 +1431,22 @@ function handleTouchEnd() {
         if (!confirmed) return;
         try {
           const supabase = getClient();
-          if (supabase) await supabase.auth.signOut();
-          localStorage.removeItem('qs_session_active');
-          document.body.classList.remove('mode-app');
+          if (supabase) {
+            const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
+            if (signOutError) throw signOutError;
+          }
+          // Clear app-owned session/cache state as well as the Supabase local session.
+          ['qs_session_active', 'qs_last_user_id', 'qs_user_cache'].forEach((key) => {
+            try { localStorage.removeItem(key); } catch (_) {}
+          });
+          document.body.classList.remove('mode-app', 'qs-auth-pending');
           toast('Signed out');
-          window.location.reload();
-        } catch (e) { errlog('signout error', e); toast('Sign out failed: ' + (e.message || ''), 'error'); }
+          // Reload only after signOut has completed successfully so auth state is settled.
+          window.location.replace(window.location.pathname);
+        } catch (e) {
+          errlog('signout error', e);
+          toast('Sign out failed: ' + (e.message || 'Please try again.'), 'error');
+        }
       });
     }
   }
