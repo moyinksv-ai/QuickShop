@@ -155,5 +155,5 @@ test('payout request activity is idempotent and survives a temporary cloud-log f
   assert.match(dashboard, /state\.logs\.unshift\(\{/);
   assert.match(dashboard, /for \(const batch of batches\)[\s\S]*?ensurePayoutActivityLog\(batch\)/,
     'dashboard should retry missing activity-log writes from payout history');
-  assert.match(dashboard, /reserved referrals are reserved and do not count toward your next cycle/);
+  assert.match(dashboard, /Referrals included in a payout request are reserved and do not count toward your next cycle/);
 });
