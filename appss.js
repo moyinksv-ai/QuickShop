@@ -6839,8 +6839,11 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         const eligible = rows.filter(r => r.status === 'earned' && !reservedIds.has(r.id));
         const pendingBatch = batches.find(b => b.status === 'pending' || b.status === 'details_requested') || null;
         const eligibleCount = eligible.length;
+        const cycleCount = Math.min(eligibleCount, MILESTONE);
         const earningsNgn = eligible.reduce((sum, row) => sum + (Number(row.amount) || AMOUNT_PER), 0);
-        const canRequest = eligibleCount >= MILESTONE && !pendingBatch;
+        const nextBatchAmount = eligible.slice(0, MILESTONE)
+          .reduce((sum, row) => sum + (Number(row.amount) || AMOUNT_PER), 0);
+        const canRequest = eligibleCount >= MILESTONE && !pendingBatch && nextBatchAmount === 5000;
 
         // Repair any missed activity-log write from a prior successful request.
         // One deterministic audit-log ID per batch prevents duplicate entries.
@@ -6868,7 +6871,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
           return card;
         }
 
-        const currentCycleStat = statCard('Current cycle', eligibleCount + ' / ' + MILESTONE, '#a78bfa');
+        const currentCycleStat = statCard('Current cycle', cycleCount + ' / ' + MILESTONE, '#a78bfa');
         const availableBalanceStat = statCard('Available balance', '₦' + earningsNgn.toLocaleString('en-NG'), '#10b981');
         stats.appendChild(currentCycleStat);
         stats.appendChild(availableBalanceStat);
@@ -6879,18 +6882,18 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         const progressLbl = document.createElement('div');
         progressLbl.style.cssText = 'display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-bottom:6px;font-weight:600;';
         const progressLeft = document.createElement('span');
-        progressLeft.textContent = eligibleCount >= MILESTONE
+        progressLeft.textContent = cycleCount >= MILESTONE
           ? '🎉 Milestone reached!'
-          : (MILESTONE - eligibleCount) + ' more eligible referral' + (MILESTONE - eligibleCount === 1 ? '' : 's') + ' to unlock payout';
+          : (MILESTONE - cycleCount) + ' more eligible referral' + (MILESTONE - cycleCount === 1 ? '' : 's') + ' to unlock payout';
         const progressRight = document.createElement('span');
-        progressRight.textContent = eligibleCount + ' / ' + MILESTONE;
+        progressRight.textContent = cycleCount + ' / ' + MILESTONE;
         progressLbl.appendChild(progressLeft);
         progressLbl.appendChild(progressRight);
 
         const track = document.createElement('div');
         track.style.cssText = 'height:6px;background:var(--border-glass);border-radius:99px;overflow:hidden;';
         const fill = document.createElement('div');
-        const fillPct = Math.min(100, Math.round((eligibleCount / MILESTONE) * 100));
+        const fillPct = Math.min(100, Math.round((cycleCount / MILESTONE) * 100));
         fill.style.cssText = 'height:100%;width:' + fillPct + '%;border-radius:99px;background:linear-gradient(90deg,#7c3aed,#a78bfa);transition:width 0.4s ease;';
         track.appendChild(fill);
         progressWrap.appendChild(progressLbl);
@@ -6939,8 +6942,11 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         } else if (eligibleCount < MILESTONE) {
           payBtn.textContent = 'Request Payout (need ' + (MILESTONE - eligibleCount) + ' more referrals)';
           payBtn.disabled = true;
+        } else if (nextBatchAmount !== 5000) {
+          payBtn.textContent = 'Payout requires admin review';
+          payBtn.disabled = true;
         } else {
-          payBtn.textContent = '💸 Request Payout — ₦' + earningsNgn.toLocaleString('en-NG');
+          payBtn.textContent = '💸 Request Payout — ₦5,000';
           payBtn.disabled = false;
         }
 
@@ -6984,16 +6990,17 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
             const reserved = new Set((freshItems.data || []).map(item => item.referral_id));
             const remaining = (freshRefs.data || []).filter(r => r.status === 'earned' && !reserved.has(r.id));
             const remainingCount = remaining.length;
+            const remainingCycleCount = Math.min(remainingCount, MILESTONE);
             const remainingAmount = remaining.reduce((sum, row) => sum + (Number(row.amount) || AMOUNT_PER), 0);
             const cycleValue = currentCycleStat.firstElementChild;
             const balanceValue = availableBalanceStat.firstElementChild;
-            if (cycleValue) cycleValue.textContent = remainingCount + ' / ' + MILESTONE;
+            if (cycleValue) cycleValue.textContent = remainingCycleCount + ' / ' + MILESTONE;
             if (balanceValue) balanceValue.textContent = '₦' + remainingAmount.toLocaleString('en-NG');
-            progressLeft.textContent = remainingCount >= MILESTONE
+            progressLeft.textContent = remainingCycleCount >= MILESTONE
               ? '🎉 Milestone reached!'
-              : (MILESTONE - remainingCount) + ' more eligible referral' + (MILESTONE - remainingCount === 1 ? '' : 's') + ' to unlock payout';
-            progressRight.textContent = remainingCount + ' / ' + MILESTONE;
-            fill.style.width = Math.min(100, Math.round((remainingCount / MILESTONE) * 100)) + '%';
+              : (MILESTONE - remainingCycleCount) + ' more eligible referral' + (MILESTONE - remainingCycleCount === 1 ? '' : 's') + ' to unlock payout';
+            progressRight.textContent = remainingCycleCount + ' / ' + MILESTONE;
+            fill.style.width = Math.min(100, Math.round((remainingCycleCount / MILESTONE) * 100)) + '%';
             payBtn.textContent = '⏳ Payout Request Pending';
             payBtn.disabled = true;
             payBtn.style.background = 'var(--card-glass)';
@@ -7005,7 +7012,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
             if (!submitted) {
               toast('Failed to submit request: ' + (e.message || 'unknown'), 'error');
               payBtn.disabled = false;
-              payBtn.textContent = '💸 Request Payout — ₦' + earningsNgn.toLocaleString('en-NG');
+              payBtn.textContent = '💸 Request Payout — ₦5,000';
             } else {
               // The request already succeeded; do not present it as a failed request
               // just because refreshing the display encountered a network error.
