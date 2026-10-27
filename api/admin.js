@@ -96,6 +96,47 @@ async function fetchPaymentClaims() {
   return { available: false, claims: [] };
 }
 
+
+async function fetchAllRows(path) {
+  const rows = [];
+  const pageSize = 1000;
+  const maxPages = 100;
+  for (let page = 0; page < maxPages; page++) {
+    const start = page * pageSize;
+    const res = await sbFetch(path, {
+      method: 'GET',
+      headers: { Range: start + '-' + (start + pageSize - 1), 'Range-Unit': 'items' }
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error('Could not load ' + path.split('?')[0] + ': ' + res.status + ': ' + errText.slice(0, 200));
+    }
+    const batch = await res.json();
+    if (!Array.isArray(batch)) throw new Error('Unexpected response loading ' + path.split('?')[0]);
+    rows.push(...batch);
+    if (batch.length < pageSize) return rows;
+  }
+  throw new Error('Payout data exceeds the safe pagination limit; refusing an incomplete payout view');
+}
+
+async function writePayoutAudit(userId, id, action, details) {
+  const res = await sbFetch('/rest/v1/audit_logs?on_conflict=id', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+    body: JSON.stringify({
+      id: id,
+      user_id: userId,
+      action: action,
+      details: details.slice(0, 500),
+      performed_by: 'admin-dashboard'
+    })
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error('Payout state updated but activity log failed: ' + res.status + ': ' + errText.slice(0, 180));
+  }
+}
+
 // ── Main handler ────────────────────────────────────────────────────────
 module.exports = async function handler(req, res) {
   // ── CORS headers — restrict to same origin ────────────────────────────
@@ -144,12 +185,16 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const { action, vendorId, founderVal } = body;
+  const { action, vendorId, founderVal, batchId } = body;
 
-  // ── Validate vendorId format (UUID v4) for mutating actions ───────────
+  // ── Validate IDs for mutating actions ──────────────────────────────────
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (action !== 'get_vendors' && (!vendorId || !UUID_RE.test(vendorId))) {
+  if (['activate', 'revoke', 'set_founder'].includes(action) && (!vendorId || !UUID_RE.test(vendorId))) {
     res.status(400).json({ error: 'Invalid or missing vendorId' });
+    return;
+  }
+  if (['request_payout_details', 'mark_payout_paid'].includes(action) && (!batchId || !UUID_RE.test(batchId))) {
+    res.status(400).json({ error: 'Invalid or missing batchId' });
     return;
   }
 
@@ -195,6 +240,92 @@ module.exports = async function handler(req, res) {
       }));
 
       res.status(200).json({ vendors, paymentClaimsAvailable: claimsResult.available });
+      return;
+    }
+
+
+    if (action === 'get_referral_payouts') {
+      const [referrals, batches, items] = await Promise.all([
+        fetchAllRows('/rest/v1/referrals?select=id,referrer_id,amount,status,created_at,paid_at&order=created_at.asc'),
+        fetchAllRows('/rest/v1/referral_payout_batches?select=id,user_id,status,referral_count,amount_ngn,requested_at,details_requested_at,paid_at,payout_reference&order=requested_at.desc'),
+        fetchAllRows('/rest/v1/referral_payout_items?select=payout_id,referral_id,amount_ngn,reserved_at')
+      ]);
+      res.status(200).json({ referrals, batches, items });
+      return;
+    }
+
+    if (action === 'request_payout_details') {
+      const batchRes = await sbFetch('/rest/v1/referral_payout_batches?id=eq.' + encodeURIComponent(batchId) + '&select=id,user_id,status,amount_ngn,referral_count,details_requested_at', { method: 'GET' });
+      if (!batchRes.ok) throw new Error('Could not load payout batch: ' + batchRes.status);
+      const batchRows = await batchRes.json();
+      const batch = batchRows && batchRows[0];
+      if (!batch) { res.status(404).json({ error: 'Payout batch not found' }); return; }
+      if (!['pending', 'details_requested'].includes(batch.status)) {
+        res.status(409).json({ error: 'Only pending payouts can request account details' });
+        return;
+      }
+      const requestedAt = batch.details_requested_at || new Date().toISOString();
+      if (batch.status !== 'details_requested') {
+        const patchRes = await sbFetch('/rest/v1/referral_payout_batches?id=eq.' + encodeURIComponent(batchId) + '&status=eq.pending', {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'details_requested', details_requested_at: requestedAt })
+        });
+        if (!patchRes.ok) {
+          const errText = await patchRes.text().catch(() => '');
+          throw new Error('Could not record account-details request: ' + patchRes.status + ': ' + errText.slice(0, 200));
+        }
+      }
+      await writePayoutAudit(batch.user_id, 'payoutdetails_' + batch.id.replace(/-/g, ''), 'Payout details requested',
+        'WhatsApp account-details request initiated for payout ' + batch.id + ' (' + batch.referral_count + ' referrals, ₦' + batch.amount_ngn + ').');
+      res.status(200).json({ ok: true, status: 'details_requested', details_requested_at: requestedAt });
+      return;
+    }
+
+    if (action === 'mark_payout_paid') {
+      const batchRes = await sbFetch('/rest/v1/referral_payout_batches?id=eq.' + encodeURIComponent(batchId) + '&select=id,user_id,status,amount_ngn,referral_count,paid_at', { method: 'GET' });
+      if (!batchRes.ok) throw new Error('Could not load payout batch: ' + batchRes.status);
+      const batchRows = await batchRes.json();
+      const batch = batchRows && batchRows[0];
+      if (!batch) { res.status(404).json({ error: 'Payout batch not found' }); return; }
+      if (batch.status === 'cancelled') { res.status(409).json({ error: 'Cancelled payouts cannot be marked paid' }); return; }
+      const items = await fetchAllRows('/rest/v1/referral_payout_items?payout_id=eq.' + encodeURIComponent(batchId) + '&select=referral_id,amount_ngn');
+      if (items.length !== Number(batch.referral_count)) {
+        res.status(409).json({ error: 'Payout item count does not match the batch; payment was not recorded' });
+        return;
+      }
+      const referralIds = items.map(function(item) { return item.referral_id; });
+      const now = batch.paid_at || new Date().toISOString();
+      if (referralIds.length) {
+        const idsFilter = 'in.(' + referralIds.join(',') + ')';
+        const verifyRes = await sbFetch('/rest/v1/referrals?id=' + encodeURIComponent(idsFilter) + '&select=id', { method: 'GET' });
+        if (!verifyRes.ok) throw new Error('Could not verify payout referrals: ' + verifyRes.status);
+        const verified = await verifyRes.json();
+        if (!Array.isArray(verified) || verified.length !== referralIds.length) {
+          res.status(409).json({ error: 'Some reserved referrals are missing; payment was not recorded' });
+          return;
+        }
+        const referralPatch = await sbFetch('/rest/v1/referrals?id=' + encodeURIComponent(idsFilter), {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'paid', paid_at: now })
+        });
+        if (!referralPatch.ok) {
+          const errText = await referralPatch.text().catch(() => '');
+          throw new Error('Could not mark reserved referrals paid: ' + referralPatch.status + ': ' + errText.slice(0, 200));
+        }
+      }
+      if (batch.status !== 'paid') {
+        const batchPatch = await sbFetch('/rest/v1/referral_payout_batches?id=eq.' + encodeURIComponent(batchId) + '&status=neq.cancelled', {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'paid', paid_at: now })
+        });
+        if (!batchPatch.ok) {
+          const errText = await batchPatch.text().catch(() => '');
+          throw new Error('Referrals were marked paid, but batch update failed; retry this action to finish tracking: ' + batchPatch.status + ': ' + errText.slice(0, 200));
+        }
+      }
+      await writePayoutAudit(batch.user_id, 'payoutpaid_' + batch.id.replace(/-/g, ''), 'Referral payout paid',
+        'Admin confirmed manual payout of ₦' + batch.amount_ngn + ' for ' + batch.referral_count + ' referrals. Batch ' + batch.id + '.');
+      res.status(200).json({ ok: true, status: 'paid', paid_at: now });
       return;
     }
 
