@@ -1211,40 +1211,31 @@ function handleTouchEnd() {
           disableBtn(btnSignup, true);
           const supabase = getClient();
           if (!supabase) throw new Error('Supabase not initialized');
+          // Persist referral attribution in auth user metadata so it survives
+          // email verification, tab closure, and the later verified login.
+          var _signupRef = '';
+          try {
+            var _candidateRef = sessionStorage.getItem('qs_referrer_id') || '';
+            if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_candidateRef)) {
+              _signupRef = _candidateRef;
+            }
+          } catch (_) {}
           const { data, error } = await supabase.auth.signUp({
             email: email, password: pass,
-            options: { data: { full_name: name, business_name: business || null } }
+            options: { data: {
+              full_name: name,
+              business_name: business || null,
+              referral_id: _signupRef || null
+            } }
           });
           if (error) throw error;
           const user = data.user;
           const profile = { uid: user.id, name, businessName: business || null, email: user.email, createdAt: Date.now() };
           await setUserProfile(user.id, profile);
 
-          // ── Referral attribution ────────────────────────────────────────
-          // Consume the pending referral captured at boot or from catalog.js.
-          // Written once — never overwritten. Self-referral blocked here and
-          // at DB level (set_my_referrer RPC re-checks ref_id <> auth.uid()
-          // and only ever sets referred_by once — WHERE referred_by IS NULL —
-          // so this can't be re-attributed via a direct API call either).
-          try {
-            var _pendingRef = sessionStorage.getItem('qs_referrer_id');
-            if (
-              _pendingRef &&
-              /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_pendingRef) &&
-              _pendingRef !== user.id
-            ) {
-              const supabaseRef = getClient();
-              if (supabaseRef) {
-                // Routed through set_my_referrer RPC -- authenticated has no
-                // direct UPDATE grant on referred_by (profiles_authenticated_read
-                // is USING(true), so a plain column grant would let any
-                // logged-in user rewrite anyone's referred_by, not just their own).
-                await supabaseRef.rpc('set_my_referrer', { ref_id: _pendingRef });
-              }
-            }
-            sessionStorage.removeItem('qs_referrer_id');
-          } catch (_refErr) { errlog('referral attribution', _refErr); }
-          // ── End referral attribution ─────────────────────────────────────
+          // Referral ID is preserved in auth user metadata above and applied
+          // after email verification, when a valid authenticated session exists.
+
 
           showVerificationNotice(email);
           toast('Account created — verification email sent. Please verify before logging in.');
@@ -1515,6 +1506,35 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       if (appScreen) appScreen.style.display = 'none';
       showVerificationNotice(user.email);
       return;
+    }
+    // Apply signup referral only after the user is verified and authenticated.
+    // Keep metadata if the RPC fails so a later login can retry attribution.
+    try {
+      var _authRef = user.user_metadata && user.user_metadata.referral_id;
+      var _refMarker = 'qs_referral_attributed_' + user.id;
+      if (
+        _authRef &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_authRef) &&
+        _authRef !== user.id &&
+        localStorage.getItem(_refMarker) !== 'true'
+      ) {
+        const _refClient = getClient();
+        if (_refClient) {
+          const { error: _attribError } = await _refClient.rpc('set_my_referrer', { ref_id: _authRef });
+          if (_attribError) {
+            errlog('referral attribution', _attribError);
+          } else {
+            localStorage.setItem(_refMarker, 'true');
+            try {
+              if (sessionStorage.getItem('qs_referrer_id') === _authRef) {
+                sessionStorage.removeItem('qs_referrer_id');
+              }
+            } catch (_) {}
+          }
+        }
+      }
+    } catch (_refErr) {
+      errlog('referral attribution', _refErr);
     }
     localStorage.setItem('qs_session_active', 'true');
     localStorage.setItem('qs_last_user_id', user.id);
