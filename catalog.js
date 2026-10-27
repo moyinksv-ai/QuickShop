@@ -56,15 +56,14 @@
   if (!STORE_ID && !TOKEN) return; // not a catalog URL — do nothing
 
   /* ── 0b. REFERRAL CAPTURE ──────────────────────────────────────────────── */
-  // When a buyer lands on this catalog via the branding link (?ref=<UUID>),
-  // save the referrer's user_id to sessionStorage immediately — before any
-  // async work. sessionStorage persists across same-tab navigation (sign up
-  // form redirect) but dies with the tab, which is the correct scope.
-  // UUID validated here so garbage params never reach Supabase.
+  // Keep referral intent through catalog navigation, refreshes and PWA restarts.
+  // Only a well-formed UUID or short code replaces a previously pending click.
   (function () {
     try {
       var _refRaw = _p.get('ref') || '';
-      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_refRaw)) {
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_refRaw) ||
+          /^[0-9a-f]{16}$/i.test(_refRaw)) {
+        localStorage.setItem('qs_pending_referral', _refRaw);
         sessionStorage.setItem('qs_referrer_id', _refRaw);
       }
     } catch (_) {}
