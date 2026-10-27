@@ -12,6 +12,10 @@
   ],
   "rewrites": [
     {
+      "source": "/r/:code([0-9a-fA-F]{16})",
+      "destination": "/?ref=:code"
+    },
+    {
       "source": "/market",
       "destination": "/search.html"
     },
