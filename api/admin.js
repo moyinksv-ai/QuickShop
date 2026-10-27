@@ -201,7 +201,39 @@ module.exports = async function handler(req, res) {
         throw new Error('Supabase error ' + sbRes.status + ': ' + errText.slice(0, 300));
       }
       const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-      // Read the ledger after activation so the admin result reflects the DB trigger.
+      // Ensure the award exists even if this vendor was already active (in that case
+      // the false->true database trigger does not fire). The unique referred_id index
+      // makes this idempotent and prevents double awards.
+      const postProfileRes = await sbFetch('/rest/v1/profiles?id=eq.' + encodeURIComponent(vendorId) + '&select=id,referred_by', { method: 'GET' });
+      if (!postProfileRes.ok) {
+        const errText = await postProfileRes.text().catch(() => '');
+        throw new Error('Activated, but could not verify referral state: ' + postProfileRes.status + ': ' + errText.slice(0, 200));
+      }
+      const postProfiles = await postProfileRes.json();
+      const finalProfile = postProfiles && postProfiles[0];
+      if (finalProfile && finalProfile.referred_by && finalProfile.referred_by.toLowerCase() !== vendorId.toLowerCase()) {
+        const existingRes = await sbFetch('/rest/v1/referrals?referred_id=eq.' + encodeURIComponent(vendorId) + '&select=id', { method: 'GET' });
+        if (!existingRes.ok) {
+          const errText = await existingRes.text().catch(() => '');
+          throw new Error('Activated, but could not verify referral ledger: ' + existingRes.status + ': ' + errText.slice(0, 200));
+        }
+        const existingRows = await existingRes.json();
+        if (!Array.isArray(existingRows) || existingRows.length === 0) {
+          const insertRes = await sbFetch('/rest/v1/referrals', {
+            method: 'POST',
+            body: JSON.stringify({ referrer_id: finalProfile.referred_by, referred_id: vendorId, amount: 500, status: 'earned' }),
+          });
+          if (!insertRes.ok) {
+            const errText = await insertRes.text().catch(() => '');
+            // A concurrent activation may have inserted the same award. Verify before failing.
+            const verifyRes = await sbFetch('/rest/v1/referrals?referred_id=eq.' + encodeURIComponent(vendorId) + '&select=id', { method: 'GET' });
+            const verifyRows = verifyRes.ok ? await verifyRes.json() : [];
+            if (!Array.isArray(verifyRows) || verifyRows.length === 0) {
+              throw new Error('Activated, but referral award failed: ' + insertRes.status + ': ' + errText.slice(0, 200));
+            }
+          }
+        }
+      }
       const referralRes = await sbFetch('/rest/v1/referrals?referred_id=eq.' + encodeURIComponent(vendorId) + '&select=id,referrer_id,amount,status', { method: 'GET' });
       const referralRows = referralRes.ok ? await referralRes.json() : [];
       res.status(200).json({
