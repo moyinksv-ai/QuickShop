@@ -1252,31 +1252,7 @@ function handleTouchEnd() {
           const profile = { uid: user.id, name, businessName: business || null, email: user.email, createdAt: Date.now() };
           await setUserProfile(user.id, profile);
 
-          // ── Referral attribution ────────────────────────────────────────
-          // Consume the pending referral captured at boot or from catalog.js.
-          // Written once — never overwritten. Self-referral blocked here and
-          // at DB level (set_my_referrer RPC re-checks ref_id <> auth.uid()
-          // and only ever sets referred_by once — WHERE referred_by IS NULL —
-          // so this can't be re-attributed via a direct API call either).
-          try {
-            var _pendingRef = sessionStorage.getItem('qs_referrer_id');
-            if (
-              _pendingRef &&
-              /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_pendingRef) &&
-              _pendingRef !== user.id
-            ) {
-              const supabaseRef = getClient();
-              if (supabaseRef) {
-                // Routed through set_my_referrer RPC -- authenticated has no
-                // direct UPDATE grant on referred_by (profiles_authenticated_read
-                // is USING(true), so a plain column grant would let any
-                // logged-in user rewrite anyone's referred_by, not just their own).
-                await supabaseRef.rpc('set_my_referrer', { ref_id: _pendingRef });
-              }
-            }
-            sessionStorage.removeItem('qs_referrer_id');
-          } catch (_refErr) { errlog('referral attribution', _refErr); }
-          // ── End referral attribution ─────────────────────────────────────
+          // Keep the captured referral until authenticated attribution resolves it.
 
           showVerificationNotice(email);
           toast('Account created — verification email sent. Please verify before logging in.');
