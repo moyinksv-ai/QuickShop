@@ -7065,7 +7065,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         }
       }
     })();
-─
+    // ── End referral dashboard ────────────────────────────────────────────
 
     // Wire Share Catalog action button — calls share-catalog.js handleShareClick directly
     const actionShareBtn = settingsPanel.querySelector('#qs-action-share');
