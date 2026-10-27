@@ -80,6 +80,10 @@
     #loginScreen { display: none !important; }
     .qs-hidden { display: none !important; }
 
+    /* Auth and landing are mutually exclusive, including on refresh/startup. */
+    body.qs-show-auth #qs-landing { display: none !important; }
+    body:not(.qs-show-auth) #loginScreen { display: none !important; }
+
     body.qs-show-auth #loginScreen {
       display: flex   !important;
       flex-direction  : column !important;
