@@ -48,6 +48,8 @@ test('admin API keeps profiles visible when payment claims are absent or unavail
   assert.match(adminApiSource, /async function fetchPaymentClaims\(\)/);
   assert.match(adminApiSource, /const vendors = \(profiles \|\| \[\]\)\.map\(p => \(\{/);
   assert.match(adminApiSource, /has_payment_claim: claimsResult\.available \? Boolean\(latestClaimByUser\[p\.id\]\) : null/);
+  assert.match(adminApiSource, /fetchProfilePhoneNumbers\(\)/);
+  assert.match(adminApiSource, /phone_number: phoneMap\[p\.id\] \|\| p\.phone_number \|\| ''/);
   assert.match(adminApiSource, /paymentClaimsAvailable: claimsResult\.available/);
 });
 
