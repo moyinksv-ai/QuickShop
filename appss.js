@@ -1419,40 +1419,45 @@ function handleTouchEnd() {
       showResetForm();
     });
 
-    const btnLogout = $('btnLogout');
-    if (btnLogout) {
-      btnLogout.addEventListener('click', async function () {
-        // Sign out immediately. A missing/broken confirmation modal must never
-        // prevent the vendor from leaving their account.
-        const supabase = getClient();
-        let signOutError = null;
-        try {
-          if (supabase) {
-            const result = await supabase.auth.signOut({ scope: 'local' });
-            signOutError = result && result.error ? result.error : null;
-          }
-        } catch (e) {
-          signOutError = e;
-        } finally {
-          // Clear app-owned state and any persisted Supabase auth token as a fallback.
-          ['qs_session_active', 'qs_last_user_id', 'qs_user_cache'].forEach((key) => {
-            try { localStorage.removeItem(key); } catch (_) {}
-          });
-          try {
-            Object.keys(localStorage).forEach((key) => {
-              if (/^sb-.+-auth-token$/.test(key)) localStorage.removeItem(key);
-            });
-          } catch (_) {}
-          currentUser = null;
-          document.body.classList.remove('mode-app', 'qs-auth-pending');
-          document.body.classList.add('qs-show-auth');
-          if (signOutError) errlog('Supabase signout returned an error; local app session cleared', signOutError);
-          toast('Signed out');
-          // Reset the page so the logged-out screen is rebuilt from a clean state.
-          window.location.replace(window.location.pathname);
+    // The Sign Out button is created dynamically when the Settings panel renders.
+    // Delegate the click at document level so the handler exists before that button.
+    document.addEventListener('click', async function (event) {
+      const target = event.target;
+      const btnLogout = target && typeof target.closest === 'function'
+        ? target.closest('#btnLogout')
+        : null;
+      if (!btnLogout) return;
+
+      // Sign out immediately. A missing/broken confirmation modal must never
+      // prevent the vendor from leaving their account.
+      const supabase = getClient();
+      let signOutError = null;
+      try {
+        if (supabase) {
+          const result = await supabase.auth.signOut({ scope: 'local' });
+          signOutError = result && result.error ? result.error : null;
         }
-      });
-    }
+      } catch (e) {
+        signOutError = e;
+      } finally {
+        // Clear app-owned state and any persisted Supabase auth token as a fallback.
+        ['qs_session_active', 'qs_last_user_id', 'qs_user_cache'].forEach((key) => {
+          try { localStorage.removeItem(key); } catch (_) {}
+        });
+        try {
+          Object.keys(localStorage).forEach((key) => {
+            if (/^sb-.+-auth-token$/.test(key)) localStorage.removeItem(key);
+          });
+        } catch (_) {}
+        currentUser = null;
+        document.body.classList.remove('mode-app', 'qs-auth-pending');
+        document.body.classList.add('qs-show-auth');
+        if (signOutError) errlog('Supabase signout returned an error; local app session cleared', signOutError);
+        toast('Signed out');
+        // Reset the page so the logged-out screen is rebuilt from a clean state.
+        window.location.replace(window.location.pathname);
+      }
+    });
   }
 
   async function initAuth() {
