@@ -658,13 +658,25 @@ function handleTouchEnd() {
   function showLoginForm() { hideAllAuthForms(); const el = $('loginForm'); if (el) el.style.display = 'flex'; clearAuths(); }
   function showSignupForm() { hideAllAuthForms(); const el = $('signupForm'); if (el) el.style.display = 'flex'; clearAuths(); }
   function showResetForm() { hideAllAuthForms(); const el = $('resetForm'); if (el) el.style.display = 'flex'; clearAuths(); }
-  function showResetVerifyForm(email) { hideAllAuthForms(); _pendingResetEmail = email || ''; const el = $('resetVerifyForm'); if (el) el.style.display = 'flex'; }
+  function showResetVerifyForm(email) {
+    hideAllAuthForms();
+    _pendingResetEmail = email || '';
+    try {
+      if (_pendingResetEmail) localStorage.setItem('qs_pending_reset_email', _pendingResetEmail);
+    } catch (_) {}
+    const el = $('resetVerifyForm');
+    if (el) el.style.display = 'flex';
+  }
   function showVerificationNotice(email) {
     hideAllAuthForms();
+    const _verificationEmail = (email || (getUser() && getUser().email) || '').trim();
+    if (_verificationEmail) {
+      try { localStorage.setItem('qs_pending_verification_email', _verificationEmail); } catch (_) {}
+    }
     const el = $('verificationNotice');
     if (el) el.style.display = 'flex';
     const emailEl = $('verificationEmail');
-    if (emailEl) emailEl.textContent = email || (getUser() && getUser().email) || '';
+    if (emailEl) emailEl.textContent = _verificationEmail;
   }
   function showAuthLoading() { hideAllAuthForms(); const el = $('authLoading'); if (el) el.style.display = 'flex'; }
   function clearAuths() {
@@ -1289,6 +1301,7 @@ function handleTouchEnd() {
           if (!supabase) throw new Error('Supabase not initialized');
           const { error } = await supabase.auth.resetPasswordForEmail(email);
           if (error) throw error;
+          try { localStorage.setItem('qs_pending_reset_email', email); } catch (_) {}
           showResetVerifyForm(email);
           toast('6-digit code sent. Check your inbox.');
         } catch (e) {
@@ -1317,6 +1330,7 @@ function handleTouchEnd() {
           if (!email) { toast('Could not determine your email. Please try signing up again.', 'error'); return; }
           const { error } = await supabase.auth.resend({ type: 'signup', email });
           if (error) throw error;
+          try { localStorage.setItem('qs_pending_verification_email', email); } catch (_) {}
           toast('New 6-digit code sent. Check your inbox.');
         } catch (e) { errlog('resend verification error', e); toast('Failed to resend verification. Try again later.', 'error'); }
       });
@@ -1336,6 +1350,7 @@ function handleTouchEnd() {
           if (!supabase) throw new Error('Supabase not initialized');
           const { error } = await supabase.auth.verifyOtp({ email, token: code, type: 'signup' });
           if (error) throw error;
+          try { localStorage.removeItem('qs_pending_verification_email'); } catch (_) {}
           localStorage.setItem('qs_session_active', 'true');
           document.body.classList.add('mode-app');
           toast('Email verified! Welcome to QuickShop.');
@@ -1387,6 +1402,7 @@ function handleTouchEnd() {
           if (updateError) throw updateError;
           await supabase.auth.signOut();
           _pendingResetEmail = '';
+          try { localStorage.removeItem('qs_pending_reset_email'); } catch (_) {}
           toast('Password reset! Please sign in with your new password.');
           showLoginForm();
         } catch (e) {
@@ -1401,7 +1417,11 @@ function handleTouchEnd() {
     }
 
     const btnBackToResetEmail = $('btnBackToResetEmail');
-    if (btnBackToResetEmail) btnBackToResetEmail.addEventListener('click', showResetForm);
+    if (btnBackToResetEmail) btnBackToResetEmail.addEventListener('click', function () {
+      _pendingResetEmail = '';
+      try { localStorage.removeItem('qs_pending_reset_email'); } catch (_) {}
+      showResetForm();
+    });
 
     const btnLogout = $('btnLogout');
     if (btnLogout) {
@@ -1586,7 +1606,21 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     const loginScreen = $('loginScreen'), appScreen = document.querySelector('.app');
     if (loginScreen) loginScreen.style.display = 'flex';
     if (appScreen) appScreen.style.display = 'none';
-    showLoginForm();
+    // Restore interrupted auth steps after cold reload/app eviction on mobile.
+    // Low-memory browsers can discard the page while the user switches to Gmail.
+    let _pendingVerificationEmail = '';
+    let _savedResetEmail = '';
+    try {
+      _pendingVerificationEmail = (localStorage.getItem('qs_pending_verification_email') || '').trim();
+      _savedResetEmail = (localStorage.getItem('qs_pending_reset_email') || '').trim();
+    } catch (_) {}
+    if (_pendingVerificationEmail) {
+      showVerificationNotice(_pendingVerificationEmail);
+    } else if (_savedResetEmail) {
+      showResetVerifyForm(_savedResetEmail);
+    } else {
+      showLoginForm();
+    }
     setBottomNavVisible(false);
     const userEmailEl = $('userEmail'), userDisplayNameEl = $('userDisplayName');
     if (userEmailEl) userEmailEl.textContent = '—';
