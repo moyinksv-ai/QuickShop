@@ -39,6 +39,7 @@ test('admin account filters use unique DOM IDs and do not mislabel unknown payme
   assert.match(adminHtml, /\[v\.business_name, v\.name, v\.email, v\.id\]/);
   assert.doesNotMatch(adminHtml, /Never paid/);
   assert.match(adminHtml, /v\.has_payment_claim !== false/);
+  assert.match(adminHtml, /Object\.assign\(vendor, data\.patch \|\| \{\}\);[\s\S]*?applyFilters\(\);[\s\S]*?updateStats\(\);/);
   assert.match(adminHtml, /created\.getFullYear\(\)/);
   assert.equal(countMatches(adminHtml, /addMeta\('Created '/g), 1, 'creation timestamp should appear once per card');
 });
