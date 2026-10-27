@@ -894,6 +894,8 @@
         appendPayoutBadge(badges, payoutMoney(v.activeBatch.amount_ngn) + ' · ' + (v.activeBatch.referral_count || 0) + ' referrals', 'badge-founder');
       } else if (v.ready) {
         appendPayoutBadge(badges, 'Payout ready · ₦5,000', 'badge-active');
+      } else if (v.eligibleCount >= 10) {
+        appendPayoutBadge(badges, 'Payout amount needs review', 'badge-pending');
       } else if (v.eligibleCount >= 7) {
         appendPayoutBadge(badges, 'Approaching payout', 'badge-pending');
       }
@@ -979,7 +981,9 @@
             if (!phone) { toast('No usable WhatsApp number saved for this vendor.', 'error'); return; }
             var message = v.ready
               ? 'Hello ' + (v.name || v.business_name || 'there') + ', you have reached the QuickShop referral payout threshold of 10 eligible referrals and your ₦5,000 manual payout is being prepared. Please reply with your bank name, account name, and account number. Thank you.'
-              : 'Hello ' + (v.name || v.business_name || 'there') + ', you are approaching the QuickShop referral payout threshold (' + v.eligibleCount + '/10 eligible referrals). To help us prepare your manual payout, please reply with your bank name, account name, and account number. Thank you.';
+              : v.eligibleCount >= 10
+                ? 'Hello ' + (v.name || v.business_name || 'there') + ', you have reached 10 eligible QuickShop referrals. We are reviewing the referral reward total before confirming your manual payout. Please reply with your bank name, account name, and account number so we can prepare if approved. Thank you.'
+                : 'Hello ' + (v.name || v.business_name || 'there') + ', you are approaching the QuickShop referral payout threshold (' + v.eligibleCount + '/10 eligible referrals). To help us prepare your manual payout, please reply with your bank name, account name, and account number. Thank you.';
             var waUrl = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(message);
             var waWindow = window.open(waUrl, '_blank', 'noopener,noreferrer');
             if (waWindow) { try { waWindow.opener = null; } catch (_) {} }
