@@ -6988,29 +6988,6 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     window.addEventListener('online',  window._qsBadgeOnline);
     window.addEventListener('offline', window._qsBadgeOffline);
 
-    const btnLogout = $('btnLogout');
-    if (btnLogout) {
-      btnLogout.addEventListener('click', async function () {
-        const confirmed = await showConfirm({
-          title: 'Sign Out',
-          message: 'Are you sure you want to sign out?',
-          okText: 'Sign Out',
-          okDanger: true
-        });
-        if (!confirmed) return;
-        try {
-          const supabase = getClient();
-          if (supabase) await supabase.auth.signOut();
-          localStorage.removeItem('qs_session_active');
-          document.body.classList.remove('mode-app');
-          toast('Signed out');
-          window.location.reload();
-        } catch (err) {
-          errlog('Logout error', err);
-          toast('Sign out failed', 'error');
-        }
-      });
-    }
     } catch(e) { errlog('renderSettingsPanel', e); const el=$('settingsPanel'); if(el){el.innerHTML='';const d=document.createElement('div');d.className='small';d.style.cssText='padding:20px;text-align:center;';d.textContent='Settings failed to load — pull to refresh.';el.appendChild(d);} }
   }
 
