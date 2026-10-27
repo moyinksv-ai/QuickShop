@@ -78,6 +78,13 @@
     .filter-field select, .filter-field input { width: 100%; min-width: 0; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--border-hi); background: var(--lift); color: var(--text); font: inherit; color-scheme: dark; }
     #filter-summary { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
     @media (max-width: 700px) { #filters { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-left: 12px; margin-right: 12px; } #stats { grid-template-columns: repeat(2,1fr); padding-left: 12px; padding-right: 12px; } #vendor-list { padding-left: 12px; padding-right: 12px; } }
+    /* ACCOUNT FILTERS */
+    #filters { margin: 16px 20px 0; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .filter-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+    .filter-field label { color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+    .filter-field select, .filter-field input { width: 100%; min-width: 0; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--border-hi); background: var(--lift); color: var(--text); font: inherit; color-scheme: dark; }
+    #filter-summary { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
+    @media (max-width: 700px) { #filters { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-left: 12px; margin-right: 12px; } #stats { grid-template-columns: repeat(2,1fr); padding-left: 12px; padding-right: 12px; } #vendor-list { padding-left: 12px; padding-right: 12px; } }
     /* VENDOR LIST */
     #vendor-list { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
     .vendor-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
@@ -200,6 +207,14 @@
     <div class="filter-field"><label for="created-from">Created from</label><input id="created-from" type="date" /></div>
     <div class="filter-field"><label for="created-to">Created to</label><input id="created-to" type="date" /></div>
     <div class="filter-field"><label for="account-search">Search account</label><input id="account-search" type="search" placeholder="Store, name, or email" /></div>
+    <div id="filter-summary" aria-live="polite">Showing all accounts</div>
+  </section>
+
+  <section id="filters" aria-label="Filter accounts">
+    <div class="filter-field"><label for="status-filter">Account status</label><select id="status-filter"><option value="all">All accounts</option><option value="active">Active stores</option><option value="inactive">Inactive stores</option><option value="founders">Founders</option><option value="never">Never activated / no recorded payment</option></select></div>
+    <div class="filter-field"><label for="created-from">Created from</label><input id="created-from" type="date" /></div>
+    <div class="filter-field"><label for="created-to">Created to</label><input id="created-to" type="date" /></div>
+    <div class="filter-field"><label for="account-search">Search account</label><input id="account-search" type="search" placeholder="Email, store name, or name" /></div>
     <div id="filter-summary" aria-live="polite">Showing all accounts</div>
   </section>
 
@@ -561,6 +576,10 @@
       s.textContent = text;
       metaEl.appendChild(s);
       hasMeta = true;
+    }
+    if (v.created_at) {
+      var created = new Date(v.created_at);
+      if (!isNaN(created.getTime())) addMeta('Created ' + created.toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }), '');
     }
     if (v.created_at) {
       var created = new Date(v.created_at);
