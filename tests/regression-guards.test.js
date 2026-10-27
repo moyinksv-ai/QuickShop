@@ -169,7 +169,7 @@ test('admin referral payout dashboard shows cycle progress, WhatsApp account req
   assert.match(adminHtml, /Please reply with your bank name, account name, and account number/);
   assert.match(adminHtml, /apiCall\('request_payout_details'/);
   assert.match(adminHtml, /apiCall\('mark_payout_paid'/);
-  assert.match(adminHtml, /eligibleCount >= 10 && counts\.eligibleAmount >= 5000 && !activeBatch/);
+  assert.match(adminHtml, /eligibleCount >= 10 && counts\\.eligibleAmount === 5000 && !activeBatch/);
   assert.match(adminHtml, /items\.forEach\(function\(item\) \{ reserved\[item\.referral_id\] = true; \}\)/);
 });
 
