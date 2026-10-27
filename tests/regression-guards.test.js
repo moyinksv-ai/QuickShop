@@ -26,7 +26,7 @@ test('vendor sign-out supports the Settings button being rendered after startup'
     'Do not bind the vendor Sign Out handler only during startup before Settings exists'
   );
   assert.match(appSource, /supabase\.auth\.signOut\(\{ scope: 'local' \}\)/);
-  assert.match(appSource, /localStorage\.removeItem\('qs_session_active'\)/);
+  assert.match(appSource, /\['qs_session_active', 'qs_last_user_id', 'qs_user_cache'\]/);
   assert.match(appSource, /window\.location\.replace\(window\.location\.pathname\)/);
 });
 
