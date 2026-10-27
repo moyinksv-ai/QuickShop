@@ -111,6 +111,37 @@
     .action-result.visible { opacity: 1; }
     .action-result.error { color: var(--red); }
 
+
+    /* REFERRAL PAYOUTS */
+    #payout-section { margin: 16px 20px 0; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+    .payout-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+    .payout-title { font-size:15px; font-weight:800; }
+    .payout-subtitle { color:var(--muted); font-size:11px; margin-top:3px; }
+    #payout-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-bottom:12px; }
+    .payout-stat { background:var(--lift); border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
+    .payout-stat strong { display:block; font-size:20px; line-height:1.2; }
+    .payout-stat span { display:block; color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.05em; margin-top:4px; }
+    #payout-list { display:flex; flex-direction:column; gap:8px; }
+    .payout-card { border:1px solid var(--border-hi); border-radius:11px; overflow:hidden; }
+    .payout-main { padding:12px; display:flex; gap:12px; align-items:flex-start; }
+    .payout-vendor { flex:1; min-width:0; }
+    .payout-vendor-name { font-weight:800; font-size:13px; overflow-wrap:anywhere; }
+    .payout-vendor-meta { color:var(--muted); font-size:11px; overflow-wrap:anywhere; margin-top:2px; }
+    .payout-badges { display:flex; flex-wrap:wrap; gap:5px; margin-top:7px; }
+    .payout-progress { height:7px; background:var(--lift); border-radius:99px; overflow:hidden; margin-top:10px; }
+    .payout-progress > span { display:block; height:100%; background:var(--amber); border-radius:99px; }
+    .payout-progress.ready > span { background:var(--green); }
+    .payout-count { font-size:12px; font-weight:800; white-space:nowrap; text-align:right; }
+    .payout-count small { display:block; color:var(--muted); font-size:10px; font-weight:600; margin-top:3px; }
+    .payout-actions { border-top:1px solid var(--border); padding:9px 12px; display:flex; gap:7px; align-items:center; flex-wrap:wrap; }
+    .btn-payout { background:var(--green); color:#fff; }
+    .btn-whatsapp { background:#166534; color:#fff; }
+    .btn-paid { background:var(--violet-bg); color:var(--violet); border:1px solid var(--violet-bd); }
+    .btn-muted { background:var(--lift); color:var(--muted); border:1px solid var(--border-hi); }
+    .payout-empty { padding:18px 10px; color:var(--muted); font-size:12px; text-align:center; }
+    .payout-error { color:var(--red); }
+    @media (max-width:700px) { #payout-section { margin-left:12px; margin-right:12px; padding:12px; } #payout-summary { grid-template-columns:repeat(3,minmax(0,1fr)); } .payout-stat { padding:9px 8px; } .payout-stat strong { font-size:17px; } .payout-main { padding:10px; } }
+
     /* STATES */
     #loading-state, #empty-state, #error-state { padding: 60px 20px; text-align: center; color: var(--muted); line-height: 1.7; }
     .spinner { width: 28px; height: 28px; border: 2.5px solid var(--border-hi); border-top-color: var(--green); border-radius: 50%; animation: spin 0.7s linear infinite; margin: 0 auto 12px; }
@@ -194,6 +225,19 @@
     <div class="stat-card stat-red">   <div class="stat-val" id="s-lapsed">&#8212;</div><div class="stat-lbl">Lapsed</div></div>
     <div class="stat-card stat-amber"> <div class="stat-val" id="s-expiring">&#8212;</div><div class="stat-lbl">Expiring &le;7d</div></div>
   </div>
+
+  <section id="payout-section" aria-label="Referral payout preparation">
+    <div class="payout-heading">
+      <div><div class="payout-title">Referral payouts</div><div class="payout-subtitle">10 eligible referrals unlock ₦5,000. Reserved referrals do not count toward another cycle.</div></div>
+      <button id="payout-refresh-btn" class="btn btn-muted" type="button">Refresh payouts</button>
+    </div>
+    <div id="payout-summary" aria-live="polite">
+      <div class="payout-stat"><strong id="ps-near">—</strong><span>Approaching (7–9)</span></div>
+      <div class="payout-stat"><strong id="ps-ready">—</strong><span>Ready / requested</span></div>
+      <div class="payout-stat"><strong id="ps-pending">—</strong><span>Awaiting payment</span></div>
+    </div>
+    <div id="payout-list"><div class="payout-empty">Sign in to load referral payout data.</div></div>
+  </section>
 
   <section id="filters" aria-label="Filter accounts">
     <div class="filter-field"><label for="status-filter">Account status</label><select id="status-filter"><option value="all">All accounts</option><option value="active">Active stores</option><option value="inactive">Inactive stores</option><option value="founders">Founders</option><option value="never">Never activated / no recorded payment</option></select></div>
@@ -398,6 +442,7 @@
         document.getElementById('gate').style.display = 'none';
         document.getElementById('app').classList.add('visible');
         renderVendors(result.data.vendors || []);
+        loadReferralPayouts();
       }
     }).catch(function(err) {
       gateErr.textContent = 'Error: ' + (err.message || 'Check connection and try again.');
@@ -430,6 +475,7 @@
   ['status-filter', 'created-from', 'created-to', 'account-search'].forEach(function(id) {
     var el = document.getElementById(id);
     el.addEventListener(id === 'account-search' ? 'input' : 'change', applyFilters);
+    if (id === 'account-search') el.addEventListener('input', renderReferralPayouts);
   });
 
   // ── TOAST ──────────────────────────────────────────────────────────────
@@ -720,6 +766,232 @@
       (!_paymentClaimsAvailable ? ' · Payment-claim data unavailable; no-recorded-payment filter disabled' : '');
   }
 
+
+  // ── REFERRAL PAYOUT PREPARATION ────────────────────────────────────────
+  var _payoutData = { referrals: [], batches: [], items: [] };
+  var _payoutLoading = false;
+
+  function payoutMoney(value) {
+    return '₦' + Number(value || 0).toLocaleString('en-NG');
+  }
+
+  function payoutDate(value) {
+    if (!value) return '—';
+    var d = new Date(value);
+    return isNaN(d.getTime()) ? '—' : d.toLocaleString([], { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+  }
+
+  function normalizeWhatsAppPhone(phone) {
+    var digits = String(phone || '').replace(/\D/g, '');
+    if (digits.indexOf('00') === 0) digits = digits.slice(2);
+    if (digits.indexOf('0') === 0 && digits.length === 11) digits = '234' + digits.slice(1);
+    else if (digits.length === 10) digits = '234' + digits;
+    return digits;
+  }
+
+  function payoutVendorRows() {
+    var referrals = _payoutData.referrals || [];
+    var batches = _payoutData.batches || [];
+    var items = _payoutData.items || [];
+    var reserved = Object.create(null);
+    items.forEach(function(item) { reserved[item.referral_id] = true; });
+    var byVendor = Object.create(null);
+    referrals.forEach(function(r) {
+      if (!byVendor[r.referrer_id]) byVendor[r.referrer_id] = { eligibleCount:0, eligibleAmount:0, earnedCount:0, paidCount:0 };
+      var row = byVendor[r.referrer_id];
+      if (r.status === 'paid') row.paidCount++;
+      if (r.status === 'earned') {
+        row.earnedCount++;
+        if (!reserved[r.id]) {
+          row.eligibleCount++;
+          row.eligibleAmount += Number(r.amount || 0);
+        }
+      }
+    });
+    var batchByVendor = Object.create(null);
+    batches.forEach(function(b) {
+      if (!batchByVendor[b.user_id]) batchByVendor[b.user_id] = [];
+      batchByVendor[b.user_id].push(b);
+    });
+    return _vendors.map(function(v) {
+      var counts = byVendor[v.id] || { eligibleCount:0, eligibleAmount:0, earnedCount:0, paidCount:0 };
+      var vendorBatches = (batchByVendor[v.id] || []).slice().sort(function(a,b) {
+        return new Date(b.requested_at || 0) - new Date(a.requested_at || 0);
+      });
+      var activeBatch = vendorBatches.find(function(b) { return b.status === 'pending' || b.status === 'details_requested'; }) || null;
+      var lastBatch = vendorBatches[0] || null;
+      return Object.assign({}, v, counts, {
+        activeBatch: activeBatch,
+        lastBatch: lastBatch,
+        cycleCount: Math.min(counts.eligibleCount, 10),
+        ready: counts.eligibleCount >= 10 && counts.eligibleAmount >= 5000 && !activeBatch
+      });
+    });
+  }
+
+  function appendPayoutBadge(parent, label, cls) {
+    var el = document.createElement('span');
+    el.className = 'badge ' + cls;
+    el.textContent = label;
+    parent.appendChild(el);
+  }
+
+  function renderReferralPayouts() {
+    var rows = payoutVendorRows();
+    var near = rows.filter(function(v) { return !v.activeBatch && v.eligibleCount >= 7 && v.eligibleCount <= 9; }).length;
+    var ready = rows.filter(function(v) { return v.ready || v.activeBatch; }).length;
+    var pending = (_payoutData.batches || []).filter(function(b) { return b.status === 'pending' || b.status === 'details_requested'; }).length;
+    document.getElementById('ps-near').textContent = near;
+    document.getElementById('ps-ready').textContent = ready;
+    document.getElementById('ps-pending').textContent = pending;
+
+    var search = (document.getElementById('account-search').value || '').trim().toLowerCase();
+    rows = rows.filter(function(v) {
+      return [v.business_name, v.name, v.email, v.id].join(' ').toLowerCase().indexOf(search) !== -1;
+    }).filter(function(v) {
+      return v.eligibleCount > 0 || v.activeBatch || v.lastBatch;
+    }).sort(function(a,b) {
+      function rank(v) { return v.activeBatch ? 0 : v.ready ? 1 : v.eligibleCount >= 7 ? 2 : 3; }
+      return rank(a)-rank(b) || b.eligibleCount-a.eligibleCount || String(a.business_name || a.name || '').localeCompare(String(b.business_name || b.name || ''));
+    });
+
+    var list = document.getElementById('payout-list');
+    list.innerHTML = '';
+    if (!_vendors.length) {
+      list.innerHTML = '<div class="payout-empty">No vendor accounts loaded.</div>';
+      return;
+    }
+    if (!rows.length) {
+      list.innerHTML = '<div class="payout-empty">No earned referrals or payout history match this search yet.</div>';
+      return;
+    }
+
+    rows.forEach(function(v) {
+      var card = document.createElement('article');
+      card.className = 'payout-card';
+      var main = document.createElement('div');
+      main.className = 'payout-main';
+      var info = document.createElement('div');
+      info.className = 'payout-vendor';
+      var name = document.createElement('div');
+      name.className = 'payout-vendor-name';
+      name.textContent = v.business_name || v.name || 'Unnamed vendor';
+      var meta = document.createElement('div');
+      meta.className = 'payout-vendor-meta';
+      meta.textContent = (v.email || v.id) + (v.phone_number ? ' · ' + v.phone_number : '');
+      var badges = document.createElement('div');
+      badges.className = 'payout-badges';
+      if (v.activeBatch) {
+        appendPayoutBadge(badges, v.activeBatch.status === 'details_requested' ? 'Account details requested' : 'Payout requested', 'badge-pending');
+        appendPayoutBadge(badges, payoutMoney(v.activeBatch.amount_ngn) + ' · ' + (v.activeBatch.referral_count || 0) + ' referrals', 'badge-founder');
+      } else if (v.ready) {
+        appendPayoutBadge(badges, 'Payout ready · ₦5,000', 'badge-active');
+      } else if (v.eligibleCount >= 7) {
+        appendPayoutBadge(badges, 'Approaching payout', 'badge-pending');
+      }
+      if (v.lastBatch && v.lastBatch.status === 'paid') appendPayoutBadge(badges, 'Last payout paid ' + payoutDate(v.lastBatch.paid_at), 'badge-active');
+      if (v.lastBatch && v.lastBatch.status === 'cancelled') appendPayoutBadge(badges, 'Previous payout cancelled', 'badge-lapsed');
+
+      var count = document.createElement('div');
+      count.className = 'payout-count';
+      count.textContent = v.cycleCount + '/10';
+      var small = document.createElement('small');
+      small.textContent = v.eligibleCount >= 10 ? (v.eligibleAmount === 5000 ? '₦5,000 available' : payoutMoney(v.eligibleAmount) + ' · review needed') : (10 - v.cycleCount) + ' more';
+      count.appendChild(small);
+      info.appendChild(name);
+      info.appendChild(meta);
+      info.appendChild(badges);
+      var progress = document.createElement('div');
+      progress.className = 'payout-progress' + (v.ready ? ' ready' : '');
+      var bar = document.createElement('span');
+      bar.style.width = Math.min(100, (v.cycleCount / 10) * 100) + '%';
+      progress.appendChild(bar);
+      info.appendChild(progress);
+      main.appendChild(info);
+      main.appendChild(count);
+      card.appendChild(main);
+
+      var actions = document.createElement('div');
+      actions.className = 'payout-actions';
+      if (v.activeBatch && v.activeBatch.status !== 'paid' && v.activeBatch.status !== 'cancelled') {
+        var wa = document.createElement('button');
+        wa.type = 'button';
+        wa.className = 'btn btn-whatsapp';
+        wa.textContent = v.activeBatch.status === 'details_requested' ? 'Open WhatsApp again' : 'Request account details · WhatsApp';
+        wa.disabled = !normalizeWhatsAppPhone(v.phone_number);
+        wa.addEventListener('click', function() {
+          var phone = normalizeWhatsAppPhone(v.phone_number);
+          if (!phone) { toast('No usable WhatsApp number saved for this vendor.', 'error'); return; }
+          var message = 'Hello ' + (v.name || v.business_name || 'there') + ', your QuickShop referral payout of ' + payoutMoney(v.activeBatch.amount_ngn) + ' is being prepared. Please reply with your bank name, account name, and account number so we can process your payout manually. Thank you.';
+          var waUrl = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(message);
+          // Open synchronously from the click to avoid mobile popup blockers.
+          var waWindow = window.open(waUrl, '_blank', 'noopener,noreferrer');
+          if (waWindow) { try { waWindow.opener = null; } catch (_) {} }
+          apiCall('request_payout_details', { batchId: v.activeBatch.id }).then(function() {
+            toast('Account-details request logged for ' + (v.business_name || v.name || 'vendor'), 'success');
+            loadReferralPayouts();
+          }).catch(function(err) {
+            toast('WhatsApp opened, but tracking update failed: ' + (err.message || 'unknown'), 'error');
+            loadReferralPayouts();
+          });
+        });
+        actions.appendChild(wa);
+        var paid = document.createElement('button');
+        paid.type = 'button';
+        paid.className = 'btn btn-paid';
+        paid.textContent = 'Mark payout paid';
+        paid.addEventListener('click', function() {
+          showConfirm('Confirm manual payout', 'Only confirm after you have actually sent ' + payoutMoney(v.activeBatch.amount_ngn) + ' to this vendor. This will mark the batch and its referrals as paid.', false).then(function(ok) {
+            if (!ok) return;
+            paid.disabled = true;
+            apiCall('mark_payout_paid', { batchId: v.activeBatch.id }).then(function() {
+              toast('Payout marked paid. Next referral cycle is clear.', 'success');
+              loadReferralPayouts();
+            }).catch(function(err) {
+              paid.disabled = false;
+              toast('Could not record payment: ' + (err.message || 'unknown'), 'error');
+            });
+          });
+        });
+        actions.appendChild(paid);
+        var requestedAt = document.createElement('span');
+        requestedAt.className = 'vendor-email';
+        requestedAt.textContent = 'Requested ' + payoutDate(v.activeBatch.requested_at) + (v.activeBatch.details_requested_at ? ' · Details requested ' + payoutDate(v.activeBatch.details_requested_at) : '');
+        actions.appendChild(requestedAt);
+      } else if (v.ready) {
+        var readyNote = document.createElement('span');
+        readyNote.className = 'vendor-email';
+        readyNote.textContent = 'Ready once the vendor submits a payout request in the vendor app.';
+        actions.appendChild(readyNote);
+      } else {
+        var cycleNote = document.createElement('span');
+        cycleNote.className = 'vendor-email';
+        cycleNote.textContent = v.eligibleCount + ' eligible referrals · ' + v.paidCount + ' already paid historically';
+        actions.appendChild(cycleNote);
+      }
+      card.appendChild(actions);
+      list.appendChild(card);
+    });
+  }
+
+  function loadReferralPayouts() {
+    if (!_adminToken || _payoutLoading) return;
+    _payoutLoading = true;
+    var list = document.getElementById('payout-list');
+    list.innerHTML = '<div class="payout-empty"><div class="spinner"></div>Loading referral payout data…</div>';
+    apiCall('get_referral_payouts').then(function(data) {
+      _payoutData = {
+        referrals: Array.isArray(data.referrals) ? data.referrals : [],
+        batches: Array.isArray(data.batches) ? data.batches : [],
+        items: Array.isArray(data.items) ? data.items : []
+      };
+      renderReferralPayouts();
+    }).catch(function(err) {
+      list.innerHTML = '<div class="payout-empty payout-error">Failed to load payout data: ' + String(err.message || 'unknown').replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>';
+      toast('Payout data unavailable: ' + (err.message || ''), 'error');
+    }).finally(function() { _payoutLoading = false; });
+  }
+
   // ── LOAD VENDORS ───────────────────────────────────────────────────────
   function loadVendors() {
     var listEl = document.getElementById('vendor-list');
@@ -735,6 +1007,7 @@
   }
 
   document.getElementById('refresh-btn').addEventListener('click', loadVendors);
+  document.getElementById('payout-refresh-btn').addEventListener('click', loadReferralPayouts);
 
 })();
 </script>
