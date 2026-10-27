@@ -6747,11 +6747,12 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     renderCategoryEditor();
 
     // ── Referral dashboard — async, non-blocking ──────────────────────────
-    // Queries the referrals and payout_requests tables for the current user.
-    // Computes totals from ledger rows — never from stored counters.
-    // Renders into #qs-referral-body which is already in the DOM above.
+    // Uses the payout-batch ledger as the source of truth. Reserved referrals
+    // are excluded from the next milestone without deleting historical rows.
+    // Payout requests use the database RPC so batch creation + referral
+    // reservation happen atomically and concurrent clicks cannot double-claim.
     (async function renderReferralDashboard() {
-      const _u  = getUser();
+      const _u = getUser();
       const _sb = getClient();
       const _body = settingsPanel.querySelector('#qs-referral-body');
       if (!_u || !_sb || !_body) return;
@@ -6759,90 +6760,128 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       const MILESTONE = 10;
       const AMOUNT_PER = 500;
 
+      function makeRequestId() {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+          return window.crypto.randomUUID();
+        }
+        const bytes = new Uint8Array(16);
+        if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+          window.crypto.getRandomValues(bytes);
+        } else {
+          for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+        }
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+        return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' +
+          hex.slice(16, 20) + '-' + hex.slice(20);
+      }
+
+      async function ensurePayoutActivityLog(batch) {
+        if (!batch || !batch.id) return null;
+        // Stable ID makes logging idempotent. The dashboard retries this upsert
+        // on later opens if the payout RPC succeeded but this separate write failed.
+        const logId = 'payoutreq_' + String(batch.id).replace(/-/g, '');
+        const amount = Number(batch.amount_ngn) || 0;
+        const count = Number(batch.referral_count) || MILESTONE;
+        const logRow = {
+          id: logId,
+          user_id: _u.id,
+          action: 'Payout requested',
+          details: 'Referral payout requested: ₦' + amount.toLocaleString('en-NG') +
+            ' for ' + count + ' referrals. Request ID: ' + batch.id,
+          performed_by: String(_u.email || _u.user_metadata && (_u.user_metadata.full_name || _u.user_metadata.name) || _u.id).slice(0, 100),
+          created_at: batch.requested_at || new Date().toISOString()
+        };
+        const { error } = await _sb.from('audit_logs').upsert(logRow, {
+          onConflict: 'id',
+          ignoreDuplicates: true
+        });
+        if (error) throw error;
+        return logRow;
+      }
+
       try {
-        // Fetch referrals + pending payout requests in parallel
-        const [refResult, payResult] = await Promise.all([
+        const [refResult, itemResult, batchResult] = await Promise.all([
           _sb.from('referrals')
-            .select('id, status, created_at')
+            .select('id, status, amount, created_at')
             .eq('referrer_id', _u.id),
-          _sb.from('payout_requests')
-            .select('id, status')
+          _sb.from('referral_payout_items')
+            .select('referral_id'),
+          _sb.from('referral_payout_batches')
+            .select('id, status, referral_count, amount_ngn, requested_at, paid_at')
             .eq('user_id', _u.id)
-            .eq('status', 'pending')
+            .order('requested_at', { ascending: false })
         ]);
 
-        const rows       = refResult.data  || [];
-        const pendingPay = payResult.data  || [];
+        if (refResult.error) throw refResult.error;
+        if (itemResult.error) throw itemResult.error;
+        if (batchResult.error) throw batchResult.error;
 
-        const earned = rows.filter(r => r.status === 'earned').length;
-        const paid   = rows.filter(r => r.status === 'paid').length;
-        const total  = rows.length;
+        const rows = Array.isArray(refResult.data) ? refResult.data : [];
+        const reservedIds = new Set((itemResult.data || []).map(item => item.referral_id));
+        const batches = Array.isArray(batchResult.data) ? batchResult.data : [];
+        const eligible = rows.filter(r => r.status === 'earned' && !reservedIds.has(r.id));
+        const pendingBatch = batches.find(b => b.status === 'pending' || b.status === 'details_requested') || null;
+        const eligibleCount = eligible.length;
+        const earningsNgn = eligible.reduce((sum, row) => sum + (Number(row.amount) || AMOUNT_PER), 0);
+        const canRequest = eligibleCount >= MILESTONE && !pendingBatch;
 
-        const earningsNgn  = earned * AMOUNT_PER;
-        const hasPending   = pendingPay.length > 0;
-        const canRequest   = total >= MILESTONE && !hasPending;
+        // Repair any missed activity-log write from a prior successful request.
+        // One deterministic audit-log ID per batch prevents duplicate entries.
+        for (const batch of batches) {
+          try { await ensurePayoutActivityLog(batch); }
+          catch (logError) { errlog('payout activity log sync failed', logError); }
+        }
 
-        // Build UI — Obsidian Glass style, dark, 16px radius, glassmorphism
         _body.innerHTML = '';
 
-        // Stats row
         const stats = document.createElement('div');
         stats.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;';
 
         function statCard(label, value, accent) {
-          const c = document.createElement('div');
-          c.style.cssText = [
-            'background:var(--card-glass);',
-            'border:1px solid var(--border-glass);',
-            'border-radius:16px;padding:14px 16px;',
-          ].join('');
-          const v = document.createElement('div');
-          v.style.cssText = 'font-size:22px;font-weight:800;color:' + accent + ';letter-spacing:-0.5px;margin-bottom:3px;';
-          v.textContent = value;
-          const l = document.createElement('div');
-          l.style.cssText = 'font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;';
-          l.textContent = label;
-          c.appendChild(v);
-          c.appendChild(l);
-          return c;
+          const card = document.createElement('div');
+          card.style.cssText = 'background:var(--card-glass);border:1px solid var(--border-glass);border-radius:16px;padding:14px 16px;';
+          const valueEl = document.createElement('div');
+          valueEl.style.cssText = 'font-size:22px;font-weight:800;color:' + accent + ';letter-spacing:-0.5px;margin-bottom:3px;';
+          valueEl.textContent = value;
+          const labelEl = document.createElement('div');
+          labelEl.style.cssText = 'font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;';
+          labelEl.textContent = label;
+          card.appendChild(valueEl);
+          card.appendChild(labelEl);
+          return card;
         }
 
-        stats.appendChild(statCard('Referrals', total + ' / ' + MILESTONE, '#a78bfa'));
-        stats.appendChild(statCard('Earnings',  '₦' + earningsNgn.toLocaleString('en-NG'), '#10b981'));
+        stats.appendChild(statCard('Current cycle', eligibleCount + ' / ' + MILESTONE, '#a78bfa'));
+        stats.appendChild(statCard('Available balance', '₦' + earningsNgn.toLocaleString('en-NG'), '#10b981'));
         _body.appendChild(stats);
 
-        // Progress bar toward milestone
         const progressWrap = document.createElement('div');
         progressWrap.style.cssText = 'margin-bottom:14px;';
         const progressLbl = document.createElement('div');
         progressLbl.style.cssText = 'display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-bottom:6px;font-weight:600;';
         const progressLeft = document.createElement('span');
-        progressLeft.textContent = total >= MILESTONE
+        progressLeft.textContent = eligibleCount >= MILESTONE
           ? '🎉 Milestone reached!'
-          : (MILESTONE - total) + ' more referral' + (MILESTONE - total === 1 ? '' : 's') + ' to unlock payout';
+          : (MILESTONE - eligibleCount) + ' more eligible referral' + (MILESTONE - eligibleCount === 1 ? '' : 's') + ' to unlock payout';
         const progressRight = document.createElement('span');
-        progressRight.textContent = total + ' / ' + MILESTONE;
+        progressRight.textContent = eligibleCount + ' / ' + MILESTONE;
         progressLbl.appendChild(progressLeft);
         progressLbl.appendChild(progressRight);
 
         const track = document.createElement('div');
         track.style.cssText = 'height:6px;background:var(--border-glass);border-radius:99px;overflow:hidden;';
         const fill = document.createElement('div');
-        const fillPct = Math.min(100, Math.round((total / MILESTONE) * 100));
+        const fillPct = Math.min(100, Math.round((eligibleCount / MILESTONE) * 100));
         fill.style.cssText = 'height:100%;width:' + fillPct + '%;border-radius:99px;background:linear-gradient(90deg,#7c3aed,#a78bfa);transition:width 0.4s ease;';
         track.appendChild(fill);
         progressWrap.appendChild(progressLbl);
         progressWrap.appendChild(track);
         _body.appendChild(progressWrap);
 
-        // Referral link row — shows their unique referral URL
         const linkRow = document.createElement('div');
-        linkRow.style.cssText = [
-          'background:rgba(99,102,241,0.07);',
-          'border:1px solid rgba(99,102,241,0.18);',
-          'border-radius:12px;padding:12px 14px;',
-          'margin-bottom:14px;',
-        ].join('');
+        linkRow.style.cssText = 'background:rgba(99,102,241,0.07);border:1px solid rgba(99,102,241,0.18);border-radius:12px;padding:12px 14px;margin-bottom:14px;';
         const linkLabel = document.createElement('div');
         linkLabel.style.cssText = 'font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;';
         linkLabel.textContent = 'Your Referral Link';
@@ -6850,13 +6889,11 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         linkVal.style.cssText = 'font-size:12px;color:#a78bfa;word-break:break-all;line-height:1.5;cursor:pointer;';
         let refUrl = window.location.origin + '/?ref=' + encodeURIComponent(_u.id);
         try {
-          const { data: _shortCode, error: _shortCodeError } = await _sb.rpc('get_my_referral_code');
-          if (!_shortCodeError && typeof _shortCode === 'string' && /^[0-9a-f]{16}$/.test(_shortCode)) {
-            refUrl = window.location.origin + '/r/' + _shortCode;
+          const { data: shortCode, error: shortCodeError } = await _sb.rpc('get_my_referral_code');
+          if (!shortCodeError && typeof shortCode === 'string' && /^[0-9a-f]{16}$/.test(shortCode)) {
+            refUrl = window.location.origin + '/r/' + shortCode;
           }
-        } catch (_) {
-          // Existing UUID referral URLs remain a functional fallback.
-        }
+        } catch (_) {}
         linkVal.textContent = refUrl;
         linkVal.title = 'Tap to copy';
         linkVal.addEventListener('click', function () {
@@ -6872,26 +6909,21 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         linkRow.appendChild(linkVal);
         _body.appendChild(linkRow);
 
-        // Payout button
         const payBtn = document.createElement('button');
         payBtn.type = 'button';
-        payBtn.style.cssText = [
-          'width:100%;padding:13px;border-radius:16px;border:0;',
-          'font-size:14px;font-weight:700;cursor:pointer;',
-          'transition:opacity 0.2s,transform 0.1s;',
-          canRequest
+        payBtn.style.cssText = 'width:100%;padding:13px;border-radius:16px;border:0;font-size:14px;font-weight:700;cursor:pointer;transition:opacity 0.2s,transform 0.1s;' +
+          (canRequest
             ? 'background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;box-shadow:0 6px 20px rgba(124,58,237,0.3);'
-            : 'background:var(--card-glass);color:var(--text-muted);cursor:not-allowed;border:1px solid var(--border-glass);',
-        ].join('');
+            : 'background:var(--card-glass);color:var(--text-muted);cursor:not-allowed;border:1px solid var(--border-glass);');
 
-        if (hasPending) {
+        if (pendingBatch) {
           payBtn.textContent = '⏳ Payout Request Pending';
           payBtn.disabled = true;
-        } else if (total < MILESTONE) {
-          payBtn.textContent = 'Request Payout (need ' + MILESTONE + ' referrals)';
+        } else if (eligibleCount < MILESTONE) {
+          payBtn.textContent = 'Request Payout (need ' + (MILESTONE - eligibleCount) + ' more referrals)';
           payBtn.disabled = true;
         } else {
-          payBtn.textContent = '💸 Request Payout — ₦' + (earningsNgn).toLocaleString('en-NG');
+          payBtn.textContent = '💸 Request Payout — ₦' + earningsNgn.toLocaleString('en-NG');
           payBtn.disabled = false;
         }
 
@@ -6899,23 +6931,51 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
           if (!canRequest) return;
           payBtn.disabled = true;
           payBtn.textContent = 'Submitting…';
+          let submitted = false;
           try {
-            // Anti-fraud: check for existing pending request server-side before inserting
-            const { data: existingPending } = await _sb
-              .from('payout_requests')
-              .select('id')
-              .eq('user_id', _u.id)
-              .eq('status', 'pending');
-            if (existingPending && existingPending.length > 0) {
-              toast('You already have a pending payout request.', 'warning');
-              payBtn.textContent = '⏳ Payout Request Pending';
-              return;
+            const clientRequestId = makeRequestId();
+            const { data, error } = await _sb.rpc('qs_request_referral_payout_v2', {
+              p_client_request_id: clientRequestId
+            });
+            if (error) throw error;
+            const batch = Array.isArray(data) ? data[0] : data;
+            if (!batch || !batch.id) throw new Error('Payout request returned no batch details');
+            submitted = true;
+
+            // Request RPC reserves this cycle's 10 referrals atomically.
+            // A separate audit write is retried on next dashboard open if needed.
+            try {
+              await ensurePayoutActivityLog(batch);
+            } catch (logError) {
+              errlog('payout request saved but activity log sync failed', logError);
+              toast('Payout requested; activity log will retry syncing.', 'warning');
             }
-            const { error: insErr } = await _sb
-              .from('payout_requests')
-              .insert({ user_id: _u.id, status: 'pending' });
-            if (insErr) throw insErr;
-            toast('Payout requested ✓ We\'ll process it shortly.', 'success');
+
+            toast('Payout requested ✓ We’ll process it shortly.', 'success');
+            // Rebuild from server state so reserved referrals no longer count.
+            // A page reload is intentionally avoided to preserve the vendor's view.
+            const [freshRefs, freshItems, freshBatches] = await Promise.all([
+              _sb.from('referrals').select('id,status,amount,created_at').eq('referrer_id', _u.id),
+              _sb.from('referral_payout_items').select('referral_id'),
+              _sb.from('referral_payout_batches').select('id,status,referral_count,amount_ngn,requested_at,paid_at').eq('user_id', _u.id).order('requested_at', { ascending: false })
+            ]);
+            if (freshRefs.error) throw freshRefs.error;
+            if (freshItems.error) throw freshItems.error;
+            if (freshBatches.error) throw freshBatches.error;
+            // Re-enter this isolated dashboard renderer with fresh authoritative state.
+            // Avoid recursive render by updating the progress and button in-place.
+            const reserved = new Set((freshItems.data || []).map(item => item.referral_id));
+            const remaining = (freshRefs.data || []).filter(r => r.status === 'earned' && !reserved.has(r.id));
+            const remainingCount = remaining.length;
+            const remainingAmount = remaining.reduce((sum, row) => sum + (Number(row.amount) || AMOUNT_PER), 0);
+            const statValues = stats.querySelectorAll('div');
+            if (statValues[0]) statValues[0].textContent = remainingCount + ' / ' + MILESTONE;
+            if (statValues[2]) statValues[2].textContent = '₦' + remainingAmount.toLocaleString('en-NG');
+            progressLeft.textContent = remainingCount >= MILESTONE
+              ? '🎉 Milestone reached!'
+              : (MILESTONE - remainingCount) + ' more eligible referral' + (MILESTONE - remainingCount === 1 ? '' : 's') + ' to unlock payout';
+            progressRight.textContent = remainingCount + ' / ' + MILESTONE;
+            fill.style.width = Math.min(100, Math.round((remainingCount / MILESTONE) * 100)) + '%';
             payBtn.textContent = '⏳ Payout Request Pending';
             payBtn.disabled = true;
             payBtn.style.background = 'var(--card-glass)';
@@ -6924,19 +6984,57 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
             payBtn.style.border = '1px solid var(--border-glass)';
           } catch (e) {
             errlog('payout request failed', e);
-            toast('Failed to submit request: ' + (e.message || 'unknown'), 'error');
-            payBtn.disabled = false;
-            payBtn.textContent = '💸 Request Payout — ₦' + earningsNgn.toLocaleString('en-NG');
+            if (!submitted) {
+              toast('Failed to submit request: ' + (e.message || 'unknown'), 'error');
+              payBtn.disabled = false;
+              payBtn.textContent = '💸 Request Payout — ₦' + earningsNgn.toLocaleString('en-NG');
+            } else {
+              // The request already succeeded; do not present it as a failed request
+              // just because refreshing the display encountered a network error.
+              toast('Payout requested; refresh to update cycle progress.', 'warning');
+            }
           }
         });
 
         _body.appendChild(payBtn);
 
-        // Sub-note
         const note = document.createElement('div');
         note.style.cssText = 'font-size:11px;color:var(--text-muted);text-align:center;margin-top:8px;line-height:1.5;';
-        note.textContent = 'Share your referral link. Every vendor who signs up and gets activated earns you ₦500.';
+        note.textContent = 'Every vendor who signs up and gets activated earns you ₦500. Referrals included in a payout request are reserved and do not count toward your next cycle.';
         _body.appendChild(note);
+
+        // Compact request history makes the activity visible even if the separate
+        // audit-log sync is temporarily unavailable.
+        if (batches.length) {
+          const historyWrap = document.createElement('div');
+          historyWrap.style.cssText = 'margin-top:16px;';
+          const historyTitle = document.createElement('div');
+          historyTitle.style.cssText = 'font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;';
+          historyTitle.textContent = 'Payout activity';
+          historyWrap.appendChild(historyTitle);
+          batches.slice(0, 5).forEach(batch => {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--border-glass);font-size:12px;';
+            const left = document.createElement('div');
+            const label = document.createElement('div');
+            label.style.cssText = 'font-weight:700;color:var(--text-primary);';
+            label.textContent = batch.status === 'paid' ? 'Payout paid' :
+              batch.status === 'cancelled' ? 'Payout cancelled' :
+              batch.status === 'details_requested' ? 'Payout details requested' : 'Payout requested';
+            const date = document.createElement('div');
+            date.style.cssText = 'color:var(--text-muted);margin-top:3px;';
+            date.textContent = batch.requested_at ? new Date(batch.requested_at).toLocaleString() : '';
+            left.appendChild(label);
+            left.appendChild(date);
+            const amount = document.createElement('div');
+            amount.style.cssText = 'font-weight:700;white-space:nowrap;color:var(--text-primary);';
+            amount.textContent = '₦' + (Number(batch.amount_ngn) || 0).toLocaleString('en-NG');
+            row.appendChild(left);
+            row.appendChild(amount);
+            historyWrap.appendChild(row);
+          });
+          _body.appendChild(historyWrap);
+        }
 
       } catch (e) {
         errlog('renderReferralDashboard', e);
@@ -6949,7 +7047,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         }
       }
     })();
-    // ── End referral dashboard ────────────────────────────────────────────
+─
 
     // Wire Share Catalog action button — calls share-catalog.js handleShareClick directly
     const actionShareBtn = settingsPanel.querySelector('#qs-action-share');
