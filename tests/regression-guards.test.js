@@ -54,7 +54,7 @@ test('admin API keeps profiles visible when payment claims are absent or unavail
 
 test('application and admin scripts parse without syntax errors', () => {
   const vm = require('node:vm');
-  assert.doesNotThrow(() => new vm.Script(appSource), 'appss.js syntax');
+  assert.doesNotThrow(() => new vm.Script(appSource, { filename: 'appss.js' }), 'appss.js syntax');
   assert.doesNotThrow(() => new vm.Script(adminApiSource), 'api/admin.js syntax');
   const inlineScripts = Array.from(adminHtml.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi))
     .filter(match => !/\bsrc\s*=/.test(match[1]) && match[2].trim());
