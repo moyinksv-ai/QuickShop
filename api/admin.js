@@ -119,6 +119,18 @@ async function fetchAllRows(path) {
   throw new Error('Payout data exceeds the safe pagination limit; refusing an incomplete payout view');
 }
 
+async function fetchProfilePhoneNumbers() {
+  try {
+    const rows = await fetchAllRows('/rest/v1/profiles?select=id,phone_number');
+    const map = {};
+    rows.forEach(profile => { map[profile.id] = profile.phone_number || ''; });
+    return map;
+  } catch (_) {
+    // Phone enrichment is optional; keep the admin account list usable if this query fails.
+    return {};
+  }
+}
+
 async function writePayoutAudit(userId, id, action, details) {
   const res = await sbFetch('/rest/v1/audit_logs?on_conflict=id', {
     method: 'POST',
@@ -201,10 +213,11 @@ module.exports = async function handler(req, res) {
   // ── Route actions ──────────────────────────────────────────────────────
   try {
     if (action === 'get_vendors') {
-      const [profilesRes, emailMap, claimsResult] = await Promise.all([
+      const [profilesRes, emailMap, claimsResult, phoneMap] = await Promise.all([
         sbFetch('/rest/v1/rpc/admin_get_vendors', { method: 'POST', body: '{}' }),
         fetchAuthEmails(),
         fetchPaymentClaims(),
+        fetchProfilePhoneNumbers(),
       ]);
 
       if (!profilesRes.ok) {
@@ -235,6 +248,7 @@ module.exports = async function handler(req, res) {
       const vendors = (profiles || []).map(p => ({
         ...p,
         email: emailMap[p.id] || p.email || '',
+        phone_number: phoneMap[p.id] || p.phone_number || '',
         payment_claim: claimsResult.available ? (latestClaimByUser[p.id] || null) : null,
         has_payment_claim: claimsResult.available ? Boolean(latestClaimByUser[p.id]) : null,
       }));
