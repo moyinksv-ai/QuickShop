@@ -706,6 +706,41 @@
     ? window.__QS_SUPABASE.client : null;
   if (!sb) console.error('[QS Market] Supabase client not ready.');
 
+  // Capture referral context before marketplace navigation strips query parameters.
+  // UUID links remain supported; short codes resolve through the restricted RPC.
+  (function captureMarketReferral() {
+    try {
+      var params = new URLSearchParams(window.location.search);
+      var raw = (params.get('ref') || '').trim();
+      var pathMatch = window.location.pathname.match(/^\\/r\\/([0-9a-f]{16})\\/?$/i);
+      if (!raw && pathMatch) raw = pathMatch[1];
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) {
+        localStorage.setItem('qs_pending_referrer_id', raw.toLowerCase());
+        localStorage.removeItem('qs_pending_referral_candidate');
+        try { sessionStorage.setItem('qs_referrer_id', raw.toLowerCase()); } catch (_) {}
+      } else if (/^[0-9a-f]{16}$/i.test(raw)) {
+        localStorage.setItem('qs_pending_referral_candidate', raw.toLowerCase());
+      }
+    } catch (_) {}
+  })();
+
+  (async function resolveMarketReferral() {
+    if (!sb) return;
+    try {
+      var candidate = localStorage.getItem('qs_pending_referral_candidate') || '';
+      if (!/^[0-9a-f]{16}$/i.test(candidate)) return;
+      var result = await sb.rpc('resolve_referral_code', { p_code: candidate });
+      if (result.error || localStorage.getItem('qs_pending_referral_candidate') !== candidate) return;
+      var id = typeof result.data === 'string' ? result.data :
+        (Array.isArray(result.data) ? result.data[0] : null);
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id || '')) {
+        localStorage.setItem('qs_pending_referrer_id', id.toLowerCase());
+        try { sessionStorage.setItem('qs_referrer_id', id.toLowerCase()); } catch (_) {}
+      }
+      localStorage.removeItem('qs_pending_referral_candidate');
+    } catch (e) { console.warn('[QS Market] Referral code lookup will retry on the next visit.'); }
+  })();
+
   // ── DOM refs ──────────────────────────────────────────────────────────────
   var input           = document.getElementById('qs-search-input');
   var clearBtn        = document.getElementById('qs-clear-btn');
