@@ -7067,7 +7067,10 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
           _body.innerHTML = '';
           const errDiv = document.createElement('div');
           errDiv.style.cssText = 'font-size:12px;color:var(--text-muted);padding:8px 0;';
-          errDiv.textContent = 'Could not load referral data. Check your connection.';
+          const permissionFailure = e && (e.code === '42501' || /permission denied/i.test(String(e.message || '')));
+          errDiv.textContent = permissionFailure
+            ? 'Referral payout access is not configured correctly. Please contact support.'
+            : 'Could not load referral data. Please refresh and try again.';
           _body.appendChild(errDiv);
         }
       }
