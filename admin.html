@@ -78,13 +78,6 @@
     .filter-field select, .filter-field input { width: 100%; min-width: 0; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--border-hi); background: var(--lift); color: var(--text); font: inherit; color-scheme: dark; }
     #filter-summary { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
     @media (max-width: 700px) { #filters { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-left: 12px; margin-right: 12px; } #stats { grid-template-columns: repeat(2,1fr); padding-left: 12px; padding-right: 12px; } #vendor-list { padding-left: 12px; padding-right: 12px; } }
-    /* ACCOUNT FILTERS */
-    #filters { margin: 16px 20px 0; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-    .filter-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-    .filter-field label { color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
-    .filter-field select, .filter-field input { width: 100%; min-width: 0; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--border-hi); background: var(--lift); color: var(--text); font: inherit; color-scheme: dark; }
-    #filter-summary { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
-    @media (max-width: 700px) { #filters { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-left: 12px; margin-right: 12px; } #stats { grid-template-columns: repeat(2,1fr); padding-left: 12px; padding-right: 12px; } #vendor-list { padding-left: 12px; padding-right: 12px; } }
     /* VENDOR LIST */
     #vendor-list { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
     .vendor-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
@@ -201,14 +194,6 @@
     <div class="stat-card stat-red">   <div class="stat-val" id="s-lapsed">&#8212;</div><div class="stat-lbl">Lapsed</div></div>
     <div class="stat-card stat-amber"> <div class="stat-val" id="s-expiring">&#8212;</div><div class="stat-lbl">Expiring &le;7d</div></div>
   </div>
-
-  <section id="filters" aria-label="Filter accounts">
-    <div class="filter-field"><label for="status-filter">Account status</label><select id="status-filter"><option value="all">All accounts</option><option value="active">Active stores</option><option value="inactive">Inactive stores</option><option value="founders">Founders</option><option value="never">Never activated (verify payment)</option></select></div>
-    <div class="filter-field"><label for="created-from">Created from</label><input id="created-from" type="date" /></div>
-    <div class="filter-field"><label for="created-to">Created to</label><input id="created-to" type="date" /></div>
-    <div class="filter-field"><label for="account-search">Search account</label><input id="account-search" type="search" placeholder="Store, name, or email" /></div>
-    <div id="filter-summary" aria-live="polite">Showing all accounts</div>
-  </section>
 
   <section id="filters" aria-label="Filter accounts">
     <div class="filter-field"><label for="status-filter">Account status</label><select id="status-filter"><option value="all">All accounts</option><option value="active">Active stores</option><option value="inactive">Inactive stores</option><option value="founders">Founders</option><option value="never">Never activated / no recorded payment</option></select></div>
@@ -360,7 +345,7 @@
         gateInput.value = '';
         document.getElementById('gate').style.display = 'none';
         document.getElementById('app').classList.add('visible');
-        renderVendors(result.data.vendors || []);
+        renderVendors(result.data.vendors || [], result.data.paymentClaimsAvailable);
       }
     }).catch(function(err) {
       gateErr.textContent = 'Error: ' + (err.message || 'unknown');
@@ -479,6 +464,7 @@
 
   // ── STATE ──────────────────────────────────────────────────────────────
   var _vendors = [];
+  var _paymentClaimsAvailable = true;
 
   // ── HELPERS ────────────────────────────────────────────────────────────
   function daysFromNow(isoStr) {
@@ -551,10 +537,25 @@
       b.textContent = text;
       return b;
     }
-    if (v.is_founder)             badgesEl.appendChild(mkBadge('\u2B50 Founder', 'badge-founder'));
-    if (v.is_active)              badgesEl.appendChild(mkBadge('\u25CF Active',  'badge-active'));
-    else if (v.subscription_expires) badgesEl.appendChild(mkBadge('\u25CF Lapsed',  'badge-lapsed'));
-    else                          badgesEl.appendChild(mkBadge('\u25CB Never paid','badge-pending'));
+    if (v.is_founder) badgesEl.appendChild(mkBadge('\u2B50 Founder', 'badge-founder'));
+    if (v.is_active) {
+      badgesEl.appendChild(mkBadge('\u25CF Active', 'badge-active'));
+    } else if (!_paymentClaimsAvailable) {
+      badgesEl.appendChild(mkBadge('Payment status unavailable', 'badge-pending'));
+    } else if (v.payment_claim) {
+      var claimStatus = String(v.payment_claim.status || '').toLowerCase();
+      var claimLabel = {
+        pending: 'Claim pending',
+        approved: 'Claim approved',
+        rejected: 'Claim rejected',
+        cancelled: 'Claim cancelled'
+      }[claimStatus] || 'Payment claim recorded';
+      badgesEl.appendChild(mkBadge(claimLabel, 'badge-pending'));
+    } else if (v.subscription_expires) {
+      badgesEl.appendChild(mkBadge('\u25CF Lapsed', 'badge-lapsed'));
+    } else {
+      badgesEl.appendChild(mkBadge('Awaiting payment confirmation', 'badge-pending'));
+    }
 
     infoEl.appendChild(nameEl);
     infoEl.appendChild(emailEl);
@@ -576,10 +577,6 @@
       s.textContent = text;
       metaEl.appendChild(s);
       hasMeta = true;
-    }
-    if (v.created_at) {
-      var created = new Date(v.created_at);
-      if (!isNaN(created.getTime())) addMeta('Created ' + created.toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }), '');
     }
     if (v.created_at) {
       var created = new Date(v.created_at);
@@ -664,8 +661,14 @@
   }
 
   // ── RENDER VENDOR LIST ─────────────────────────────────────────────────
-  function renderVendors(vendors) {
+  function renderVendors(vendors, paymentClaimsAvailable) {
     _vendors = Array.isArray(vendors) ? vendors : [];
+    _paymentClaimsAvailable = paymentClaimsAvailable !== false;
+    var neverOption = document.querySelector('#status-filter option[value="never"]');
+    if (neverOption) neverOption.disabled = !_paymentClaimsAvailable;
+    if (!_paymentClaimsAvailable && document.getElementById('status-filter').value === 'never') {
+      document.getElementById('status-filter').value = 'all';
+    }
     updateStats();
     applyFilters();
   }
@@ -679,10 +682,16 @@
       if (status === 'active' && !v.is_active) return false;
       if (status === 'inactive' && v.is_active) return false;
       if (status === 'founders' && !v.is_founder) return false;
-      if (status === 'never' && (v.is_active || v.is_founder || v.subscription_expires)) return false;
+      // A missing claim is only meaningful when the claims query succeeded.
+      if (status === 'never' && (!_paymentClaimsAvailable || v.is_active || v.is_founder || v.subscription_expires || v.has_payment_claim !== false)) return false;
       if (from || to) {
         if (!v.created_at) return false;
-        var createdDay = new Date(v.created_at).toISOString().slice(0, 10);
+        var created = new Date(v.created_at);
+        if (isNaN(created.getTime())) return false;
+        // Match the local calendar date shown on the account card, not UTC's date.
+        var createdDay = created.getFullYear() + '-' +
+          String(created.getMonth() + 1).padStart(2, '0') + '-' +
+          String(created.getDate()).padStart(2, '0');
         if (from && createdDay < from) return false;
         if (to && createdDay > to) return false;
       }
@@ -699,7 +708,9 @@
     } else {
       shown.forEach(function(v) { listEl.appendChild(renderCard(v)); });
     }
-    document.getElementById('filter-summary').textContent = 'Showing ' + shown.length + ' of ' + _vendors.length + ' accounts';
+    document.getElementById('filter-summary').textContent =
+      'Showing ' + shown.length + ' of ' + _vendors.length + ' accounts' +
+      (!_paymentClaimsAvailable ? ' · Payment-claim data unavailable; no-recorded-payment filter disabled' : '');
   }
 
   // ── LOAD VENDORS ───────────────────────────────────────────────────────
@@ -707,7 +718,7 @@
     var listEl = document.getElementById('vendor-list');
     listEl.innerHTML = '<div id="loading-state"><div class="spinner"></div>Loading vendors\u2026</div>';
     apiCall('get_vendors').then(function(data) {
-      renderVendors(data.vendors || []);
+      renderVendors(data.vendors || [], data.paymentClaimsAvailable);
     }).catch(function(err) {
       listEl.innerHTML = '<div id="error-state">Failed to load vendors.<br><small>' +
         String(err.message || 'Unknown error').replace(/&/g,'&amp;').replace(/</g,'&lt;') +
