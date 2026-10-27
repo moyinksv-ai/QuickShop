@@ -659,6 +659,8 @@ function handleTouchEnd() {
   function showSignupForm() { hideAllAuthForms(); const el = $('signupForm'); if (el) el.style.display = 'flex'; clearAuths(); }
   function showResetForm() { hideAllAuthForms(); const el = $('resetForm'); if (el) el.style.display = 'flex'; clearAuths(); }
   function showResetVerifyForm(email) {
+    // Keep the auth surface visible after cold reloads, including standalone PWAs.
+    document.body.classList.add('qs-auth-pending', 'qs-show-auth');
     hideAllAuthForms();
     _pendingResetEmail = email || '';
     try {
@@ -668,6 +670,9 @@ function handleTouchEnd() {
     if (el) el.style.display = 'flex';
   }
   function showVerificationNotice(email) {
+    // The CSS intentionally hides #loginScreen unless qs-show-auth is present.
+    // Restore both classes so the landing page stays hidden and the OTP panel is visible.
+    document.body.classList.add('qs-auth-pending', 'qs-show-auth');
     hideAllAuthForms();
     const _verificationEmail = (email || (getUser() && getUser().email) || '').trim();
     if (_verificationEmail) {
