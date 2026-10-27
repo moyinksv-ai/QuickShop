@@ -55,17 +55,16 @@
 
   if (!STORE_ID && !TOKEN) return; // not a catalog URL — do nothing
 
-  /* ── 0b. REFERRAL CAPTURE ──────────────────────────────────────────────── */
-  // When a buyer lands on this catalog via the branding link (?ref=<UUID>),
-  // save the referrer's user_id to sessionStorage immediately — before any
-  // async work. sessionStorage persists across same-tab navigation (sign up
-  // form redirect) but dies with the tab, which is the correct scope.
-  // UUID validated here so garbage params never reach Supabase.
+  /* ── 0b. PERSISTENT REFERRAL CAPTURE ──────────────────────────────────── */
   (function () {
     try {
-      var _refRaw = _p.get('ref') || '';
+      var _refRaw = (_p.get('ref') || '').trim();
       if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_refRaw)) {
-        sessionStorage.setItem('qs_referrer_id', _refRaw);
+        localStorage.setItem('qs_pending_referrer_id', _refRaw.toLowerCase());
+        localStorage.removeItem('qs_pending_referral_candidate');
+        try { sessionStorage.setItem('qs_referrer_id', _refRaw.toLowerCase()); } catch (_) {}
+      } else if (/^[0-9a-f]{16}$/i.test(_refRaw)) {
+        localStorage.setItem('qs_pending_referral_candidate', _refRaw.toLowerCase());
       }
     } catch (_) {}
   })();
@@ -2645,6 +2644,25 @@
       );
       return;
     }
+
+    // Resolve a short code without ever exposing the private code mapping table.
+    // Compare the candidate again after the network call so stale responses cannot
+    // overwrite a more recent referral click.
+    try {
+      var _candidateCode = localStorage.getItem('qs_pending_referral_candidate') || '';
+      if (/^[0-9a-f]{16}$/i.test(_candidateCode)) {
+        var _resolvedCode = await client.rpc('resolve_referral_code', { p_code: _candidateCode });
+        if (!_resolvedCode.error && localStorage.getItem('qs_pending_referral_candidate') === _candidateCode) {
+          var _resolvedId = typeof _resolvedCode.data === 'string' ? _resolvedCode.data :
+            (Array.isArray(_resolvedCode.data) ? _resolvedCode.data[0] : null);
+          if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_resolvedId || '')) {
+            localStorage.setItem('qs_pending_referrer_id', _resolvedId.toLowerCase());
+            try { sessionStorage.setItem('qs_referrer_id', _resolvedId.toLowerCase()); } catch (_) {}
+          }
+          localStorage.removeItem('qs_pending_referral_candidate');
+        }
+      }
+    } catch (e) { console.warn('[QS Catalog] Referral code lookup will retry on the next visit.', e); }
 
     // ── Store resolution + data fetch ──────────────────────────────────────
     // Fast path: qs_get_store RPC — 1 round trip, resolves slug/UUID and

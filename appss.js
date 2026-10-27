@@ -63,16 +63,26 @@ function initApp() {
   const IS_PROD = window.location.hostname !== 'localhost' && !window.location.hostname.includes('127.0.0.1');
   const log = IS_PROD ? () => {} : (...a) => console.log('[QS]', ...a);
 
-  // ── Referral capture ─────────────────────────────────────────────────────
-  // If the user arrived via a catalog's branding link (?ref=<UUID>), capture
-  // the referrer's user_id into sessionStorage immediately at boot so it
-  // survives navigation between Login ↔ Signup tabs. Consumed once at signup
-  // then cleared. UUID-validated here to prevent garbage data reaching the DB.
+  // Referral capture is persistent across refreshes, tab changes and PWA restarts.
+  // A new valid UUID/code supersedes the previous pending referral; invalid codes do not.
   (function captureReferral() {
     try {
-      var _refParam = new URLSearchParams(window.location.search).get('ref');
-      if (_refParam && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_refParam)) {
-        sessionStorage.setItem('qs_referrer_id', _refParam);
+      var _params = new URLSearchParams(window.location.search);
+      var _raw = (_params.get('ref') || '').trim();
+      var _pathMatch = window.location.pathname.match(/^\/r\/([0-9a-f]{16})\/?$/i);
+      if (!_raw && _pathMatch) _raw = _pathMatch[1];
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_raw)) {
+        localStorage.setItem('qs_pending_referrer_id', _raw.toLowerCase());
+        localStorage.removeItem('qs_pending_referral_candidate');
+        try { sessionStorage.setItem('qs_referrer_id', _raw.toLowerCase()); } catch (_) {}
+      } else if (/^[0-9a-f]{16}$/i.test(_raw)) {
+        localStorage.setItem('qs_pending_referral_candidate', _raw.toLowerCase());
+      }
+      // Migrate older sessions that only had the tab-scoped key.
+      var _legacy = sessionStorage.getItem('qs_referrer_id');
+      if (!localStorage.getItem('qs_pending_referrer_id') &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_legacy || '')) {
+        localStorage.setItem('qs_pending_referrer_id', _legacy.toLowerCase());
       }
     } catch (_) {}
   })();
@@ -319,6 +329,47 @@ function initApp() {
   // the object before appss.js can write to it. currentUser is the
   // authoritative source — set by handleAuthUser on every auth event.
   const getUser = () => currentUser;
+
+  const REFERRER_KEY = 'qs_pending_referrer_id';
+  const REFERRAL_CANDIDATE_KEY = 'qs_pending_referral_candidate';
+  const REFERRER_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  async function resolvePendingReferralCode() {
+    let candidate = '';
+    try { candidate = localStorage.getItem(REFERRAL_CANDIDATE_KEY) || ''; } catch (_) {}
+    if (!/^[0-9a-f]{16}$/i.test(candidate)) return null;
+    let client = getClient();
+    if (!client) {
+      const ready = await waitForSupabaseReady(1500);
+      client = ready && ready.client;
+    }
+    if (!client) return null;
+    let result;
+    try {
+      result = await client.rpc('resolve_referral_code', { p_code: candidate });
+    } catch (e) {
+      errlog('referral code lookup', e);
+      return null; // Preserve the candidate so a later visit can retry.
+    }
+    if (result.error) {
+      errlog('referral code lookup', result.error);
+      return null; // Preserve the candidate so a later visit can retry.
+    }
+    // An older network response must never overwrite a newer click.
+    try {
+      if (localStorage.getItem(REFERRAL_CANDIDATE_KEY) !== candidate) return null;
+      const resolved = typeof result.data === 'string' ? result.data :
+        (Array.isArray(result.data) ? result.data[0] : null);
+      if (REFERRER_UUID_RE.test(resolved || '') && (!currentUser || resolved !== currentUser.id)) {
+        localStorage.setItem(REFERRER_KEY, resolved.toLowerCase());
+        try { sessionStorage.setItem('qs_referrer_id', resolved.toLowerCase()); } catch (_) {}
+        localStorage.removeItem(REFERRAL_CANDIDATE_KEY);
+        return resolved.toLowerCase();
+      }
+      // Invalid or self-referral: discard only this candidate; keep any earlier valid pending referral.
+      localStorage.removeItem(REFERRAL_CANDIDATE_KEY);
+    } catch (_) {}
+    return null;
+  }
 
   const LOCAL_KEY_PREFIX = 'quickshop_stable_v1_';
   let currentUser = null;
@@ -658,13 +709,30 @@ function handleTouchEnd() {
   function showLoginForm() { hideAllAuthForms(); const el = $('loginForm'); if (el) el.style.display = 'flex'; clearAuths(); }
   function showSignupForm() { hideAllAuthForms(); const el = $('signupForm'); if (el) el.style.display = 'flex'; clearAuths(); }
   function showResetForm() { hideAllAuthForms(); const el = $('resetForm'); if (el) el.style.display = 'flex'; clearAuths(); }
-  function showResetVerifyForm(email) { hideAllAuthForms(); _pendingResetEmail = email || ''; const el = $('resetVerifyForm'); if (el) el.style.display = 'flex'; }
-  function showVerificationNotice(email) {
+  function showResetVerifyForm(email) {
+    // Keep the auth surface visible after cold reloads, including standalone PWAs.
+    document.body.classList.add('qs-auth-pending', 'qs-show-auth');
     hideAllAuthForms();
+    _pendingResetEmail = email || '';
+    try {
+      if (_pendingResetEmail) localStorage.setItem('qs_pending_reset_email', _pendingResetEmail);
+    } catch (_) {}
+    const el = $('resetVerifyForm');
+    if (el) el.style.display = 'flex';
+  }
+  function showVerificationNotice(email) {
+    // The CSS intentionally hides #loginScreen unless qs-show-auth is present.
+    // Restore both classes so the landing page stays hidden and the OTP panel is visible.
+    document.body.classList.add('qs-auth-pending', 'qs-show-auth');
+    hideAllAuthForms();
+    const _verificationEmail = (email || (getUser() && getUser().email) || '').trim();
+    if (_verificationEmail) {
+      try { localStorage.setItem('qs_pending_verification_email', _verificationEmail); } catch (_) {}
+    }
     const el = $('verificationNotice');
     if (el) el.style.display = 'flex';
     const emailEl = $('verificationEmail');
-    if (emailEl) emailEl.textContent = email || (getUser() && getUser().email) || '';
+    if (emailEl) emailEl.textContent = _verificationEmail;
   }
   function showAuthLoading() { hideAllAuthForms(); const el = $('authLoading'); if (el) el.style.display = 'flex'; }
   function clearAuths() {
@@ -1211,40 +1279,24 @@ function handleTouchEnd() {
           disableBtn(btnSignup, true);
           const supabase = getClient();
           if (!supabase) throw new Error('Supabase not initialized');
+          await resolvePendingReferralCode();
+          let _signupRef = '';
+          try {
+            _signupRef = localStorage.getItem(REFERRER_KEY) || sessionStorage.getItem('qs_referrer_id') || '';
+          } catch (_) {}
+          if (!REFERRER_UUID_RE.test(_signupRef) || _signupRef === (currentUser && currentUser.id)) _signupRef = '';
           const { data, error } = await supabase.auth.signUp({
             email: email, password: pass,
-            options: { data: { full_name: name, business_name: business || null } }
+            options: { data: {
+              full_name: name,
+              business_name: business || null,
+              referral_id: _signupRef || null
+            } }
           });
           if (error) throw error;
           const user = data.user;
           const profile = { uid: user.id, name, businessName: business || null, email: user.email, createdAt: Date.now() };
           await setUserProfile(user.id, profile);
-
-          // ── Referral attribution ────────────────────────────────────────
-          // Consume the pending referral captured at boot or from catalog.js.
-          // Written once — never overwritten. Self-referral blocked here and
-          // at DB level (set_my_referrer RPC re-checks ref_id <> auth.uid()
-          // and only ever sets referred_by once — WHERE referred_by IS NULL —
-          // so this can't be re-attributed via a direct API call either).
-          try {
-            var _pendingRef = sessionStorage.getItem('qs_referrer_id');
-            if (
-              _pendingRef &&
-              /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_pendingRef) &&
-              _pendingRef !== user.id
-            ) {
-              const supabaseRef = getClient();
-              if (supabaseRef) {
-                // Routed through set_my_referrer RPC -- authenticated has no
-                // direct UPDATE grant on referred_by (profiles_authenticated_read
-                // is USING(true), so a plain column grant would let any
-                // logged-in user rewrite anyone's referred_by, not just their own).
-                await supabaseRef.rpc('set_my_referrer', { ref_id: _pendingRef });
-              }
-            }
-            sessionStorage.removeItem('qs_referrer_id');
-          } catch (_refErr) { errlog('referral attribution', _refErr); }
-          // ── End referral attribution ─────────────────────────────────────
 
           showVerificationNotice(email);
           toast('Account created — verification email sent. Please verify before logging in.');
@@ -1289,6 +1341,7 @@ function handleTouchEnd() {
           if (!supabase) throw new Error('Supabase not initialized');
           const { error } = await supabase.auth.resetPasswordForEmail(email);
           if (error) throw error;
+          try { localStorage.setItem('qs_pending_reset_email', email); } catch (_) {}
           showResetVerifyForm(email);
           toast('6-digit code sent. Check your inbox.');
         } catch (e) {
@@ -1317,6 +1370,7 @@ function handleTouchEnd() {
           if (!email) { toast('Could not determine your email. Please try signing up again.', 'error'); return; }
           const { error } = await supabase.auth.resend({ type: 'signup', email });
           if (error) throw error;
+          try { localStorage.setItem('qs_pending_verification_email', email); } catch (_) {}
           toast('New 6-digit code sent. Check your inbox.');
         } catch (e) { errlog('resend verification error', e); toast('Failed to resend verification. Try again later.', 'error'); }
       });
@@ -1336,6 +1390,7 @@ function handleTouchEnd() {
           if (!supabase) throw new Error('Supabase not initialized');
           const { error } = await supabase.auth.verifyOtp({ email, token: code, type: 'signup' });
           if (error) throw error;
+          try { localStorage.removeItem('qs_pending_verification_email'); } catch (_) {}
           localStorage.setItem('qs_session_active', 'true');
           document.body.classList.add('mode-app');
           toast('Email verified! Welcome to QuickShop.');
@@ -1387,6 +1442,7 @@ function handleTouchEnd() {
           if (updateError) throw updateError;
           await supabase.auth.signOut();
           _pendingResetEmail = '';
+          try { localStorage.removeItem('qs_pending_reset_email'); } catch (_) {}
           toast('Password reset! Please sign in with your new password.');
           showLoginForm();
         } catch (e) {
@@ -1401,7 +1457,11 @@ function handleTouchEnd() {
     }
 
     const btnBackToResetEmail = $('btnBackToResetEmail');
-    if (btnBackToResetEmail) btnBackToResetEmail.addEventListener('click', showResetForm);
+    if (btnBackToResetEmail) btnBackToResetEmail.addEventListener('click', function () {
+      _pendingResetEmail = '';
+      try { localStorage.removeItem('qs_pending_reset_email'); } catch (_) {}
+      showResetForm();
+    });
 
     const btnLogout = $('btnLogout');
     if (btnLogout) {
@@ -1516,6 +1576,50 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       showVerificationNotice(user.email);
       return;
     }
+    // Latest valid click wins until the database records attribution. The DB RPC
+    // locks an existing referrer, so later clicks cannot rewrite recorded attribution.
+    try {
+      await resolvePendingReferralCode();
+      let _unresolvedCandidate = '';
+      let _pendingRef = '';
+      try {
+        _unresolvedCandidate = localStorage.getItem(REFERRAL_CANDIDATE_KEY) || '';
+        _pendingRef = localStorage.getItem(REFERRER_KEY) || '';
+      } catch (_) {}
+      const _refMarker = 'qs_referral_attributed_' + user.id;
+      if (localStorage.getItem(_refMarker) === 'true') {
+        // This account already completed attribution. Don't let a later visit
+        // leave a pending click behind for a different account on this device.
+        try {
+          localStorage.removeItem(REFERRER_KEY);
+          localStorage.removeItem(REFERRAL_CANDIDATE_KEY);
+          sessionStorage.removeItem('qs_referrer_id');
+        } catch (_) {}
+      } else if (!/^[0-9a-f]{16}$/i.test(_unresolvedCandidate)) {
+        // Do not fall back to older signup metadata while the latest short code
+        // is still awaiting resolution; doing so could lock the wrong referrer.
+        if (!REFERRER_UUID_RE.test(_pendingRef || '')) {
+          _pendingRef = (user.user_metadata && user.user_metadata.referral_id) || '';
+        }
+        if (REFERRER_UUID_RE.test(_pendingRef || '') &&
+            _pendingRef !== user.id) {
+          const _refClient = getClient();
+          if (_refClient) {
+            const { error: _attribError } = await _refClient.rpc('set_my_referrer', { ref_id: _pendingRef });
+            if (_attribError) {
+              errlog('referral attribution', _attribError); // Keep pending data for a later auth retry.
+            } else {
+              localStorage.setItem(_refMarker, 'true');
+              try {
+                if (localStorage.getItem(REFERRER_KEY) === _pendingRef) localStorage.removeItem(REFERRER_KEY);
+                if (sessionStorage.getItem('qs_referrer_id') === _pendingRef) sessionStorage.removeItem('qs_referrer_id');
+                localStorage.removeItem(REFERRAL_CANDIDATE_KEY);
+              } catch (_) {}
+            }
+          }
+        }
+      }
+    } catch (_refErr) { errlog('referral attribution', _refErr); }
     localStorage.setItem('qs_session_active', 'true');
     localStorage.setItem('qs_last_user_id', user.id);
     // Cache slim identity so renderSettingsPanel can render fully while offline.
@@ -1586,7 +1690,21 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     const loginScreen = $('loginScreen'), appScreen = document.querySelector('.app');
     if (loginScreen) loginScreen.style.display = 'flex';
     if (appScreen) appScreen.style.display = 'none';
-    showLoginForm();
+    // Restore interrupted auth steps after cold reload/app eviction on mobile.
+    // Low-memory browsers can discard the page while the user switches to Gmail.
+    let _pendingVerificationEmail = '';
+    let _savedResetEmail = '';
+    try {
+      _pendingVerificationEmail = (localStorage.getItem('qs_pending_verification_email') || '').trim();
+      _savedResetEmail = (localStorage.getItem('qs_pending_reset_email') || '').trim();
+    } catch (_) {}
+    if (_pendingVerificationEmail) {
+      showVerificationNotice(_pendingVerificationEmail);
+    } else if (_savedResetEmail) {
+      showResetVerifyForm(_savedResetEmail);
+    } else {
+      showLoginForm();
+    }
     setBottomNavVisible(false);
     const userEmailEl = $('userEmail'), userDisplayNameEl = $('userDisplayName');
     if (userEmailEl) userEmailEl.textContent = '—';
@@ -6747,7 +6865,15 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
         linkLabel.textContent = 'Your Referral Link';
         const linkVal = document.createElement('div');
         linkVal.style.cssText = 'font-size:12px;color:#a78bfa;word-break:break-all;line-height:1.5;cursor:pointer;';
-        const refUrl = window.location.origin + '/?ref=' + encodeURIComponent(_u.id);
+        let refUrl = window.location.origin + '/?ref=' + encodeURIComponent(_u.id); // UUID link remains the safe fallback.
+        try {
+          const { data: shortCode, error: codeError } = await _sb.rpc('get_my_referral_code');
+          if (!codeError && /^[0-9a-f]{16}$/i.test(typeof shortCode === 'string' ? shortCode : '')) {
+            refUrl = window.location.origin + '/r/' + shortCode.toLowerCase();
+          } else if (codeError) {
+            errlog('get referral code', codeError);
+          }
+        } catch (codeErr) { errlog('get referral code', codeErr); }
         linkVal.textContent = refUrl;
         linkVal.title = 'Tap to copy';
         linkVal.addEventListener('click', function () {
