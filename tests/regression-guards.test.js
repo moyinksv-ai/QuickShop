@@ -129,3 +129,31 @@ test('admin API keeps all vendors visible and marks claim state unavailable on c
   assert.equal(response.body.vendors.length, 2);
   assert.equal(response.body.vendors.find(v => v.id === 'vendor-without-claim').has_payment_claim, null);
 });
+
+
+test('referral payout cycles exclude reserved and paid referrals and use the atomic payout RPC', () => {
+  const start = appSource.indexOf('// ── Referral dashboard — async, non-blocking');
+  const end = appSource.indexOf('// ── End referral dashboard', start);
+  assert.ok(start >= 0 && end > start, 'referral dashboard boundaries must exist');
+  const dashboard = appSource.slice(start, end);
+
+  assert.match(dashboard, /from\('referral_payout_items'\)[\s\S]*?select\('referral_id'\)/);
+  assert.match(dashboard, /r\.status === 'earned' && !reservedIds\.has\(r\.id\)/);
+  assert.match(dashboard, /rpc\('qs_request_referral_payout_v2'/);
+  assert.match(dashboard, /p_client_request_id: clientRequestId/);
+  assert.doesNotMatch(dashboard, /from\('payout_requests'\)/, 'do not use the legacy payout table for new referral requests');
+  assert.doesNotMatch(dashboard, /\.from\('referrals'\)\s*\.insert/, 'referrals must not be recreated or deleted to reset a cycle');
+});
+
+test('payout request activity is idempotent and survives a temporary cloud-log failure', () => {
+  const start = appSource.indexOf('// ── Referral dashboard — async, non-blocking');
+  const end = appSource.indexOf('// ── End referral dashboard', start);
+  const dashboard = appSource.slice(start, end);
+  assert.match(dashboard, /const logId = 'payoutreq_' \+ String\(batch\.id\)\.replace\(\/-\/g, ''\)/);
+  assert.match(dashboard, /action: 'Payout requested'/);
+  assert.match(dashboard, /from\('audit_logs'\)\.upsert\(logRow/);
+  assert.match(dashboard, /state\.logs\.unshift\(\{/);
+  assert.match(dashboard, /for \(const batch of batches\)[\s\S]*?ensurePayoutActivityLog\(batch\)/,
+    'dashboard should retry missing activity-log writes from payout history');
+  assert.match(dashboard, /reserved referrals are reserved and do not count toward your next cycle/);
+});
