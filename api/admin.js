@@ -146,6 +146,52 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === 'activate') {
+      // Before activation, retry referral attribution from signup metadata. Signup/OTP
+      // can race the admin's payment confirmation, so do not silently miss a valid
+      // referral just because the browser's authenticated attribution retry has not run.
+      const profileRes = await sbFetch(
+        '/rest/v1/profiles?id=eq.' + encodeURIComponent(vendorId) + '&select=id,referred_by',
+        { method: 'GET' }
+      );
+      if (!profileRes.ok) {
+        const errText = await profileRes.text().catch(() => '');
+        throw new Error('Could not verify vendor referral state: ' + profileRes.status + ': ' + errText.slice(0, 200));
+      }
+      const profileRows = await profileRes.json();
+      const profile = profileRows && profileRows[0];
+      if (!profile) throw new Error('Vendor profile not found');
+      if (!profile.referred_by) {
+        const authRes = await sbFetch('/auth/v1/admin/users/' + encodeURIComponent(vendorId), { method: 'GET' });
+        if (authRes.ok) {
+          const authUser = await authRes.json();
+          const meta = authUser.user_metadata || {};
+          const rawCode = typeof meta.referral_code === 'string' ? meta.referral_code.trim() : '';
+          const rawId = typeof meta.referral_id === 'string' ? meta.referral_id.trim() : '';
+          let referrerId = null;
+          if (/^[0-9a-f]{16}$/i.test(rawCode)) {
+            const resolveRes = await sbFetch('/rest/v1/rpc/resolve_referral_code', {
+              method: 'POST', body: JSON.stringify({ p_code: rawCode.toLowerCase() })
+            });
+            if (resolveRes.ok) {
+              const resolved = await resolveRes.json();
+              referrerId = typeof resolved === 'string' ? resolved : (resolved && (resolved.referrer_id || resolved.id)) || null;
+            }
+          } else if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId)) {
+            referrerId = rawId;
+          }
+          if (referrerId && referrerId.toLowerCase() !== vendorId.toLowerCase()) {
+            const updateRes = await sbFetch('/rest/v1/profiles?id=eq.' + encodeURIComponent(vendorId) + '&referred_by=is.null', {
+              method: 'PATCH',
+              body: JSON.stringify({ referred_by: referrerId }),
+            });
+            if (!updateRes.ok) {
+              const errText = await updateRes.text().catch(() => '');
+              throw new Error('Could not save referral attribution before activation: ' + updateRes.status + ': ' + errText.slice(0, 200));
+            }
+          }
+        }
+      }
+
       const sbRes = await sbFetch('/rest/v1/rpc/admin_activate_vendor', {
         method: 'POST',
         body: JSON.stringify({ vendor_id: vendorId, days_count: 30 }),
@@ -155,7 +201,14 @@ module.exports = async function handler(req, res) {
         throw new Error('Supabase error ' + sbRes.status + ': ' + errText.slice(0, 300));
       }
       const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-      res.status(200).json({ ok: true, patch: { is_active: true, subscription_expires: expires } });
+      // Read the ledger after activation so the admin result reflects the DB trigger.
+      const referralRes = await sbFetch('/rest/v1/referrals?referred_id=eq.' + encodeURIComponent(vendorId) + '&select=id,referrer_id,amount,status', { method: 'GET' });
+      const referralRows = referralRes.ok ? await referralRes.json() : [];
+      res.status(200).json({
+        ok: true,
+        patch: { is_active: true, subscription_expires: expires },
+        referralAwarded: Array.isArray(referralRows) && referralRows.length > 0,
+      });
       return;
     }
 
