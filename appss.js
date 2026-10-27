@@ -69,7 +69,7 @@ function initApp() {
     try {
       var _params = new URLSearchParams(window.location.search);
       var _raw = (_params.get('ref') || '').trim();
-      var _pathMatch = window.location.pathname.match(/^\\/r\\/([0-9a-f]{16})\\/?$/i);
+      var _pathMatch = window.location.pathname.match(/^\/r\/([0-9a-f]{16})\/?$/i);
       if (!_raw && _pathMatch) _raw = _pathMatch[1];
       if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_raw)) {
         localStorage.setItem('qs_pending_referrer_id', _raw.toLowerCase());
