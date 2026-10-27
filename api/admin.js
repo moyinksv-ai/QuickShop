@@ -201,7 +201,7 @@ module.exports = async function handler(req, res) {
 
   // ── Validate IDs for mutating actions ──────────────────────────────────
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (['activate', 'revoke', 'set_founder'].includes(action) && (!vendorId || !UUID_RE.test(vendorId))) {
+  if (['activate', 'revoke', 'set_founder', 'request_vendor_payout_details'].includes(action) && (!vendorId || !UUID_RE.test(vendorId))) {
     res.status(400).json({ error: 'Invalid or missing vendorId' });
     return;
   }
@@ -258,13 +258,29 @@ module.exports = async function handler(req, res) {
     }
 
 
+
+    if (action === 'request_vendor_payout_details') {
+      const profileRes = await sbFetch('/rest/v1/profiles?id=eq.' + encodeURIComponent(vendorId) + '&select=id,business_name,name', { method: 'GET' });
+      if (!profileRes.ok) throw new Error('Could not verify vendor before requesting account details: ' + profileRes.status);
+      const profiles = await profileRes.json();
+      if (!Array.isArray(profiles) || !profiles[0]) { res.status(404).json({ error: 'Vendor not found' }); return; }
+      const count = Number.isInteger(Number(body.eligibleCount)) ? Math.max(0, Math.min(100000, Number(body.eligibleCount))) : 0;
+      const amount = Number.isFinite(Number(body.eligibleAmount)) ? Math.max(0, Math.min(100000000, Number(body.eligibleAmount))) : 0;
+      const logId = 'pdetail_' + Date.now().toString(36) + '_' + vendorId.replace(/-/g, '').slice(0, 8);
+      await writePayoutAudit(vendorId, logId, 'Payout details requested',
+        'WhatsApp account-details request initiated before payout batch existed. Eligible unreserved referrals: ' + count + '; eligible amount: ₦' + amount + '.');
+      res.status(200).json({ ok: true, logged: true });
+      return;
+    }
+
     if (action === 'get_referral_payouts') {
-      const [referrals, batches, items] = await Promise.all([
+      const [referrals, batches, items, activities] = await Promise.all([
         fetchAllRows('/rest/v1/referrals?select=id,referrer_id,amount,status,created_at,paid_at&order=created_at.asc'),
         fetchAllRows('/rest/v1/referral_payout_batches?select=id,user_id,status,referral_count,amount_ngn,requested_at,details_requested_at,paid_at,payout_reference&order=requested_at.desc'),
-        fetchAllRows('/rest/v1/referral_payout_items?select=payout_id,referral_id,amount_ngn,reserved_at')
+        fetchAllRows('/rest/v1/referral_payout_items?select=payout_id,referral_id,amount_ngn,reserved_at'),
+        fetchAllRows('/rest/v1/audit_logs?select=id,user_id,action,details,created_at&action=eq.Payout%20details%20requested&order=created_at.desc').catch(() => [])
       ]);
-      res.status(200).json({ referrals, batches, items });
+      res.status(200).json({ referrals, batches, items, activities });
       return;
     }
 
