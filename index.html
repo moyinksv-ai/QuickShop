@@ -106,10 +106,7 @@
     #qs-landing { display: none !important; }
     body:not(.mode-app):not(.qs-cat-early):not(.qs-auth-pending) #qs-landing:not(.qs-hidden) { display: block !important; }
 
-    /* Keep the public landing visible while auth is unresolved. A stale local session flag can add mode-app before Supabase validates the session; hiding the landing during that window can leave a blank screen if auth startup stalls. Once auth resolves, handleAuthUser/handleAuthLogout removes qs-auth-pending and normal routing takes over. */
-    body.qs-auth-pending #qs-landing:not(.qs-hidden) { display: block !important; }
-    body.qs-auth-pending.mode-app .app    { display: block !important; }
-    body.qs-auth-pending.mode-app .bottom-nav { display: flex !important; }
+    /* During auth startup, keep the landing hidden until session routing resolves. */
 
     @keyframes spin     { to { transform: rotate(360deg); } }
     @keyframes scanLine { 0%,100%{opacity:0;transform:translateY(-100%)} 50%{opacity:1;transform:translateY(100%)} }
