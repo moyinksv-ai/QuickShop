@@ -1586,16 +1586,23 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         _unresolvedCandidate = localStorage.getItem(REFERRAL_CANDIDATE_KEY) || '';
         _pendingRef = localStorage.getItem(REFERRER_KEY) || '';
       } catch (_) {}
-      // Do not fall back to older signup metadata while the latest short code
-      // is still awaiting resolution; doing so could lock the wrong referrer.
-      if (!/^[0-9a-f]{16}$/i.test(_unresolvedCandidate)) {
+      const _refMarker = 'qs_referral_attributed_' + user.id;
+      if (localStorage.getItem(_refMarker) === 'true') {
+        // This account already completed attribution. Don't let a later visit
+        // leave a pending click behind for a different account on this device.
+        try {
+          localStorage.removeItem(REFERRER_KEY);
+          localStorage.removeItem(REFERRAL_CANDIDATE_KEY);
+          sessionStorage.removeItem('qs_referrer_id');
+        } catch (_) {}
+      } else if (!/^[0-9a-f]{16}$/i.test(_unresolvedCandidate)) {
+        // Do not fall back to older signup metadata while the latest short code
+        // is still awaiting resolution; doing so could lock the wrong referrer.
         if (!REFERRER_UUID_RE.test(_pendingRef || '')) {
           _pendingRef = (user.user_metadata && user.user_metadata.referral_id) || '';
         }
-        const _refMarker = 'qs_referral_attributed_' + user.id;
         if (REFERRER_UUID_RE.test(_pendingRef || '') &&
-            _pendingRef !== user.id &&
-            localStorage.getItem(_refMarker) !== 'true') {
+            _pendingRef !== user.id) {
           const _refClient = getClient();
           if (_refClient) {
             const { error: _attribError } = await _refClient.rpc('set_my_referrer', { ref_id: _pendingRef });
@@ -1606,6 +1613,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
               try {
                 if (localStorage.getItem(REFERRER_KEY) === _pendingRef) localStorage.removeItem(REFERRER_KEY);
                 if (sessionStorage.getItem('qs_referrer_id') === _pendingRef) sessionStorage.removeItem('qs_referrer_id');
+                localStorage.removeItem(REFERRAL_CANDIDATE_KEY);
               } catch (_) {}
             }
           }
