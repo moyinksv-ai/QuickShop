@@ -824,7 +824,7 @@
         activeBatch: activeBatch,
         lastBatch: lastBatch,
         cycleCount: Math.min(counts.eligibleCount, 10),
-        ready: counts.eligibleCount >= 10 && counts.eligibleAmount >= 5000 && !activeBatch
+        ready: counts.eligibleCount >= 10 && counts.eligibleAmount === 5000 && !activeBatch
       });
     });
   }
@@ -848,8 +848,6 @@
     var search = (document.getElementById('account-search').value || '').trim().toLowerCase();
     rows = rows.filter(function(v) {
       return [v.business_name, v.name, v.email, v.id].join(' ').toLowerCase().indexOf(search) !== -1;
-    }).filter(function(v) {
-      return v.eligibleCount > 0 || v.activeBatch || v.lastBatch;
     }).sort(function(a,b) {
       function rank(v) { return v.activeBatch ? 0 : v.ready ? 1 : v.eligibleCount >= 7 ? 2 : 3; }
       return rank(a)-rank(b) || b.eligibleCount-a.eligibleCount || String(a.business_name || a.name || '').localeCompare(String(b.business_name || b.name || ''));
