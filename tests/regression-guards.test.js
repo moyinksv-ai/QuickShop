@@ -170,6 +170,9 @@ test('admin referral payout dashboard shows cycle progress, WhatsApp account req
   assert.match(adminHtml, /Request account details · WhatsApp/);
   assert.match(adminHtml, /Please reply with your bank name, account name, and account number/);
   assert.match(adminHtml, /apiCall\('request_payout_details'/);
+  assert.match(adminHtml, /apiCall\('request_vendor_payout_details'/);
+  assert.match(adminHtml, /v\.eligibleCount >= 7/);
+  assert.match(adminHtml, /latestDetailsRequest/);
   assert.match(adminHtml, /apiCall\('mark_payout_paid'/);
     assert.match(adminHtml, /eligibleCount >= 10 && counts.eligibleAmount === 5000 && !activeBatch/);
   assert.match(adminHtml, /items\.forEach\(function\(item\) \{ reserved\[item\.referral_id\] = true; \}\)/);
@@ -177,6 +180,8 @@ test('admin referral payout dashboard shows cycle progress, WhatsApp account req
 
 test('admin payout API protects state transitions and records activity', () => {
   assert.match(adminApiSource, /action === 'get_referral_payouts'/);
+  assert.match(adminApiSource, /action === 'request_vendor_payout_details'/);
+  assert.match(adminApiSource, /WhatsApp account-details request initiated before payout batch existed/);
   assert.match(adminApiSource, /action === 'request_payout_details'/);
   assert.match(adminApiSource, /status: 'details_requested', details_requested_at: requestedAt/);
   assert.match(adminApiSource, /action === 'mark_payout_paid'/);
