@@ -1422,30 +1422,34 @@ function handleTouchEnd() {
     const btnLogout = $('btnLogout');
     if (btnLogout) {
       btnLogout.addEventListener('click', async function () {
-        const confirmed = await showConfirm({
-          title: 'Sign Out',
-          message: 'Are you sure you want to sign out?',
-          okText: 'Sign Out',
-          okDanger: true
-        });
-        if (!confirmed) return;
+        // Sign out immediately. A missing/broken confirmation modal must never
+        // prevent the vendor from leaving their account.
+        const supabase = getClient();
+        let signOutError = null;
         try {
-          const supabase = getClient();
           if (supabase) {
-            const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
-            if (signOutError) throw signOutError;
+            const result = await supabase.auth.signOut({ scope: 'local' });
+            signOutError = result && result.error ? result.error : null;
           }
-          // Clear app-owned session/cache state as well as the Supabase local session.
+        } catch (e) {
+          signOutError = e;
+        } finally {
+          // Clear app-owned state and any persisted Supabase auth token as a fallback.
           ['qs_session_active', 'qs_last_user_id', 'qs_user_cache'].forEach((key) => {
             try { localStorage.removeItem(key); } catch (_) {}
           });
+          try {
+            Object.keys(localStorage).forEach((key) => {
+              if (/^sb-.+-auth-token$/.test(key)) localStorage.removeItem(key);
+            });
+          } catch (_) {}
+          currentUser = null;
           document.body.classList.remove('mode-app', 'qs-auth-pending');
+          document.body.classList.add('qs-show-auth');
+          if (signOutError) errlog('Supabase signout returned an error; local app session cleared', signOutError);
           toast('Signed out');
-          // Reload only after signOut has completed successfully so auth state is settled.
+          // Reset the page so the logged-out screen is rebuilt from a clean state.
           window.location.replace(window.location.pathname);
-        } catch (e) {
-          errlog('signout error', e);
-          toast('Sign out failed: ' + (e.message || 'Please try again.'), 'error');
         }
       });
     }
@@ -1659,7 +1663,8 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       Sentry.setUser(null);
     }
     document.body.classList.remove('qs-auth-pending');
-document.body.classList.remove('mode-app'); // auth resolved (logged out)
+    document.body.classList.remove('mode-app'); // auth resolved (logged out)
+    document.body.classList.add('qs-show-auth'); // CSS hides auth unless this state is explicit
     const loginScreen = $('loginScreen'), appScreen = document.querySelector('.app');
     if (loginScreen) loginScreen.style.display = 'flex';
     if (appScreen) appScreen.style.display = 'none';
