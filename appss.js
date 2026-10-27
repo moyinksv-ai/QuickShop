@@ -1598,7 +1598,11 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         _pendingReferral = localStorage.getItem('qs_pending_referral') || '';
         if (!_pendingReferral) _pendingReferral = sessionStorage.getItem('qs_referrer_id') || '';
       } catch (_) {}
-      if (!_pendingReferral) _pendingReferral = _meta.referral_code || _meta.referral_id || '';
+      if (!_pendingReferral) {
+        let _alreadyAttributed = false;
+        try { _alreadyAttributed = localStorage.getItem('qs_referral_attributed_' + user.id) === 'true'; } catch (_) {}
+        if (!_alreadyAttributed) _pendingReferral = _meta.referral_code || _meta.referral_id || '';
+      }
 
       const _isRefUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_pendingReferral);
       const _isRefCode = /^[0-9a-f]{16}$/i.test(_pendingReferral);
