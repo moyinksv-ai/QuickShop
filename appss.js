@@ -6793,6 +6793,21 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
           performed_by: String(_u.email || _u.user_metadata && (_u.user_metadata.full_name || _u.user_metadata.name) || _u.id).slice(0, 100),
           created_at: batch.requested_at || new Date().toISOString()
         };
+        // Keep the visible in-app Activity Log in sync immediately. The same
+        // stable ID is used for the cloud row, so saveState's upsert cannot
+        // create a duplicate if the direct audit write is retried.
+        if (!Array.isArray(state.logs)) state.logs = [];
+        if (!state.logs.some(entry => entry.id === logId)) {
+          state.logs.unshift({
+            id: logId,
+            ts: new Date(logRow.created_at).getTime(),
+            action: logRow.action,
+            details: logRow.details,
+            user: logRow.performed_by
+          });
+          state.logs = state.logs.slice(0, 200);
+          saveState();
+        }
         const { error } = await _sb.from('audit_logs').upsert(logRow, {
           onConflict: 'id',
           ignoreDuplicates: true
