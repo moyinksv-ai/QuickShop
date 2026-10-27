@@ -1580,27 +1580,34 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     // locks an existing referrer, so later clicks cannot rewrite recorded attribution.
     try {
       await resolvePendingReferralCode();
+      let _unresolvedCandidate = '';
       let _pendingRef = '';
-      try { _pendingRef = localStorage.getItem(REFERRER_KEY) || ''; } catch (_) {}
-      if (!REFERRER_UUID_RE.test(_pendingRef || '')) {
-        _pendingRef = (user.user_metadata && user.user_metadata.referral_id) || '';
-      }
-      const _refMarker = 'qs_referral_attributed_' + user.id;
-      if (REFERRER_UUID_RE.test(_pendingRef || '') &&
-          _pendingRef !== user.id &&
-          localStorage.getItem(_refMarker) !== 'true') {
-        const _refClient = getClient();
-        if (_refClient) {
-          const { error: _attribError } = await _refClient.rpc('set_my_referrer', { ref_id: _pendingRef });
-          if (_attribError) {
-            errlog('referral attribution', _attribError); // Keep pending data for a later auth retry.
-          } else {
-            localStorage.setItem(_refMarker, 'true');
-            try {
-              if (localStorage.getItem(REFERRER_KEY) === _pendingRef) localStorage.removeItem(REFERRER_KEY);
-              if (sessionStorage.getItem('qs_referrer_id') === _pendingRef) sessionStorage.removeItem('qs_referrer_id');
-              localStorage.removeItem(REFERRAL_CANDIDATE_KEY);
-            } catch (_) {}
+      try {
+        _unresolvedCandidate = localStorage.getItem(REFERRAL_CANDIDATE_KEY) || '';
+        _pendingRef = localStorage.getItem(REFERRER_KEY) || '';
+      } catch (_) {}
+      // Do not fall back to older signup metadata while the latest short code
+      // is still awaiting resolution; doing so could lock the wrong referrer.
+      if (!/^[0-9a-f]{16}$/i.test(_unresolvedCandidate)) {
+        if (!REFERRER_UUID_RE.test(_pendingRef || '')) {
+          _pendingRef = (user.user_metadata && user.user_metadata.referral_id) || '';
+        }
+        const _refMarker = 'qs_referral_attributed_' + user.id;
+        if (REFERRER_UUID_RE.test(_pendingRef || '') &&
+            _pendingRef !== user.id &&
+            localStorage.getItem(_refMarker) !== 'true') {
+          const _refClient = getClient();
+          if (_refClient) {
+            const { error: _attribError } = await _refClient.rpc('set_my_referrer', { ref_id: _pendingRef });
+            if (_attribError) {
+              errlog('referral attribution', _attribError); // Keep pending data for a later auth retry.
+            } else {
+              localStorage.setItem(_refMarker, 'true');
+              try {
+                if (localStorage.getItem(REFERRER_KEY) === _pendingRef) localStorage.removeItem(REFERRER_KEY);
+                if (sessionStorage.getItem('qs_referrer_id') === _pendingRef) sessionStorage.removeItem('qs_referrer_id');
+              } catch (_) {}
+            }
           }
         }
       }
