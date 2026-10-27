@@ -139,6 +139,9 @@ test('referral payout cycles exclude reserved and paid referrals and use the ato
 
   assert.match(dashboard, /from\('referral_payout_items'\)[\s\S]*?select\('referral_id'\)/);
   assert.match(dashboard, /r\.status === 'earned' && !reservedIds\.has\(r\.id\)/);
+  assert.match(dashboard, /const cycleCount = Math\.min\(eligibleCount, MILESTONE\)/);
+  assert.match(dashboard, /nextBatchAmount === 5000/);
+  assert.match(dashboard, /Request Payout — ₦5,000/);
   assert.match(dashboard, /rpc\('qs_request_referral_payout_v2'/);
   assert.match(dashboard, /p_client_request_id: clientRequestId/);
   assert.doesNotMatch(dashboard, /from\('payout_requests'\)/, 'do not use the legacy payout table for new referral requests');
