@@ -648,10 +648,17 @@
 
       apiCall(apiAction, extra).then(function(data) {
         Object.assign(vendor, data.patch || {});
-        if (resultEl) { resultEl.textContent = '\u2713 Saved'; resultEl.className = 'action-result visible'; setTimeout(function() { resultEl.classList.remove('visible'); }, 2500); }
         toast(storeName + ' updated \u2713', 'success');
-        card.parentNode.replaceChild(renderCard(vendor), card);
+        // Re-render from the complete in-memory list so the selected filters
+        // immediately reflect the updated account state without dropping records.
+        applyFilters();
         updateStats();
+        var updatedResultEl = document.getElementById('res-' + vendor.id);
+        if (updatedResultEl) {
+          updatedResultEl.textContent = '\u2713 Saved';
+          updatedResultEl.className = 'action-result visible';
+          setTimeout(function() { updatedResultEl.classList.remove('visible'); }, 2500);
+        }
       }).catch(function(err) {
         if (resultEl) { resultEl.textContent = '\u2717 ' + (err.message || 'Failed'); resultEl.className = 'action-result visible error'; setTimeout(function() { resultEl.classList.remove('visible'); }, 4000); }
         toast('Failed: ' + (err.message || 'unknown'), 'error');
