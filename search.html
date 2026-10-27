@@ -712,7 +712,7 @@
     try {
       var params = new URLSearchParams(window.location.search);
       var raw = (params.get('ref') || '').trim();
-      var pathMatch = window.location.pathname.match(/^\\/r\\/([0-9a-f]{16})\\/?$/i);
+      var pathMatch = window.location.pathname.match(/^\/r\/([0-9a-f]{16})\/?$/i);
       if (!raw && pathMatch) raw = pathMatch[1];
       if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) {
         localStorage.setItem('qs_pending_referrer_id', raw.toLowerCase());
