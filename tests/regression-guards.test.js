@@ -164,6 +164,15 @@ test('payout request activity is idempotent and survives a temporary cloud-log f
 });
 
 
+test('referral payout dashboard reports database permission failures accurately and retains read grants', () => {
+  const migration = fs.readFileSync(path.join(root, 'supabase/migrations/20261027174600_grant_vendor_referral_payout_reads.sql'), 'utf8');
+  assert.match(appSource, /e\.code === '42501'/);
+  assert.match(appSource, /Referral payout access is not configured correctly/);
+  assert.doesNotMatch(appSource, /Could not load referral data\. Check your connection/);
+  assert.match(migration, /GRANT SELECT ON TABLE public\.referral_payout_items TO authenticated/i);
+  assert.match(migration, /GRANT SELECT ON TABLE public\.referral_payout_batches TO authenticated/i);
+});
+ 
 test('admin referral payout dashboard shows cycle progress, WhatsApp account requests, and manual paid tracking', () => {
   assert.match(adminHtml, /id="payout-section"/);
   assert.match(adminHtml, /Approaching \(7–9\)/);
