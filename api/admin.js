@@ -64,6 +64,38 @@ async function fetchAuthEmails() {
   }
 }
 
+/*
+ * Fetch payment claims separately from profiles so vendors without claims are
+ * never dropped from the account list. Range pagination avoids silently
+ * ignoring older claims when the table grows beyond PostgREST's page size.
+ */
+async function fetchPaymentClaims() {
+  const claims = [];
+  const pageSize = 1000;
+  const maxPages = 100;
+
+  try {
+    for (let page = 0; page < maxPages; page++) {
+      const start = page * pageSize;
+      const end = start + pageSize - 1;
+      const res = await sbFetch(
+        '/rest/v1/payment_claims?select=user_id,status,claim_kind,amount_ngn,claimed_at,updated_at,reviewed_at&order=claimed_at.desc',
+        { method: 'GET', headers: { Range: start + '-' + end, 'Range-Unit': 'items' } }
+      );
+      if (!res.ok) return { available: false, claims: [] };
+      const rows = await res.json();
+      if (!Array.isArray(rows)) return { available: false, claims: [] };
+      claims.push(...rows);
+      if (rows.length < pageSize) return { available: true, claims };
+    }
+  } catch (_) {
+    return { available: false, claims: [] };
+  }
+
+  // A full final page at the safety cap means completeness is not guaranteed.
+  return { available: false, claims: [] };
+}
+
 // ── Main handler ────────────────────────────────────────────────────────
 module.exports = async function handler(req, res) {
   // ── CORS headers — restrict to same origin ────────────────────────────
@@ -124,9 +156,10 @@ module.exports = async function handler(req, res) {
   // ── Route actions ──────────────────────────────────────────────────────
   try {
     if (action === 'get_vendors') {
-      const [profilesRes, emailMap] = await Promise.all([
+      const [profilesRes, emailMap, claimsResult] = await Promise.all([
         sbFetch('/rest/v1/rpc/admin_get_vendors', { method: 'POST', body: '{}' }),
         fetchAuthEmails(),
+        fetchPaymentClaims(),
       ]);
 
       if (!profilesRes.ok) {
@@ -135,13 +168,33 @@ module.exports = async function handler(req, res) {
       }
 
       const profiles = await profilesRes.json();
-      // Merge auth emails (more reliable than profile.email field)
+      // Claims are optional enrichment; never remove a profile because it has no claim.
+      // The query is ordered newest first, so the first claim per vendor is the latest.
+      const latestClaimByUser = {};
+      if (claimsResult.available) {
+        claimsResult.claims.forEach(claim => {
+          if (!latestClaimByUser[claim.user_id]) {
+            latestClaimByUser[claim.user_id] = {
+              status: claim.status,
+              claim_kind: claim.claim_kind,
+              amount_ngn: claim.amount_ngn,
+              claimed_at: claim.claimed_at,
+              updated_at: claim.updated_at,
+              reviewed_at: claim.reviewed_at,
+            };
+          }
+        });
+      }
+
+      // Merge auth emails (more reliable than profile.email field) and latest claim state.
       const vendors = (profiles || []).map(p => ({
         ...p,
         email: emailMap[p.id] || p.email || '',
+        payment_claim: claimsResult.available ? (latestClaimByUser[p.id] || null) : null,
+        has_payment_claim: claimsResult.available ? Boolean(latestClaimByUser[p.id]) : null,
       }));
 
-      res.status(200).json({ vendors });
+      res.status(200).json({ vendors, paymentClaimsAvailable: claimsResult.available });
       return;
     }
 
