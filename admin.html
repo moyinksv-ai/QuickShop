@@ -459,6 +459,7 @@
   function lockAdmin() {
     _adminToken = null;
     _vendors = [];
+    _payoutData = { referrals: [], batches: [], items: [], activities: [] };
     document.getElementById('app').classList.remove('visible');
     document.getElementById('vendor-list').innerHTML = '<div id="loading-state">Locked. Sign in to load accounts.</div>';
     document.getElementById('gate').style.display = 'flex';
@@ -768,7 +769,7 @@
 
 
   // ── REFERRAL PAYOUT PREPARATION ────────────────────────────────────────
-  var _payoutData = { referrals: [], batches: [], items: [] };
+  var _payoutData = { referrals: [], batches: [], items: [], activities: [] };
   var _payoutLoading = false;
 
   function payoutMoney(value) {
@@ -813,6 +814,14 @@
       if (!batchByVendor[b.user_id]) batchByVendor[b.user_id] = [];
       batchByVendor[b.user_id].push(b);
     });
+    var latestDetailsByVendor = Object.create(null);
+    (_payoutData.activities || []).slice().sort(function(a,b) {
+      return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+    }).forEach(function(activity) {
+      if (activity.action === 'Payout details requested' && !latestDetailsByVendor[activity.user_id]) {
+        latestDetailsByVendor[activity.user_id] = activity;
+      }
+    });
     return _vendors.map(function(v) {
       var counts = byVendor[v.id] || { eligibleCount:0, eligibleAmount:0, earnedCount:0, paidCount:0 };
       var vendorBatches = (batchByVendor[v.id] || []).slice().sort(function(a,b) {
@@ -823,6 +832,7 @@
       return Object.assign({}, v, counts, {
         activeBatch: activeBatch,
         lastBatch: lastBatch,
+        latestDetailsRequest: latestDetailsByVendor[v.id] || null,
         cycleCount: Math.min(counts.eligibleCount, 10),
         ready: counts.eligibleCount >= 10 && counts.eligibleAmount === 5000 && !activeBatch
       });
@@ -887,6 +897,7 @@
       } else if (v.eligibleCount >= 7) {
         appendPayoutBadge(badges, 'Approaching payout', 'badge-pending');
       }
+      if (!v.activeBatch && v.latestDetailsRequest) appendPayoutBadge(badges, 'Account details requested', 'badge-pending');
       if (v.lastBatch && v.lastBatch.status === 'paid') appendPayoutBadge(badges, 'Last payout paid ' + payoutDate(v.lastBatch.paid_at), 'badge-active');
       if (v.lastBatch && v.lastBatch.status === 'cancelled') appendPayoutBadge(badges, 'Previous payout cancelled', 'badge-lapsed');
 
@@ -956,15 +967,40 @@
         requestedAt.className = 'vendor-email';
         requestedAt.textContent = 'Requested ' + payoutDate(v.activeBatch.requested_at) + (v.activeBatch.details_requested_at ? ' · Details requested ' + payoutDate(v.activeBatch.details_requested_at) : '');
         actions.appendChild(requestedAt);
-      } else if (v.ready) {
-        var readyNote = document.createElement('span');
-        readyNote.className = 'vendor-email';
-        readyNote.textContent = 'Ready once the vendor submits a payout request in the vendor app.';
-        actions.appendChild(readyNote);
       } else {
+        if (v.eligibleCount >= 7) {
+          var prepWa = document.createElement('button');
+          prepWa.type = 'button';
+          prepWa.className = 'btn btn-whatsapp';
+          prepWa.textContent = 'Request account details · WhatsApp';
+          prepWa.disabled = !normalizeWhatsAppPhone(v.phone_number);
+          prepWa.addEventListener('click', function() {
+            var phone = normalizeWhatsAppPhone(v.phone_number);
+            if (!phone) { toast('No usable WhatsApp number saved for this vendor.', 'error'); return; }
+            var message = v.ready
+              ? 'Hello ' + (v.name || v.business_name || 'there') + ', you have reached the QuickShop referral payout threshold of 10 eligible referrals and your ₦5,000 manual payout is being prepared. Please reply with your bank name, account name, and account number. Thank you.'
+              : 'Hello ' + (v.name || v.business_name || 'there') + ', you are approaching the QuickShop referral payout threshold (' + v.eligibleCount + '/10 eligible referrals). To help us prepare your manual payout, please reply with your bank name, account name, and account number. Thank you.';
+            var waUrl = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(message);
+            var waWindow = window.open(waUrl, '_blank', 'noopener,noreferrer');
+            if (waWindow) { try { waWindow.opener = null; } catch (_) {} }
+            apiCall('request_vendor_payout_details', {
+              vendorId: v.id,
+              eligibleCount: v.eligibleCount,
+              eligibleAmount: v.eligibleAmount
+            }).then(function() {
+              toast('Account-details request logged for ' + (v.business_name || v.name || 'vendor'), 'success');
+              loadReferralPayouts();
+            }).catch(function(err) {
+              toast('WhatsApp opened, but tracking update failed: ' + (err.message || 'unknown'), 'error');
+              loadReferralPayouts();
+            });
+          });
+          actions.appendChild(prepWa);
+        }
         var cycleNote = document.createElement('span');
         cycleNote.className = 'vendor-email';
-        cycleNote.textContent = v.eligibleCount + ' eligible referrals · ' + v.paidCount + ' already paid historically';
+        cycleNote.textContent = v.eligibleCount + ' eligible referrals · ' + v.paidCount + ' already paid historically' +
+          (v.latestDetailsRequest ? ' · Details requested ' + payoutDate(v.latestDetailsRequest.created_at) : '');
         actions.appendChild(cycleNote);
       }
       card.appendChild(actions);
@@ -981,7 +1017,8 @@
       _payoutData = {
         referrals: Array.isArray(data.referrals) ? data.referrals : [],
         batches: Array.isArray(data.batches) ? data.batches : [],
-        items: Array.isArray(data.items) ? data.items : []
+        items: Array.isArray(data.items) ? data.items : [],
+        activities: Array.isArray(data.activities) ? data.activities : []
       };
       renderReferralPayouts();
     }).catch(function(err) {
@@ -1004,7 +1041,7 @@
     });
   }
 
-  document.getElementById('refresh-btn').addEventListener('click', loadVendors);
+  document.getElementById('refresh-btn').addEventListener('click', function() { loadVendors(); loadReferralPayouts(); });
   document.getElementById('payout-refresh-btn').addEventListener('click', loadReferralPayouts);
 
 })();
