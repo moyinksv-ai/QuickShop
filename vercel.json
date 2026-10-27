@@ -4,17 +4,24 @@
   "outputDirectory": ".",
   "redirects": [
     {
+      "source": "/r/:code([0-9a-fA-F]{16})",
+      "destination": "/?ref=:code",
+      "permanent": false
+    },
+    {
       "source": "/(.*)",
-      "has": [{ "type": "header", "key": "x-forwarded-proto", "value": "http" }],
+      "has": [
+        {
+          "type": "header",
+          "key": "x-forwarded-proto",
+          "value": "http"
+        }
+      ],
       "destination": "https://quickshopper.vercel.app/$1",
       "permanent": true
     }
   ],
   "rewrites": [
-    {
-      "source": "/r/:code([0-9a-fA-F]{16})",
-      "destination": "/?ref=:code"
-    },
     {
       "source": "/market",
       "destination": "/search.html"
