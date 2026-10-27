@@ -6853,8 +6853,10 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
           return card;
         }
 
-        stats.appendChild(statCard('Current cycle', eligibleCount + ' / ' + MILESTONE, '#a78bfa'));
-        stats.appendChild(statCard('Available balance', '₦' + earningsNgn.toLocaleString('en-NG'), '#10b981'));
+        const currentCycleStat = statCard('Current cycle', eligibleCount + ' / ' + MILESTONE, '#a78bfa');
+        const availableBalanceStat = statCard('Available balance', '₦' + earningsNgn.toLocaleString('en-NG'), '#10b981');
+        stats.appendChild(currentCycleStat);
+        stats.appendChild(availableBalanceStat);
         _body.appendChild(stats);
 
         const progressWrap = document.createElement('div');
@@ -6968,9 +6970,10 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
             const remaining = (freshRefs.data || []).filter(r => r.status === 'earned' && !reserved.has(r.id));
             const remainingCount = remaining.length;
             const remainingAmount = remaining.reduce((sum, row) => sum + (Number(row.amount) || AMOUNT_PER), 0);
-            const statValues = stats.querySelectorAll('div');
-            if (statValues[0]) statValues[0].textContent = remainingCount + ' / ' + MILESTONE;
-            if (statValues[2]) statValues[2].textContent = '₦' + remainingAmount.toLocaleString('en-NG');
+            const cycleValue = currentCycleStat.firstElementChild;
+            const balanceValue = availableBalanceStat.firstElementChild;
+            if (cycleValue) cycleValue.textContent = remainingCount + ' / ' + MILESTONE;
+            if (balanceValue) balanceValue.textContent = '₦' + remainingAmount.toLocaleString('en-NG');
             progressLeft.textContent = remainingCount >= MILESTONE
               ? '🎉 Milestone reached!'
               : (MILESTONE - remainingCount) + ' more eligible referral' + (MILESTONE - remainingCount === 1 ? '' : 's') + ' to unlock payout';
