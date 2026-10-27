@@ -64,15 +64,19 @@ function initApp() {
   const log = IS_PROD ? () => {} : (...a) => console.log('[QS]', ...a);
 
   // ── Referral capture ─────────────────────────────────────────────────────
-  // If the user arrived via a catalog's branding link (?ref=<UUID>), capture
-  // the referrer's user_id into sessionStorage immediately at boot so it
-  // survives navigation between Login ↔ Signup tabs. Consumed once at signup
-  // then cleared. UUID-validated here to prevent garbage data reaching the DB.
+  // Persist only well-formed referral tokens. A later valid click replaces an
+  // earlier pending click; malformed query strings never erase a good token.
+  // UUID links remain supported while /r/<16-hex-code> links use the resolver.
   (function captureReferral() {
     try {
-      var _refParam = new URLSearchParams(window.location.search).get('ref');
-      if (_refParam && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_refParam)) {
-        sessionStorage.setItem('qs_referrer_id', _refParam);
+      var _refParam = new URLSearchParams(window.location.search).get('ref') || '';
+      var _pathMatch = window.location.pathname.match(/^\/r\/([0-9a-f]{16})\/?$/i);
+      var _refCandidate = _pathMatch ? _pathMatch[1] : _refParam;
+      var _validRef = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_refCandidate) ||
+                     /^[0-9a-f]{16}$/i.test(_refCandidate);
+      if (_validRef) {
+        localStorage.setItem('qs_pending_referral', _refCandidate);
+        try { sessionStorage.setItem('qs_referrer_id', _refCandidate); } catch (_) {}
       }
     } catch (_) {}
   })();
@@ -1228,9 +1232,20 @@ function handleTouchEnd() {
           disableBtn(btnSignup, true);
           const supabase = getClient();
           if (!supabase) throw new Error('Supabase not initialized');
+          // Store the pending referral in auth metadata as a cross-device fallback.
+          // The durable local value remains authoritative for the latest valid click.
+          var _signupReferral = '';
+          try { _signupReferral = localStorage.getItem('qs_pending_referral') || sessionStorage.getItem('qs_referrer_id') || ''; } catch (_) {}
+          var _signupReferralIsUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_signupReferral);
+          var _signupReferralIsCode = /^[0-9a-f]{16}$/i.test(_signupReferral);
           const { data, error } = await supabase.auth.signUp({
             email: email, password: pass,
-            options: { data: { full_name: name, business_name: business || null } }
+            options: { data: {
+              full_name: name,
+              business_name: business || null,
+              referral_id: _signupReferralIsUuid ? _signupReferral : null,
+              referral_code: _signupReferralIsCode ? _signupReferral.toLowerCase() : null
+            } }
           });
           if (error) throw error;
           const user = data.user;
@@ -1571,6 +1586,53 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     }
     loadLocalData(user.id);
     await syncCloudData(user);
+
+    // ── Durable referral attribution ─────────────────────────────────────
+    // Pending click survives navigation, refresh, PWA restarts, and OTP delay.
+    // Prefer the latest locally captured click; auth metadata is a fallback
+    // for users who complete verification on a different device.
+    try {
+      const _meta = user.user_metadata || {};
+      let _pendingReferral = '';
+      try {
+        _pendingReferral = localStorage.getItem('qs_pending_referral') || '';
+        if (!_pendingReferral) _pendingReferral = sessionStorage.getItem('qs_referrer_id') || '';
+      } catch (_) {}
+      if (!_pendingReferral) _pendingReferral = _meta.referral_code || _meta.referral_id || '';
+
+      const _isRefUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_pendingReferral);
+      const _isRefCode = /^[0-9a-f]{16}$/i.test(_pendingReferral);
+      if (_isRefUuid || _isRefCode) {
+        let _referrerId = _isRefUuid ? _pendingReferral : null;
+        const _refClient = getClient();
+        if (_isRefCode && _refClient) {
+          const { data: _resolvedRef, error: _resolveError } = await _refClient.rpc('resolve_referral_code', { p_code: _pendingReferral.toLowerCase() });
+          if (_resolveError) throw _resolveError;
+          _referrerId = typeof _resolvedRef === 'string' ? _resolvedRef : null;
+          if (!_referrerId) {
+            // Well-formed but unknown codes are invalid, not transient failures.
+            try { localStorage.removeItem('qs_pending_referral'); sessionStorage.removeItem('qs_referrer_id'); } catch (_) {}
+          }
+        }
+        if (_referrerId && _referrerId !== user.id && _refClient) {
+          const { error: _attribError } = await _refClient.rpc('set_my_referrer', { ref_id: _referrerId });
+          if (_attribError) throw _attribError;
+          try {
+            localStorage.removeItem('qs_pending_referral');
+            sessionStorage.removeItem('qs_referrer_id');
+            localStorage.setItem('qs_referral_attributed_' + user.id, 'true');
+          } catch (_) {}
+        } else if (_referrerId === user.id) {
+          // Reject self-referral and discard it so it cannot be retried forever.
+          try { localStorage.removeItem('qs_pending_referral'); sessionStorage.removeItem('qs_referrer_id'); } catch (_) {}
+        }
+      }
+    } catch (_referralError) {
+      // Keep pending data on transient errors; a later auth event/login retries.
+      errlog('referral attribution', _referralError);
+    }
+    // ── End durable referral attribution ──────────────────────────────────
+
     // After cloud sync: if local products exist but cloud had none, queue them all for upload.
     // This recovers from the case where products were created offline or before Supabase tables existed.
     if (window.qsdb && window.qsdb.addPendingChange && state.products && state.products.length > 0) {
@@ -6786,7 +6848,15 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
         linkLabel.textContent = 'Your Referral Link';
         const linkVal = document.createElement('div');
         linkVal.style.cssText = 'font-size:12px;color:#a78bfa;word-break:break-all;line-height:1.5;cursor:pointer;';
-        const refUrl = window.location.origin + '/?ref=' + encodeURIComponent(_u.id);
+        let refUrl = window.location.origin + '/?ref=' + encodeURIComponent(_u.id);
+        try {
+          const { data: _shortCode, error: _shortCodeError } = await _sb.rpc('get_my_referral_code');
+          if (!_shortCodeError && typeof _shortCode === 'string' && /^[0-9a-f]{16}$/.test(_shortCode)) {
+            refUrl = window.location.origin + '/r/' + _shortCode;
+          }
+        } catch (_) {
+          // Existing UUID referral URLs remain a functional fallback.
+        }
         linkVal.textContent = refUrl;
         linkVal.title = 'Tap to copy';
         linkVal.addEventListener('click', function () {
