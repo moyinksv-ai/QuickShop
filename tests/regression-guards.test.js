@@ -60,6 +60,15 @@ test('landing and auth visibility are mutually exclusive, with one canonical Hom
 test('signup sends at most one request and does not fake OTP success for existing accounts', () => {
   assert.match(appSource, /let signupInFlight = false;/);
   assert.match(appSource, /if \(signupInFlight\) return;/);
+  const signupStart = appSource.indexOf("const signupForm = $('signupForm');");
+  const signupEnd = appSource.indexOf("const btnSendReset = $('btnSendReset');", signupStart);
+  const signupHandler = appSource.slice(signupStart, signupEnd);
+  assert.ok(signupHandler.indexOf("if (!name)") < signupHandler.indexOf("signupInFlight = true;"),
+    'invalid name must not permanently lock the signup submit guard');
+  assert.ok(signupHandler.indexOf("if (!validateEmail(email))") < signupHandler.indexOf("signupInFlight = true;"),
+    'invalid email must remain correctable and retryable');
+  assert.ok(signupHandler.indexOf("if (pass !== passConfirm)") < signupHandler.indexOf("signupInFlight = true;"),
+    'password validation must run before locking signup submission');
   assert.match(appSource, /signupForm\.addEventListener\('submit', handleSignupSubmit\);/);
   assert.doesNotMatch(appSource, /_btnSignupEl\.addEventListener\('click', handleSignupSubmit\)/,
     'the signup button must not register a second submit path');
