@@ -1219,7 +1219,6 @@ function handleTouchEnd() {
         // The form submit event is the single entry point. Guard repeated taps,
         // Enter presses, and slow mobile networks from creating duplicate requests.
         if (signupInFlight) return;
-        signupInFlight = true;
         const signupName = $('signupName'), signupBusiness = $('signupBusiness');
         const signupEmail = $('signupEmail'), signupPass = $('signupPass'), signupPassConfirm = $('signupPassConfirm');
         const name = (signupName && signupName.value || '').trim();
@@ -1231,6 +1230,9 @@ function handleTouchEnd() {
         if (!validateEmail(email)) { toast('Please enter a valid email', 'error'); if (signupEmail) signupEmail.classList.add('error'); return; }
         if (!pass || pass.length < 6) { toast('Password must be at least 6 characters', 'error'); if (signupPass) signupPass.classList.add('error'); return; }
         if (pass !== passConfirm) { toast('Passwords do not match', 'error'); if (signupPassConfirm) signupPassConfirm.classList.add('error'); return; }
+        // Only lock submission after synchronous validation passes; invalid input
+        // must remain correctable without requiring a page reload.
+        signupInFlight = true;
         const btnSignup = $('btnSignup');
         try {
           showAuthLoading();
