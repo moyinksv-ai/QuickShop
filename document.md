@@ -127,14 +127,26 @@ Do not remove or rewrite existing referral, payout, admin, or offline-sync behav
 - Preview only until the user explicitly authorizes production merge/deployment.
 - If a check could not run, state that limitation plainly.
 
-## Incident: top Marketplace link hidden on narrow mobile screens
+## Incident: top Marketplace link missing beside Sign In
 
-### Root cause
-A feature-branch-only media query hid `.ql-nav-browse` at viewport widths of 370px and below. The same rule was absent from `main`, so narrow mobile users lost the top navigation Marketplace entry point even though the separate hero CTA still worked.
+### Source comparison and correction
+The top navigation link exists in both `main` and the feature branch, but the feature branch added compact mobile navigation rules before the base navigation rules. Because the base rules occur later with the same selector specificity, they override the intended compact spacing. On narrow screens this can cause the navigation group to exceed the available width and clip an entry point. I moved the responsive overrides after the base styles so the compact layout actually wins in the CSS cascade. The Marketplace link itself remains the existing `search.html` link; no duplicate link or broad landing redesign was added.
 
 ### Permanent guard
-- Keep the top Marketplace link visible at narrow widths; compact spacing around Sign In/Sign Up instead of removing the entry point.
-- The regression test must fail if a max-width 370px media query hides `.ql-nav-browse`.
+- Keep the top Marketplace link visible beside Sign In at narrow widths.
+- Keep responsive navigation overrides after the base navigation declarations.
+- Do not solve clipping by hiding Marketplace or adding a duplicate link.
+- The regression test checks the link, CSS ordering, and absence of a rule that hides it.
+
+## Incident: signup click handler removed while eliminating duplicate submit routes
+
+### Root cause
+The signup UI is a `div#signupForm`, not a native `form`, and `#btnSignup` is `type="button"`. Removing the button click and Enter handlers while keeping only a `submit` listener meant the UI could not emit the event the code was waiting for. This was a regression introduced by the duplicate-submit cleanup.
+
+### Correction and guard
+- Restore explicit button-click and Enter-key routes to the same `handleSignupSubmit` function.
+- Keep the `signupInFlight` guard to prevent overlapping network requests.
+- Test the actual DOM shape and binding paths; do not assume a `div` behaves like a form.
 
 ## Incident: signup validation could lock the form
 
