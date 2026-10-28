@@ -9,6 +9,7 @@ const root = path.resolve(__dirname, '..');
 const appSource = fs.readFileSync(path.join(root, 'appss.js'), 'utf8');
 const adminHtml = fs.readFileSync(path.join(root, 'admin.html'), 'utf8');
 const adminApiSource = fs.readFileSync(path.join(root, 'api/admin.js'), 'utf8');
+const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 
 function countMatches(source, regex) {
   return Array.from(source.matchAll(regex)).length;
@@ -28,6 +29,13 @@ test('vendor sign-out supports the Settings button being rendered after startup'
   assert.match(appSource, /supabase\.auth\.signOut\(\{ scope: 'local' \}\)/);
   assert.match(appSource, /\['qs_session_active', 'qs_last_user_id', 'qs_user_cache'\]/);
   assert.match(appSource, /window\.location\.replace\(window\.location\.pathname\)/);
+  assert.match(appSource, /btnBackToLanding\.addEventListener\('click'/);
+  assert.match(appSource, /classList\.remove\('qs-show-auth', 'qs-auth-pending', 'mode-app', 'qs-cat-early'\)/);
+});
+
+test('landing Home control is hidden outside auth and can return to landing', () => {
+  assert.match(indexHtml, /body:not\(\.qs-show-auth\) #btnBackToLanding \{ display: none !important; \}/);
+  assert.match(indexHtml, /body\.qs-show-auth #loginScreen #btnBackToLanding/);
   assert.match(appSource, /btnBackToLanding\.addEventListener\('click'/);
   assert.match(appSource, /classList\.remove\('qs-show-auth', 'qs-auth-pending', 'mode-app', 'qs-cat-early'\)/);
 });
