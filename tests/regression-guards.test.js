@@ -66,7 +66,7 @@ test('landing Marketplace navigation remains visible and compact styles override
   const mobileBlock = indexHtml.slice(mediaStart, indexHtml.indexOf('</style>', mediaStart));
   assert.doesNotMatch(mobileBlock, /ql-nav-browse[^}]*display:\\s*none|display:\\s*none[^}]*ql-nav-browse/,
     'do not hide Marketplace at small viewport widths');
-  assert.match(mobileBlock, /@media \\(max-width: 520px\\)/);
+  assert.match(mobileBlock, /@media \(max-width: 520px\)/);
 });
 
 test('signup sends at most one request and does not fake OTP success for existing accounts', () => {
