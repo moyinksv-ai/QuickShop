@@ -57,6 +57,18 @@ test('landing and auth visibility are mutually exclusive, with one canonical Hom
     'cold visits should return to landing unless an interrupted verification/reset flow must resume');
 });
 
+test('landing Marketplace navigation remains visible and compact styles override base styles on mobile', () => {
+  assert.match(indexHtml, /<a class="ql-nav-browse" href="search\.html" aria-label="Browse marketplace">Market →<\/a>/,
+    'top Marketplace link must remain beside Sign In');
+  const mediaStart = indexHtml.lastIndexOf('/* Keep the top Marketplace link and auth actions visible on narrow phones.');
+  const baseNav = indexHtml.lastIndexOf('#qs-landing .ql-nav-browse {');
+  assert.ok(mediaStart > baseNav, 'responsive navigation overrides must follow base navigation styles');
+  const mobileBlock = indexHtml.slice(mediaStart, indexHtml.indexOf('</style>', mediaStart));
+  assert.doesNotMatch(mobileBlock, /ql-nav-browse[^}]*display:\\s*none|display:\\s*none[^}]*ql-nav-browse/,
+    'do not hide Marketplace at small viewport widths');
+  assert.match(mobileBlock, /@media \\(max-width: 520px\\)/);
+});
+
 test('signup sends at most one request and does not fake OTP success for existing accounts', () => {
   assert.match(appSource, /let signupInFlight = false;/);
   assert.match(appSource, /if \(signupInFlight\) return;/);
