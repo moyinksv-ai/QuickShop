@@ -568,7 +568,7 @@
   var _vendors = [];
   var _paymentClaimsAvailable = false;
   var _vendorsLoaded = false, _payoutDataAvailable = false, _payoutDataError = false;
-  var _referralSummaryByVendor = Object.create(null), _queueReturnFocus = null;
+  var _referralSummaryByVendor = Object.create(null), _queueReturnFocus = null, _queueHistoryState = false;
 
   // ── HELPERS ────────────────────────────────────────────────────────────
   function daysFromNow(isoStr) {
@@ -1209,8 +1209,20 @@
     var payouts=(_payoutData.batches||[]).filter(function(b){return b.status==='pending'||b.status==='details_requested';}).length,total=activation+payouts;
     badge.textContent=total>99?'99+':String(total);badge.hidden=total===0;button.setAttribute('aria-label','Open referral queue'+(total?'; '+total+' items need attention':'; no pending activation or payout requests'));
   }
-  function openPayoutQueue(){_queueReturnFocus=document.activeElement;var o=document.getElementById('payout-overlay');o.classList.add('open');o.setAttribute('aria-hidden','false');document.body.classList.add('queue-open');document.getElementById('payout-open-btn').setAttribute('aria-expanded','true');document.getElementById('payout-section').focus();if(!_payoutDataAvailable)loadReferralPayouts();}
-  function closePayoutQueue(){var o=document.getElementById('payout-overlay');if(!o.classList.contains('open'))return;o.classList.remove('open');o.setAttribute('aria-hidden','true');document.body.classList.remove('queue-open');document.getElementById('payout-open-btn').setAttribute('aria-expanded','false');if(_queueReturnFocus&&_queueReturnFocus.focus)_queueReturnFocus.focus();}
+  function openPayoutQueue(){
+    _queueReturnFocus=document.activeElement;
+    if(window.history&&window.history.pushState){window.history.pushState({qsReferralQueue:true},'');_queueHistoryState=true;}
+    var o=document.getElementById('payout-overlay');o.classList.add('open');o.setAttribute('aria-hidden','false');document.body.classList.add('queue-open');
+    document.getElementById('payout-open-btn').setAttribute('aria-expanded','true');document.getElementById('payout-section').focus();if(!_payoutDataAvailable)loadReferralPayouts();
+  }
+  function closePayoutQueue(fromHistory){
+    var o=document.getElementById('payout-overlay');if(!o.classList.contains('open'))return;
+    o.classList.remove('open');o.setAttribute('aria-hidden','true');document.body.classList.remove('queue-open');
+    document.getElementById('payout-open-btn').setAttribute('aria-expanded','false');
+    if(_queueReturnFocus&&_queueReturnFocus.focus)_queueReturnFocus.focus();
+    if(_queueHistoryState){_queueHistoryState=false;if(!fromHistory&&window.history)window.history.back();}
+  }
+  window.addEventListener('popstate',function(){if(_queueHistoryState)closePayoutQueue(true);});
   document.getElementById('payout-open-btn').addEventListener('click',openPayoutQueue);
   document.getElementById('payout-close-btn').addEventListener('click',closePayoutQueue);
   document.getElementById('payout-overlay').addEventListener('click',function(e){if(e.target===this)closePayoutQueue();});
