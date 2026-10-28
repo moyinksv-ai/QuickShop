@@ -81,7 +81,24 @@
     /* The auth-only Home button must never leak onto the landing page. */
     #btnBackToLanding { display: none !important; }
     body:not(.qs-show-auth) #btnBackToLanding { display: none !important; }
-    body.qs-show-auth #loginScreen #btnBackToLanding { display: flex !important; }
+    body.qs-show-auth #loginScreen #btnBackToLanding:not([hidden]) { display: flex !important; }
+    /* Keep the auth-only control hidden even if legacy/global button styles load later. */
+    #btnBackToLanding[hidden],
+    body:not(.qs-show-auth) #btnBackToLanding { display: none !important; }
+
+    /* The landing navigation must remain a single clean row on narrow phones. */
+    @media (max-width: 520px) {
+      #qs-landing .ql-nav { gap: 8px; padding-left: 16px; padding-right: 16px; }
+      #qs-landing .ql-brand { min-width: 0; flex: 1 1 auto; }
+      #qs-landing .ql-nav-btns { flex: 0 0 auto; gap: 2px; }
+      #qs-landing .ql-nav-browse,
+      #qs-landing .ql-nav-signin { padding: 7px 6px; font-size: 12px; }
+      #qs-landing .ql-nav-signup { padding: 8px 11px; font-size: 12px; white-space: nowrap; }
+    }
+    @media (max-width: 370px) {
+      #qs-landing .ql-nav-browse { display: none; }
+      #qs-landing .ql-nav-signin { padding-left: 4px; padding-right: 4px; }
+    }
     .qs-hidden { display: none !important; }
 
     /* Auth and landing are mutually exclusive, including on refresh/startup. */
@@ -961,7 +978,7 @@
 </div>
 
   </div>  <div id="loginScreen" style="display:none">
-    <button id="btnBackToLanding" type="button" aria-label="Back to home">← Home</button>
+    <button id="btnBackToLanding" type="button" aria-label="Back to home" hidden>← Home</button>
     <div id="authForms">
       <div id="loginForm" style="display:flex;">
         <div class="auth-form-title">Welcome back</div>
