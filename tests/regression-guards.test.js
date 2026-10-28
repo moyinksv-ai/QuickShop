@@ -38,7 +38,7 @@ test('admin account filters use unique DOM IDs and do not mislabel unknown payme
     assert.equal(countMatches(adminHtml, new RegExp('id="' + id + '"', 'g')), 1, id + ' must be unique');
   }
   assert.match(adminHtml, /placeholder="Search store, owner, email, phone or ID/);
-  assert.match(adminHtml, /placeholder="Search store, owner, email, phone or ID/);
+  assert.match(adminHtml, /id="filters" aria-label="Filter accounts" hidden/);
   assert.match(adminHtml, /id="filters" aria-label="Filter accounts" hidden/);
   assert.match(adminHtml, /\[v\.business_name, v\.name, v\.email, v\.id\]/);
   assert.doesNotMatch(adminHtml, /Never paid/);
@@ -180,7 +180,7 @@ test('referral payout dashboard reports database permission failures accurately 
 test('admin referral payout dashboard prioritizes active stores and provides independent queue filters', () => {
   assert.match(adminHtml, /id="payout-section"/);
   assert.match(adminHtml, /id="payout-view-filter"/);
-  assert.match(adminHtml, /id="payout-search"/);
+  assert.doesNotMatch(adminHtml, /id="payout-search"/);
   assert.match(adminHtml, /option value="priority">Priority queue/);
   assert.match(adminHtml, /option value="outstanding">Outstanding requests/);
   assert.match(adminHtml, /v\.is_active === true/);
