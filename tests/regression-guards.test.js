@@ -69,11 +69,12 @@ test('signup sends at most one request and does not fake OTP success for existin
     'invalid email must remain correctable and retryable');
   assert.ok(signupHandler.indexOf("if (pass !== passConfirm)") < signupHandler.indexOf("signupInFlight = true;"),
     'password validation must run before locking signup submission');
-  assert.match(appSource, /signupForm\.addEventListener\('submit', handleSignupSubmit\);/);
-  assert.doesNotMatch(appSource, /_btnSignupEl\.addEventListener\('click', handleSignupSubmit\)/,
-    'the signup button must not register a second submit path');
-  assert.doesNotMatch(appSource, /el\.addEventListener\('keydown', \(e\) => \{\s*if \(e\.key === 'Enter'\)[\s\S]{0,100}handleSignupSubmit\(\)/,
-    'Enter must use native form submission rather than a parallel handler');
+  assert.match(appSource, /btnSignupSubmit\.addEventListener\('click', handleSignupSubmit\)/,
+    'the signup button is type=button inside a div and needs an explicit click handler');
+  assert.match(appSource, /if \(e\.key === 'Enter'\) \{\s*e\.preventDefault\(\);\s*handleSignupSubmit\(e\);/,
+    'Enter should call the same guarded signup handler');
+  assert.doesNotMatch(appSource, /signupForm\.addEventListener\('submit', handleSignupSubmit\)/,
+    'signupForm is not a native form and cannot emit the expected submit event');
   assert.match(appSource, /Array\.isArray\(data\.user\.identities\) && data\.user\.identities\.length === 0/,
     'Supabase empty identities response must not be treated as a new account');
   assert.match(appSource, /Try signing in or resetting your password/);
