@@ -112,35 +112,43 @@
     .action-result.error { color: var(--red); }
 
 
-    /* REFERRAL PAYOUTS */
+    /* REFERRAL PAYOUTS — compact operational queue */
     #payout-section { margin: 16px 20px 0; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
     .payout-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
-    .payout-title { font-size:15px; font-weight:800; }
-    .payout-subtitle { color:var(--muted); font-size:11px; margin-top:3px; }
+    .payout-title { font-size:15px; font-weight:800; letter-spacing:-.02em; }
+    .payout-subtitle { color:var(--muted); font-size:11px; margin-top:3px; max-width:620px; }
     #payout-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-bottom:12px; }
     .payout-stat { background:var(--lift); border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
-    .payout-stat strong { display:block; font-size:20px; line-height:1.2; }
+    .payout-stat strong { display:block; font-size:20px; line-height:1.2; font-variant-numeric:tabular-nums; }
     .payout-stat span { display:block; color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.05em; margin-top:4px; }
-    #payout-list { display:flex; flex-direction:column; gap:8px; }
-    .payout-card { border:1px solid var(--border-hi); border-radius:11px; overflow:hidden; }
+    .payout-toolbar { display:grid; grid-template-columns:minmax(180px,.7fr) minmax(220px,1.3fr); gap:8px; margin-bottom:12px; }
+    .payout-toolbar label { display:flex; flex-direction:column; gap:5px; color:var(--muted); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; min-width:0; }
+    .payout-toolbar select, .payout-toolbar input { width:100%; min-width:0; padding:9px 10px; border-radius:8px; border:1px solid var(--border-hi); background:var(--lift); color:var(--text); font:inherit; color-scheme:dark; }
+    .payout-queue-note { color:var(--muted); font-size:11px; margin:0 0 10px; }
+    #payout-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; align-items:start; }
+    .payout-card { min-width:0; border:1px solid var(--border-hi); border-radius:11px; overflow:hidden; background:rgba(255,255,255,.012); }
+    .payout-card.is-priority { border-color:var(--amber-bd); }
+    .payout-card.is-ready { border-color:var(--green-bd); }
     .payout-main { padding:12px; display:flex; gap:12px; align-items:flex-start; }
     .payout-vendor { flex:1; min-width:0; }
     .payout-vendor-name { font-weight:800; font-size:13px; overflow-wrap:anywhere; }
     .payout-vendor-meta { color:var(--muted); font-size:11px; overflow-wrap:anywhere; margin-top:2px; }
     .payout-badges { display:flex; flex-wrap:wrap; gap:5px; margin-top:7px; }
-    .payout-progress { height:7px; background:var(--lift); border-radius:99px; overflow:hidden; margin-top:10px; }
+    .payout-progress { height:5px; background:var(--lift); border-radius:99px; overflow:hidden; margin-top:9px; }
     .payout-progress > span { display:block; height:100%; background:var(--amber); border-radius:99px; }
     .payout-progress.ready > span { background:var(--green); }
-    .payout-count { font-size:12px; font-weight:800; white-space:nowrap; text-align:right; }
+    .payout-count { font-size:12px; font-weight:800; white-space:nowrap; text-align:right; font-variant-numeric:tabular-nums; }
     .payout-count small { display:block; color:var(--muted); font-size:10px; font-weight:600; margin-top:3px; }
     .payout-actions { border-top:1px solid var(--border); padding:9px 12px; display:flex; gap:7px; align-items:center; flex-wrap:wrap; }
+    .payout-actions .vendor-email { flex:1 1 100%; margin-top:2px; }
     .btn-payout { background:var(--green); color:#fff; }
     .btn-whatsapp { background:#166534; color:#fff; }
     .btn-paid { background:var(--violet-bg); color:var(--violet); border:1px solid var(--violet-bd); }
     .btn-muted { background:var(--lift); color:var(--muted); border:1px solid var(--border-hi); }
-    .payout-empty { padding:18px 10px; color:var(--muted); font-size:12px; text-align:center; }
+    .payout-empty { grid-column:1 / -1; padding:18px 10px; color:var(--muted); font-size:12px; text-align:center; }
     .payout-error { color:var(--red); }
-    @media (max-width:700px) { #payout-section { margin-left:12px; margin-right:12px; padding:12px; } #payout-summary { grid-template-columns:repeat(3,minmax(0,1fr)); } .payout-stat { padding:9px 8px; } .payout-stat strong { font-size:17px; } .payout-main { padding:10px; } }
+    @media (max-width:900px) { #payout-list { grid-template-columns:1fr; } }
+    @media (max-width:700px) { #payout-section { margin-left:12px; margin-right:12px; padding:12px; } #payout-summary { grid-template-columns:repeat(3,minmax(0,1fr)); } .payout-stat { padding:9px 8px; } .payout-stat strong { font-size:17px; } .payout-main { padding:10px; } .payout-toolbar { grid-template-columns:1fr; } }
 
     /* STATES */
     #loading-state, #empty-state, #error-state { padding: 60px 20px; text-align: center; color: var(--muted); line-height: 1.7; }
@@ -228,14 +236,31 @@
 
   <section id="payout-section" aria-label="Referral payout preparation">
     <div class="payout-heading">
-      <div><div class="payout-title">Referral payouts</div><div class="payout-subtitle">10 eligible referrals unlock ₦5,000. Reserved referrals do not count toward another cycle.</div></div>
-      <button id="payout-refresh-btn" class="btn btn-muted" type="button">Refresh payouts</button>
+      <div><div class="payout-title">Referral payout queue</div><div class="payout-subtitle">Work the queue from top to bottom: outstanding requests first, then active stores closest to the ₦5,000 threshold. A requested payout stays visible until resolved, even if a store later becomes inactive.</div></div>
+      <button id="payout-refresh-btn" class="btn btn-muted" type="button">Refresh queue</button>
     </div>
     <div id="payout-summary" aria-live="polite">
-      <div class="payout-stat"><strong id="ps-near">—</strong><span>Approaching (7–9)</span></div>
+      <div class="payout-stat"><strong id="ps-near">—</strong><span>Active · approaching</span></div>
       <div class="payout-stat"><strong id="ps-ready">—</strong><span>Ready / requested</span></div>
-      <div class="payout-stat"><strong id="ps-pending">—</strong><span>Awaiting payment</span></div>
+      <div class="payout-stat"><strong id="ps-pending">—</strong><span>Outstanding batches</span></div>
     </div>
+    <div class="payout-toolbar" aria-label="Payout queue filters">
+      <label for="payout-view-filter">Queue view
+        <select id="payout-view-filter">
+          <option value="priority">Priority queue</option>
+          <option value="outstanding">Outstanding requests</option>
+          <option value="active">Active stores</option>
+          <option value="ready">Ready / review</option>
+          <option value="approaching">Approaching (7–9)</option>
+          <option value="history">Inactive / history</option>
+          <option value="all">All payout records</option>
+        </select>
+      </label>
+      <label for="payout-search">Find a vendor
+        <input id="payout-search" type="search" placeholder="Store, owner, email, or phone" autocomplete="off" />
+      </label>
+    </div>
+    <div id="payout-queue-note" class="payout-queue-note" aria-live="polite">Priority queue · unresolved payout requests and active stores nearing payout.</div>
     <div id="payout-list"><div class="payout-empty">Sign in to load referral payout data.</div></div>
   </section>
 
@@ -855,13 +880,42 @@
     document.getElementById('ps-ready').textContent = ready;
     document.getElementById('ps-pending').textContent = pending;
 
-    var search = (document.getElementById('account-search').value || '').trim().toLowerCase();
-    rows = rows.filter(function(v) {
-      return [v.business_name, v.name, v.email, v.id].join(' ').toLowerCase().indexOf(search) !== -1;
-    }).sort(function(a,b) {
-      function rank(v) { return v.activeBatch ? 0 : v.ready ? 1 : v.eligibleCount >= 7 ? 2 : 3; }
-      return rank(a)-rank(b) || b.eligibleCount-a.eligibleCount || String(a.business_name || a.name || '').localeCompare(String(b.business_name || b.name || ''));
+    var search = (document.getElementById('payout-search').value || '').trim().toLowerCase();
+    var view = document.getElementById('payout-view-filter').value || 'priority';
+    var matching = rows.filter(function(v) {
+      return [v.business_name, v.name, v.email, v.phone_number, v.id].join(' ').toLowerCase().indexOf(search) !== -1;
     });
+    rows = matching.filter(function(v) {
+      var outstanding = Boolean(v.activeBatch);
+      var isActive = v.is_active === true;
+      var hasProgress = v.eligibleCount > 0 || v.paidCount > 0 || Boolean(v.lastBatch);
+      if (view === 'outstanding') return outstanding;
+      if (view === 'active') return isActive;
+      if (view === 'ready') return isActive && (v.ready || v.eligibleCount >= 10);
+      if (view === 'approaching') return isActive && !outstanding && v.eligibleCount >= 7 && v.eligibleCount <= 9;
+      if (view === 'history') return !outstanding && (!isActive || Boolean(v.lastBatch) || v.paidCount > 0);
+      if (view === 'all') return true;
+      return outstanding || (isActive && (v.ready || v.eligibleCount >= 7));
+    }).sort(function(a,b) {
+      function rank(v) {
+        // Never hide an existing payout obligation behind store-status sorting.
+        if (v.activeBatch) return 0;
+        if (v.is_active === true && v.eligibleCount >= 10 && v.eligibleAmount !== 5000) return 1;
+        if (v.is_active === true && v.ready) return 2;
+        if (v.is_active === true && v.eligibleCount >= 7) return 3;
+        if (v.is_active === true && v.eligibleCount > 0) return 4;
+        if (v.is_active === true) return 5;
+        if (v.lastBatch || v.paidCount > 0 || v.earnedCount > 0) return 6;
+        return 7;
+      }
+      return rank(a)-rank(b) ||
+        (b.activeBatch ? new Date(b.activeBatch.requested_at || 0).getTime() : 0) - (a.activeBatch ? new Date(a.activeBatch.requested_at || 0).getTime() : 0) ||
+        b.eligibleCount-a.eligibleCount ||
+        String(a.business_name || a.name || '').localeCompare(String(b.business_name || b.name || ''), undefined, {sensitivity:'base'});
+    });
+    var note = document.getElementById('payout-queue-note');
+    var viewLabels = {priority:'Priority queue', outstanding:'Outstanding requests', active:'Active stores', ready:'Ready / review', approaching:'Approaching (7–9)', history:'Inactive / history', all:'All payout records'};
+    note.textContent = viewLabels[view] + ' · ' + rows.length + ' of ' + matching.length + ' matching vendors. Outstanding requests remain visible until resolved.';
 
     var list = document.getElementById('payout-list');
     list.innerHTML = '';
@@ -876,7 +930,7 @@
 
     rows.forEach(function(v) {
       var card = document.createElement('article');
-      card.className = 'payout-card';
+      card.className = 'payout-card' + (v.activeBatch || (v.is_active === true && (v.ready || v.eligibleCount >= 7)) ? ' is-priority' : '') + (v.ready ? ' is-ready' : '');
       var main = document.createElement('div');
       main.className = 'payout-main';
       var info = document.createElement('div');
@@ -889,6 +943,8 @@
       meta.textContent = (v.email || v.id) + (v.phone_number ? ' · ' + v.phone_number : '');
       var badges = document.createElement('div');
       badges.className = 'payout-badges';
+      if (v.is_active === true) appendPayoutBadge(badges, 'Active store', 'badge-active');
+      else appendPayoutBadge(badges, 'Inactive store', 'badge-lapsed');
       if (v.activeBatch) {
         appendPayoutBadge(badges, v.activeBatch.status === 'details_requested' ? 'Account details requested' : 'Payout requested', 'badge-pending');
         appendPayoutBadge(badges, payoutMoney(v.activeBatch.amount_ngn) + ' · ' + (v.activeBatch.referral_count || 0) + ' referrals', 'badge-founder');
@@ -1047,6 +1103,8 @@
 
   document.getElementById('refresh-btn').addEventListener('click', function() { loadVendors(); loadReferralPayouts(); });
   document.getElementById('payout-refresh-btn').addEventListener('click', loadReferralPayouts);
+  document.getElementById('payout-view-filter').addEventListener('change', renderReferralPayouts);
+  document.getElementById('payout-search').addEventListener('input', renderReferralPayouts);
 
 })();
 </script>
