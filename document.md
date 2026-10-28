@@ -46,7 +46,7 @@ The general landing-page display selector must explicitly exclude `body.qs-show-
 
 The signup form had three submission routes: the form's native `submit` event, an explicit button `click` handler, and custom Enter-key handlers. A normal button click can trigger both click and form submit, and Enter can trigger both the custom key handler and native submit. On slow mobile networks this can issue repeated signup requests and repeated/ambiguous OTP messaging. The form now has one native submit entry point plus an in-flight guard.
 
-Supabase can return a successful-shaped signup response with an empty `user.identities` array when an email is already registered and email confirmation is enabled. The UI must not create a profile or claim a new verification code was sent for that response; it now routes back to sign-in and offers password reset.
+Supabase can return a successful-shaped signup response with an empty `user.identities` array when an email is already registered and email confirmation is enabled. The UI must not create a profile or claim a new verification code was sent for that response; it now routes back to sign-in and offers password reset. It also checks returned `email_confirmed_at` and `confirmed_at` fields so an already-verified email response does not enter the new-signup verification screen. This is a client-side response guard, not a guarantee that Supabase never attempts delivery; the backend response is authoritative and must be tested against the project's actual email-confirmation settings.
 
 ### Authentication flow map (current source-level map)
 
