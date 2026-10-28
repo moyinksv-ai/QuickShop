@@ -46,7 +46,7 @@ test('landing and auth visibility are mutually exclusive, with one canonical Hom
   assert.match(qsInitSource, /body\.classList\.remove\('qs-show-auth', 'qs-auth-pending', 'mode-app', 'qs-cat-early'\)/);
   assert.match(qsInitSource, /landing\.classList\.remove\('qs-hidden', 'qs-navigating'\)/);
   assert.match(qsInitSource, /target\.closest\('#btnBackToLanding'\)/, 'delegation should support nested button content');
-  assert.match(qsInitSource, /window\\.matchMedia && window\\.matchMedia\\('\(prefers-reduced-motion: reduce\)'\\)/);
+  assert.match(qsInitSource, /window\.matchMedia && window\.matchMedia\('\(prefers-reduced-motion: reduce\)'\)/);
 });
 
 test('admin account filters use unique DOM IDs and do not mislabel unknown payments', () => {
