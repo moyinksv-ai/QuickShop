@@ -40,7 +40,7 @@ test('admin account filters use unique DOM IDs and do not mislabel unknown payme
   assert.match(adminHtml, /placeholder="Search store, owner, email, phone or ID/);
   assert.match(adminHtml, /id="filters" aria-label="Filter accounts" hidden/);
   assert.match(adminHtml, /id="filters" aria-label="Filter accounts" hidden/);
-  assert.match(adminHtml, /\[v\.business_name, v\.name, v\.email, v\.id\]/);
+  assert.match(adminHtml, /\[v\.business_name, v\.name, v\.email, v\.phone_number, v\.id\]/);
   assert.doesNotMatch(adminHtml, /Never paid/);
   assert.match(adminHtml, /v\.has_payment_claim !== false/);
   assert.match(adminHtml, /Object\.assign\(vendor, data\.patch \|\| \{\}\);[\s\S]*?applyFilters\(\);[\s\S]*?updateStats\(\);/);
