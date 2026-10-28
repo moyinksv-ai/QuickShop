@@ -42,6 +42,11 @@ test('landing and auth visibility are mutually exclusive, with one canonical Hom
     /body:not\(\.qs-show-auth\):not\(\.mode-app\):not\(\.qs-cat-early\):not\(\.qs-auth-pending\) #qs-landing:not\(\.qs-hidden\) \{ display: block !important; \}/,
     'landing must never be force-shown while auth is active'
   );
+  assert.doesNotMatch(
+    indexHtml,
+    /@media\s*\(max-width:\s*370px\)[\s\S]{0,180}\.ql-nav-browse\s*\{\s*display:\s*none/,
+    'the top Marketplace link must remain available on narrow mobile screens'
+  );
   assert.doesNotMatch(appSource, /btnBackToLanding\.addEventListener\('click'/, 'avoid competing Home click handlers');
   assert.match(qsInitSource, /body\.classList\.remove\('qs-show-auth', 'qs-auth-pending', 'mode-app', 'qs-cat-early'\)/);
   assert.match(qsInitSource, /landing\.classList\.remove\('qs-hidden', 'qs-navigating'\)/);
