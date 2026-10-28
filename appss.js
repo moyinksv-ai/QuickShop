@@ -1213,8 +1213,13 @@ function handleTouchEnd() {
 
     const signupForm = $('signupForm');
     if (signupForm) {
+      let signupInFlight = false;
       const handleSignupSubmit = async (e) => {
         if (e) e.preventDefault();
+        // The form submit event is the single entry point. Guard repeated taps,
+        // Enter presses, and slow mobile networks from creating duplicate requests.
+        if (signupInFlight) return;
+        signupInFlight = true;
         const signupName = $('signupName'), signupBusiness = $('signupBusiness');
         const signupEmail = $('signupEmail'), signupPass = $('signupPass'), signupPassConfirm = $('signupPassConfirm');
         const name = (signupName && signupName.value || '').trim();
@@ -1226,9 +1231,9 @@ function handleTouchEnd() {
         if (!validateEmail(email)) { toast('Please enter a valid email', 'error'); if (signupEmail) signupEmail.classList.add('error'); return; }
         if (!pass || pass.length < 6) { toast('Password must be at least 6 characters', 'error'); if (signupPass) signupPass.classList.add('error'); return; }
         if (pass !== passConfirm) { toast('Passwords do not match', 'error'); if (signupPassConfirm) signupPassConfirm.classList.add('error'); return; }
+        const btnSignup = $('btnSignup');
         try {
           showAuthLoading();
-          const btnSignup = $('btnSignup');
           disableBtn(btnSignup, true);
           const supabase = getClient();
           if (!supabase) throw new Error('Supabase not initialized');
@@ -1248,7 +1253,17 @@ function handleTouchEnd() {
             } }
           });
           if (error) throw error;
-          const user = data.user;
+          // With Supabase email-confirmation enabled, signUp can intentionally
+          // return a user with no identities for an already-registered email.
+          // Do not create a profile or claim that a new OTP was sent in that case.
+          if (data && data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+            try { localStorage.removeItem('qs_pending_verification_email'); } catch (_) {}
+            showLoginForm();
+            toast('This email could not be registered as a new account. Try signing in or resetting your password.', 'error');
+            return;
+          }
+          const user = data && data.user;
+          if (!user || !user.id) throw new Error('Signup did not return a valid user');
           const profile = { uid: user.id, name, businessName: business || null, email: user.email, createdAt: Date.now() };
           await setUserProfile(user.id, profile);
 
@@ -1261,28 +1276,16 @@ function handleTouchEnd() {
           showSignupForm();
           toast(mapAuthError(e), 'error');
         } finally {
-          const btnSignup = $('btnSignup');
+          signupInFlight = false;
           disableBtn(btnSignup, false);
           const authLoading = $('authLoading');
           if (authLoading) authLoading.style.display = 'none';
         }
       };
 
+      // Native form submission handles both button clicks and Enter consistently.
+      // Do not attach a second click/keydown path that can submit twice.
       signupForm.addEventListener('submit', handleSignupSubmit);
-      const signups = ['signupName', 'signupBusiness', 'signupEmail', 'signupPass', 'signupPassConfirm'];
-      signups.forEach(Id => {
-        const el = $(Id);
-        if (el) {
-          el.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              handleSignupSubmit();
-            }
-          });
-        }
-      });
-      const _btnSignupEl = $('btnSignup');
-      if (_btnSignupEl) _btnSignupEl.addEventListener('click', handleSignupSubmit);
     }
 
     const btnSendReset = $('btnSendReset');
