@@ -190,6 +190,8 @@ test('admin referral payout dashboard prioritizes active stores and provides ind
   assert.doesNotMatch(adminHtml, /id="payout-search"/);
   assert.match(adminHtml, /id="payout-overlay"/);
   assert.match(adminHtml, /if\(e\.key==='Tab'\)/);
+  assert.match(adminHtml, /window\.addEventListener\('popstate'/);
+  assert.match(adminHtml, /history\.pushState\(\{qsReferralQueue:true\}/);
   assert.match(adminHtml, /function renderActivationAttention/);
   assert.match(adminHtml, /id="payout-open-btn"/);
   assert.match(adminHtml, /pending-activation/);
