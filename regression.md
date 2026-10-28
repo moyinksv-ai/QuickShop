@@ -2,14 +2,14 @@
 
 ## Release decision
 
-**Hold merge to `main` until the release-blocking checks below are completed.** The feature branch is 113 commits ahead of `main` and changes authentication/session routing, signup, referral attribution, admin UI/API, payout flows, database grants, and Vercel routing. A passing source-pattern suite and a READY preview are not enough evidence to safely merge this entire accumulated diff into production.
+**Hold merge to `main` until the release-blocking checks below are completed.** The feature branch is 114 commits ahead of `main` and changes authentication/session routing, signup, referral attribution, admin UI/API, payout flows, database grants, and Vercel routing. A passing source-pattern suite and a READY preview are not enough evidence to safely merge this entire accumulated diff into production.
 
 ## Baseline and rollback safety
 
 - Production baseline branch: `main`
 - Baseline SHA observed during this review: `fd20d2f5352b96b4282680a032decb116ecc0e23`
 - Feature branch: `feat/integrated-referrals-otp`
-- Feature branch comparison: 113 commits ahead, 0 behind at review time.
+- Feature branch comparison: 114 commits ahead, 0 behind at review time.
 - No merge, push to `main`, or production deployment was performed during this check.
 - Before any eventual merge, create a durable backup branch pointing to the then-current `main` SHA (for example `backup/main-before-quickshop-release-2026-10-28`) and record the merge commit SHA. A rollback should revert the merge commit or redeploy the backup SHA; do not reset or force-push `main`.
 
