@@ -166,7 +166,16 @@
     #payout-overlay{position:fixed;inset:0;z-index:500;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(3,5,8,.8);backdrop-filter:blur(10px)}
     #payout-overlay.open{display:flex;animation:queue-in .16s ease-out}
     #payout-section{margin:0;width:min(1180px,100%);height:calc(100dvh - 32px);max-height:calc(100dvh - 32px);display:flex;flex-direction:column;overflow:hidden;background:var(--bg);border-color:var(--border-hi)}
-    #payout-list{overflow:auto;min-height:0;overscroll-behavior:contain}
+    #payout-list{overflow:auto;min-height:0;flex:1;overscroll-behavior:contain}
+    #activation-attention{flex-shrink:0;max-height:28vh;overflow:auto;margin:0 0 12px;padding:10px 12px;border:1px solid var(--amber-bd);background:var(--amber-bg);border-radius:10px}
+    #activation-attention[hidden]{display:none!important}
+    .activation-attention-heading{display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:800;margin-bottom:7px}
+    #activation-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+    .activation-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px}
+    .activation-row-info{min-width:0;overflow-wrap:anywhere;font-size:11px}
+    .activation-row-info small{display:block;color:var(--muted);font-size:10px}
+    .activation-review{flex-shrink:0;background:var(--lift);color:var(--text);border:1px solid var(--border-hi);border-radius:7px;padding:6px 8px;font:inherit;font-size:10px;font-weight:700;cursor:pointer}
+    @media(max-width:700px){#activation-list{grid-template-columns:1fr}#activation-attention{max-height:24vh}}
     #payout-close-btn{width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--border-hi);border-radius:9px;background:var(--lift);color:var(--text);font-size:20px;cursor:pointer}
     body.queue-open{overflow:hidden}
     .vendor-referral-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;padding:0 16px 12px}
@@ -264,6 +273,7 @@
     <div class="payout-heading"><div><div class="payout-title" id="payout-dialog-title">Referral payout queue</div><div class="payout-subtitle">Outstanding payout requests first, then active stores approaching the ₦5,000 threshold. Existing obligations remain visible until resolved.</div></div>
       <div style="display:flex;gap:7px;align-items:center"><button id="payout-refresh-btn" class="btn btn-muted" type="button">Refresh queue</button><button id="payout-close-btn" type="button" aria-label="Close referral payout queue" title="Close queue">×</button></div>
     </div>
+    <section id="activation-attention" aria-label="Pending activation requests" hidden><div class="activation-attention-heading"><span>Pending activation requests</span><span id="activation-count">0</span></div><div id="activation-list"></div></section>
     <div id="payout-summary" aria-live="polite">
       <div class="payout-stat"><strong id="ps-near">—</strong><span>Active · approaching</span></div>
       <div class="payout-stat"><strong id="ps-ready">—</strong><span>Ready / requested</span></div>
@@ -486,7 +496,7 @@
         gateInput.value = '';
         document.getElementById('gate').style.display = 'none';
         document.getElementById('app').classList.add('visible');
-        renderVendors(result.data.vendors || []);
+        renderVendors(result.data.vendors || [], result.data.paymentClaimsAvailable);
         loadReferralPayouts();
       }
     }).catch(function(err) {
@@ -779,7 +789,9 @@
     _paymentClaimsAvailable = paymentClaimsAvailable !== false;
     var neverOption = document.querySelector('#status-filter option[value="never"]');
     if (neverOption) neverOption.disabled = !_paymentClaimsAvailable;
-    if (!_paymentClaimsAvailable && document.getElementById('status-filter').value === 'never') {
+    var activationOption = document.querySelector('#status-filter option[value="pending-activation"]');
+    if (activationOption) activationOption.disabled = !_paymentClaimsAvailable;
+    if (!_paymentClaimsAvailable && ['never','pending-activation'].indexOf(document.getElementById('status-filter').value) !== -1) {
       document.getElementById('status-filter').value = 'all';
     }
     updateStats();
@@ -910,6 +922,7 @@
   function renderReferralPayouts() {
     var rows = payoutVendorRows();
     _referralSummaryByVendor=Object.create(null);rows.forEach(function(v){_referralSummaryByVendor[v.id]=v;});
+    renderActivationAttention();
     var near = rows.filter(function(v) { return !v.activeBatch && v.eligibleCount >= 7 && v.eligibleCount <= 9; }).length;
     var ready = rows.filter(function(v) { return v.ready || v.activeBatch; }).length;
     var pending = (_payoutData.batches || []).filter(function(b) { return b.status === 'pending' || b.status === 'details_requested'; }).length;
@@ -1154,6 +1167,36 @@
     [['created-from','From '],['created-to','To ']].forEach(function(p){var el=document.getElementById(p[0]);if(el.value)addFilterChip(host,p[1]+el.value,function(){el.value='';applyFilters();});});
   }
   function addFilterChip(host,label,clear){var b=document.createElement('button');b.type='button';b.className='filter-chip';b.textContent=label+' ×';b.addEventListener('click',clear);host.appendChild(b);}
+  function renderActivationAttention(){
+    var section=document.getElementById('activation-attention'),list=document.getElementById('activation-list'),count=document.getElementById('activation-count');
+    list.innerHTML='';
+    if(!_paymentClaimsAvailable){
+      section.hidden=false;count.textContent='!';
+      var unavailable=document.createElement('div');unavailable.className='payout-empty payout-error';unavailable.textContent='Activation claim data is unavailable. Refresh to retry; this is not a zero-pending result.';
+      list.appendChild(unavailable);return;
+    }
+    var pending=_vendors.filter(function(v){return !v.is_active&&String((v.payment_claim||{}).status||'').toLowerCase()==='pending';});
+    count.textContent=String(pending.length);section.hidden=pending.length===0;
+    pending.forEach(function(v){
+      var row=document.createElement('div');row.className='activation-row';
+      var info=document.createElement('div');info.className='activation-row-info';
+      var name=document.createElement('strong');name.textContent=v.business_name||v.name||'Unnamed vendor';
+      var meta=document.createElement('small');meta.textContent=v.email||v.id;
+      info.appendChild(name);info.appendChild(meta);
+      var review=document.createElement('button');review.type='button';review.className='activation-review';review.textContent='Review vendor';
+      review.addEventListener('click',function(){
+        document.getElementById('status-filter').value='pending-activation';
+        document.getElementById('filters').hidden=false;
+        document.getElementById('filters-toggle').setAttribute('aria-expanded','true');
+        document.getElementById('filters-toggle').textContent='× Hide filters';
+        applyFilters();closePayoutQueue();
+        var listEl=document.getElementById('vendor-list');
+        listEl.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});
+      });
+      row.appendChild(info);row.appendChild(review);list.appendChild(row);
+    });
+  }
+
   function updateAttentionBadge(){
     var badge=document.getElementById('attention-count'),button=document.getElementById('payout-open-btn');
     if(!_vendorsLoaded||!_paymentClaimsAvailable||!_payoutDataAvailable||_payoutDataError){badge.textContent='!';badge.hidden=false;button.setAttribute('aria-label','Open referral queue; attention count unavailable, refresh to retry');return;}
