@@ -47,6 +47,9 @@ test('landing and auth visibility are mutually exclusive, with one canonical Hom
   assert.match(qsInitSource, /landing\.classList\.remove\('qs-hidden', 'qs-navigating'\)/);
   assert.match(qsInitSource, /target\.closest\('#btnBackToLanding'\)/, 'delegation should support nested button content');
   assert.match(qsInitSource, /window\.matchMedia && window\.matchMedia\('\(prefers-reduced-motion: reduce\)'\)/);
+  assert.match(appSource, /handleAuthLogout\(\{ initialLoad: true \}\)/, 'an unauthenticated cold visit must not be treated as an explicit sign-out');
+  assert.match(appSource, /if \(options\.initialLoad && !_pendingVerificationEmail && !_savedResetEmail &&\s+typeof window\.__qs_showLanding === 'function'\)\s*\{\s*window\.__qs_showLanding\(\);/,
+    'cold visits should return to landing unless an interrupted verification/reset flow must resume');
 });
 
 test('admin account filters use unique DOM IDs and do not mislabel unknown payments', () => {
