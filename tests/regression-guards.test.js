@@ -185,7 +185,7 @@ test('admin referral payout dashboard prioritizes active stores and provides ind
   assert.match(adminHtml, /v\.is_active === true/);
   assert.match(adminHtml, /if \(v\.activeBatch\) return 0/);
   assert.match(adminHtml, /Outstanding requests remain visible until resolved/);
-  assert.match(adminHtml, /payout-view-filter'\)\.addEventListener\('change', renderReferralPayouts/);
+  assert.match(adminHtml, /payout-view-filter'\)\.addEventListener\('change',\s*renderReferralPayouts/);
   assert.match(adminHtml, /account-search'\)\.addEventListener\('input'/);
   assert.doesNotMatch(adminHtml, /id="payout-search"/);
   assert.match(adminHtml, /id="payout-overlay"/);
