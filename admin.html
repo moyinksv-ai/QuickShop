@@ -150,6 +150,33 @@
     @media (max-width:900px) { #payout-list { grid-template-columns:1fr; } }
     @media (max-width:700px) { #payout-section { margin-left:12px; margin-right:12px; padding:12px; } #payout-summary { grid-template-columns:repeat(3,minmax(0,1fr)); } .payout-stat { padding:9px 8px; } .payout-stat strong { font-size:17px; } .payout-main { padding:10px; } .payout-toolbar { grid-template-columns:1fr; } }
 
+    /* Admin workspace refinements */
+    #header{position:sticky;top:0;z-index:100;background:rgba(10,10,15,.96);backdrop-filter:blur(20px);padding:10px 20px;gap:12px}
+    #header-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+    #payout-open-btn{display:inline-flex;align-items:center;gap:7px;min-height:36px;padding:7px 12px;background:var(--green-bg);border:1px solid var(--green-bd);border-radius:8px;color:var(--green);font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap}
+    .attention-count{display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;padding:0 5px;border-radius:99px;background:var(--amber);color:#17120a;font-size:10px;font-weight:900}
+    .attention-count[hidden]{display:none!important}
+    #global-tools{display:flex;align-items:center;gap:8px;padding:12px 20px 0}
+    #account-search{flex:1;min-width:0;width:100%;padding:11px 13px;border-radius:10px;border:1px solid var(--border-hi);background:var(--surface);color:var(--text);font:inherit}
+    #filters-toggle{flex-shrink:0;padding:10px 12px;border-radius:10px;border:1px solid var(--border-hi);background:var(--lift);color:var(--text);font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+    #active-filter-chips{display:flex;flex-wrap:wrap;gap:6px;padding:7px 20px 0}
+    .filter-chip{border:1px solid var(--border-hi);background:var(--lift);color:var(--muted);border-radius:99px;padding:3px 8px;font-size:10px}
+    #filters[hidden]{display:none!important}
+    #filters{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:10px}
+    #payout-overlay{position:fixed;inset:0;z-index:500;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(3,5,8,.8);backdrop-filter:blur(10px)}
+    #payout-overlay.open{display:flex;animation:queue-in .16s ease-out}
+    #payout-section{margin:0;width:min(1180px,100%);height:calc(100dvh - 32px);max-height:calc(100dvh - 32px);display:flex;flex-direction:column;overflow:hidden;background:var(--bg);border-color:var(--border-hi)}
+    #payout-list{overflow:auto;min-height:0;overscroll-behavior:contain}
+    #payout-close-btn{width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--border-hi);border-radius:9px;background:var(--lift);color:var(--text);font-size:20px;cursor:pointer}
+    body.queue-open{overflow:hidden}
+    .vendor-referral-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;padding:0 16px 12px}
+    .vendor-referral-metric{min-width:0;background:rgba(255,255,255,.018);border:1px solid var(--border);border-radius:8px;padding:7px 9px}
+    .vendor-referral-metric strong{display:block;font-size:14px;line-height:1.2;font-variant-numeric:tabular-nums}
+    .vendor-referral-metric span{display:block;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.04em;margin-top:3px}
+    @keyframes queue-in{from{opacity:0}to{opacity:1}}
+    @media(prefers-reduced-motion:reduce){#payout-overlay.open{animation:none}}
+    @media(max-width:700px){#header{padding:9px 12px;align-items:flex-start}#header-meta{display:none}#header-actions{gap:5px}#payout-open-btn,#refresh-btn,#signout-btn{min-height:36px;padding:7px 8px;font-size:11px}#global-tools{padding:10px 12px 0}#active-filter-chips{padding-left:12px;padding-right:12px}#filters{grid-template-columns:repeat(2,minmax(0,1fr));margin-left:12px;margin-right:12px}#stats{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;padding:10px 12px 0}.stat-card{padding:8px 5px}.stat-val{font-size:17px}.stat-lbl{font-size:8px;letter-spacing:0}#vendor-list{padding:12px}#payout-overlay{padding:0;align-items:stretch}#payout-section{width:100%;height:100dvh;max-height:100dvh;border-radius:0;padding:12px;padding-top:max(12px,env(safe-area-inset-top));padding-bottom:max(12px,env(safe-area-inset-bottom))}#payout-list{grid-template-columns:1fr}.vendor-referral-summary{padding-left:12px;padding-right:12px;gap:5px}.vendor-referral-metric{padding:7px}.vendor-referral-metric span{font-size:8px}}
+    @media(max-width:430px){#header-brand{font-size:13px}#header-actions{gap:4px}#payout-open-btn{max-width:116px;overflow:hidden;text-overflow:ellipsis}#refresh-btn,#signout-btn{font-size:0;min-width:36px}#refresh-btn:after{content:'↻';font-size:16px}#signout-btn:after{content:'↗';font-size:16px}#stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
     /* STATES */
     #loading-state, #empty-state, #error-state { padding: 60px 20px; text-align: center; color: var(--muted); line-height: 1.7; }
     .spinner { width: 28px; height: 28px; border: 2.5px solid var(--border-hi); border-top-color: var(--green); border-radius: 50%; animation: spin 0.7s linear infinite; margin: 0 auto 12px; }
@@ -217,16 +244,15 @@
 
 <div id="app">
   <div id="header">
-    <div>
-      <div id="header-brand">Quick<span>Shop</span> Admin</div>
-      <div id="header-meta">Vendor management console</div>
-    </div>
+    <div><div id="header-brand">Quick<span>Shop</span> Admin</div><div id="header-meta">Vendor management console</div></div>
     <div id="header-actions">
-      <button id="refresh-btn" type="button">&#8635; Refresh</button>
+      <button id="payout-open-btn" type="button" aria-haspopup="dialog" aria-controls="payout-section" aria-expanded="false">Referral queue <span id="attention-count" class="attention-count" hidden></span></button>
+      <button id="refresh-btn" type="button" aria-label="Refresh vendor and referral data">&#8635; Refresh</button>
       <button id="signout-btn" type="button">Sign out</button>
     </div>
   </div>
-
+  <div id="global-tools" role="search"><input id="account-search" type="search" placeholder="Search store, owner, email, phone or ID…" autocomplete="off" aria-label="Search all vendors" /><button id="filters-toggle" type="button" aria-controls="filters" aria-expanded="false">☷ Filters</button></div>
+  <div id="active-filter-chips" aria-live="polite"></div>
   <div id="stats">
     <div class="stat-card stat-violet"><div class="stat-val" id="s-total">&#8212;</div><div class="stat-lbl">Total</div></div>
     <div class="stat-card stat-green"> <div class="stat-val" id="s-active">&#8212;</div><div class="stat-lbl">Active</div></div>
@@ -234,10 +260,9 @@
     <div class="stat-card stat-amber"> <div class="stat-val" id="s-expiring">&#8212;</div><div class="stat-lbl">Expiring &le;7d</div></div>
   </div>
 
-  <section id="payout-section" aria-label="Referral payout preparation">
-    <div class="payout-heading">
-      <div><div class="payout-title">Referral payout queue</div><div class="payout-subtitle">Work the queue from top to bottom: outstanding requests first, then active stores closest to the ₦5,000 threshold. A requested payout stays visible until resolved, even if a store later becomes inactive.</div></div>
-      <button id="payout-refresh-btn" class="btn btn-muted" type="button">Refresh queue</button>
+  <div id="payout-overlay" aria-hidden="true"><section id="payout-section" role="dialog" aria-modal="true" aria-labelledby="payout-dialog-title" tabindex="-1">
+    <div class="payout-heading"><div><div class="payout-title" id="payout-dialog-title">Referral payout queue</div><div class="payout-subtitle">Outstanding payout requests first, then active stores approaching the ₦5,000 threshold. Existing obligations remain visible until resolved.</div></div>
+      <div style="display:flex;gap:7px;align-items:center"><button id="payout-refresh-btn" class="btn btn-muted" type="button">Refresh queue</button><button id="payout-close-btn" type="button" aria-label="Close referral payout queue" title="Close queue">×</button></div>
     </div>
     <div id="payout-summary" aria-live="polite">
       <div class="payout-stat"><strong id="ps-near">—</strong><span>Active · approaching</span></div>
@@ -256,19 +281,14 @@
           <option value="all">All payout records</option>
         </select>
       </label>
-      <label for="payout-search">Find a vendor
-        <input id="payout-search" type="search" placeholder="Store, owner, email, or phone" autocomplete="off" />
-      </label>
     </div>
     <div id="payout-queue-note" class="payout-queue-note" aria-live="polite">Priority queue · unresolved payout requests and active stores nearing payout.</div>
     <div id="payout-list"><div class="payout-empty">Sign in to load referral payout data.</div></div>
-  </section>
-
-  <section id="filters" aria-label="Filter accounts">
-    <div class="filter-field"><label for="status-filter">Account status</label><select id="status-filter"><option value="all">All accounts</option><option value="active">Active stores</option><option value="inactive">Inactive stores</option><option value="founders">Founders</option><option value="never">Never activated / no recorded payment</option></select></div>
+  </section></div>
+  <section id="filters" aria-label="Filter accounts" hidden>
+    <div class="filter-field"><label for="status-filter">Account status</label><select id="status-filter"><option value="all">All accounts</option><option value="active">Active stores</option><option value="inactive">Inactive stores</option><option value="pending-activation">Pending activation</option><option value="founders">Founders</option><option value="never">Never activated / no recorded payment</option></select></div>
     <div class="filter-field"><label for="created-from">Created from</label><input id="created-from" type="date" /></div>
     <div class="filter-field"><label for="created-to">Created to</label><input id="created-to" type="date" /></div>
-    <div class="filter-field"><label for="account-search">Search account</label><input id="account-search" type="search" placeholder="Email, store name, or name" /></div>
     <div id="filter-summary" aria-live="polite">Showing all accounts</div>
   </section>
 
@@ -536,7 +556,9 @@
 
   // ── STATE ──────────────────────────────────────────────────────────────
   var _vendors = [];
-  var _paymentClaimsAvailable = true;
+  var _paymentClaimsAvailable = false;
+  var _vendorsLoaded = false, _payoutDataAvailable = false, _payoutDataError = false;
+  var _referralSummaryByVendor = Object.create(null), _queueReturnFocus = null;
 
   // ── HELPERS ────────────────────────────────────────────────────────────
   function daysFromNow(isoStr) {
@@ -663,6 +685,17 @@
       if (exp && exp.text) addMeta('\uD83D\uDCC5 ' + exp.text, exp.cls);
     }
     if (hasMeta) card.appendChild(metaEl);
+    var referralSummary = _referralSummaryByVendor[v.id];
+    if (referralSummary) {
+      var referralMetrics=document.createElement('div');referralMetrics.className='vendor-referral-summary';
+      [['earnedCount','Earned referrals'],['eligibleCount','Eligible now'],['paidCount','Paid referrals']].forEach(function(metric){
+        var cell=document.createElement('div');cell.className='vendor-referral-metric';
+        var value=document.createElement('strong');value.textContent=String(referralSummary[metric[0]]||0);
+        var label=document.createElement('span');label.textContent=metric[1];
+        cell.appendChild(value);cell.appendChild(label);referralMetrics.appendChild(cell);
+      });
+      card.appendChild(referralMetrics);
+    }
 
     // Actions
     var actionsEl = document.createElement('div');
@@ -742,6 +775,7 @@
   // ── RENDER VENDOR LIST ─────────────────────────────────────────────────
   function renderVendors(vendors, paymentClaimsAvailable) {
     _vendors = Array.isArray(vendors) ? vendors : [];
+    _vendorsLoaded = true;
     _paymentClaimsAvailable = paymentClaimsAvailable !== false;
     var neverOption = document.querySelector('#status-filter option[value="never"]');
     if (neverOption) neverOption.disabled = !_paymentClaimsAvailable;
@@ -760,6 +794,7 @@
     var shown = _vendors.filter(function(v) {
       if (status === 'active' && !v.is_active) return false;
       if (status === 'inactive' && v.is_active) return false;
+      if (status === 'pending-activation' && !(v.payment_claim && String(v.payment_claim.status || '').toLowerCase() === 'pending' && !v.is_active)) return false;
       if (status === 'founders' && !v.is_founder) return false;
       // A missing claim is only meaningful when the claims query succeeded.
       if (status === 'never' && (!_paymentClaimsAvailable || v.is_active || v.is_founder || v.subscription_expires || v.has_payment_claim !== false)) return false;
@@ -775,7 +810,7 @@
         if (to && createdDay > to) return false;
       }
       if (search) {
-        var haystack = [v.business_name, v.name, v.email, v.id].join(' ').toLowerCase();
+        var haystack = [v.business_name, v.name, v.email, v.phone_number, v.id].join(' ').toLowerCase();
         if (haystack.indexOf(search) === -1) return false;
       }
       return true;
@@ -790,6 +825,7 @@
     document.getElementById('filter-summary').textContent =
       'Showing ' + shown.length + ' of ' + _vendors.length + ' accounts' +
       (!_paymentClaimsAvailable ? ' · Payment-claim data unavailable; no-recorded-payment filter disabled' : '');
+    renderActiveFilterChips(); updateAttentionBadge();
   }
 
 
@@ -873,6 +909,7 @@
 
   function renderReferralPayouts() {
     var rows = payoutVendorRows();
+    _referralSummaryByVendor=Object.create(null);rows.forEach(function(v){_referralSummaryByVendor[v.id]=v;});
     var near = rows.filter(function(v) { return !v.activeBatch && v.eligibleCount >= 7 && v.eligibleCount <= 9; }).length;
     var ready = rows.filter(function(v) { return v.ready || v.activeBatch; }).length;
     var pending = (_payoutData.batches || []).filter(function(b) { return b.status === 'pending' || b.status === 'details_requested'; }).length;
@@ -880,7 +917,7 @@
     document.getElementById('ps-ready').textContent = ready;
     document.getElementById('ps-pending').textContent = pending;
 
-    var search = (document.getElementById('payout-search').value || '').trim().toLowerCase();
+    var search = (document.getElementById('account-search').value || '').trim().toLowerCase();
     var view = document.getElementById('payout-view-filter').value || 'priority';
     var matching = rows.filter(function(v) {
       return [v.business_name, v.name, v.email, v.phone_number, v.id].join(' ').toLowerCase().indexOf(search) !== -1;
@@ -1080,8 +1117,9 @@
         items: Array.isArray(data.items) ? data.items : [],
         activities: Array.isArray(data.activities) ? data.activities : []
       };
-      renderReferralPayouts();
+      _payoutDataAvailable=true;_payoutDataError=false;renderReferralPayouts();applyFilters();
     }).catch(function(err) {
+      _payoutDataAvailable=false;_payoutDataError=true;updateAttentionBadge();
       list.innerHTML = '<div class="payout-empty payout-error">Failed to load payout data: ' + String(err.message || 'unknown').replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>';
       toast('Payout data unavailable: ' + (err.message || ''), 'error');
     }).finally(function() { _payoutLoading = false; });
@@ -1094,6 +1132,7 @@
     apiCall('get_vendors').then(function(data) {
       renderVendors(data.vendors || [], data.paymentClaimsAvailable);
     }).catch(function(err) {
+      _vendorsLoaded=false;_paymentClaimsAvailable=false;updateAttentionBadge();
       listEl.innerHTML = '<div id="error-state">Failed to load vendors.<br><small>' +
         String(err.message || 'Unknown error').replace(/&/g,'&amp;').replace(/</g,'&lt;') +
         '</small></div>';
@@ -1101,10 +1140,33 @@
     });
   }
 
-  document.getElementById('refresh-btn').addEventListener('click', function() { loadVendors(); loadReferralPayouts(); });
-  document.getElementById('payout-refresh-btn').addEventListener('click', loadReferralPayouts);
-  document.getElementById('payout-view-filter').addEventListener('change', renderReferralPayouts);
-  document.getElementById('payout-search').addEventListener('input', renderReferralPayouts);
+  document.getElementById('refresh-btn').addEventListener('click',function(){loadVendors();loadReferralPayouts();});
+  document.getElementById('payout-refresh-btn').addEventListener('click',loadReferralPayouts);
+  document.getElementById('payout-view-filter').addEventListener('change',renderReferralPayouts);
+  document.getElementById('account-search').addEventListener('input',function(){applyFilters();renderReferralPayouts();});
+  ['status-filter','created-from','created-to'].forEach(function(id){document.getElementById(id).addEventListener('change',applyFilters);});
+  document.getElementById('filters-toggle').addEventListener('click',function(){
+    var f=document.getElementById('filters'),open=this.getAttribute('aria-expanded')==='true';f.hidden=open;this.setAttribute('aria-expanded',String(!open));this.textContent=open?'☷ Filters':'× Hide filters';if(!open)document.getElementById('status-filter').focus();
+  });
+  function renderActiveFilterChips(){
+    var host=document.getElementById('active-filter-chips');host.innerHTML='';var status=document.getElementById('status-filter');
+    if(status.value!=='all')addFilterChip(host,status.options[status.selectedIndex].text,function(){status.value='all';applyFilters();});
+    [['created-from','From '],['created-to','To ']].forEach(function(p){var el=document.getElementById(p[0]);if(el.value)addFilterChip(host,p[1]+el.value,function(){el.value='';applyFilters();});});
+  }
+  function addFilterChip(host,label,clear){var b=document.createElement('button');b.type='button';b.className='filter-chip';b.textContent=label+' ×';b.addEventListener('click',clear);host.appendChild(b);}
+  function updateAttentionBadge(){
+    var badge=document.getElementById('attention-count'),button=document.getElementById('payout-open-btn');
+    if(!_vendorsLoaded||!_paymentClaimsAvailable||!_payoutDataAvailable||_payoutDataError){badge.textContent='!';badge.hidden=false;button.setAttribute('aria-label','Open referral queue; attention count unavailable, refresh to retry');return;}
+    var activation=_vendors.filter(function(v){return !v.is_active&&String((v.payment_claim||{}).status||'').toLowerCase()==='pending';}).length;
+    var payouts=(_payoutData.batches||[]).filter(function(b){return b.status==='pending'||b.status==='details_requested';}).length,total=activation+payouts;
+    badge.textContent=total>99?'99+':String(total);badge.hidden=total===0;button.setAttribute('aria-label','Open referral queue'+(total?'; '+total+' items need attention':'; no pending activation or payout requests'));
+  }
+  function openPayoutQueue(){_queueReturnFocus=document.activeElement;var o=document.getElementById('payout-overlay');o.classList.add('open');o.setAttribute('aria-hidden','false');document.body.classList.add('queue-open');document.getElementById('payout-open-btn').setAttribute('aria-expanded','true');document.getElementById('payout-section').focus();if(!_payoutDataAvailable)loadReferralPayouts();}
+  function closePayoutQueue(){var o=document.getElementById('payout-overlay');if(!o.classList.contains('open'))return;o.classList.remove('open');o.setAttribute('aria-hidden','true');document.body.classList.remove('queue-open');document.getElementById('payout-open-btn').setAttribute('aria-expanded','false');if(_queueReturnFocus&&_queueReturnFocus.focus)_queueReturnFocus.focus();}
+  document.getElementById('payout-open-btn').addEventListener('click',openPayoutQueue);
+  document.getElementById('payout-close-btn').addEventListener('click',closePayoutQueue);
+  document.getElementById('payout-overlay').addEventListener('click',function(e){if(e.target===this)closePayoutQueue();});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')closePayoutQueue();});
 
 })();
 </script>
