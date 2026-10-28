@@ -80,7 +80,8 @@
     #loginScreen { display: none !important; }
     /* The auth-only Home button must never leak onto the landing page. */
     #btnBackToLanding { display: none !important; }
-    body.qs-show-auth #btnBackToLanding { display: flex !important; }
+    body:not(.qs-show-auth) #btnBackToLanding { display: none !important; }
+    body.qs-show-auth #loginScreen #btnBackToLanding { display: flex !important; }
     .qs-hidden { display: none !important; }
 
     /* Auth and landing are mutually exclusive, including on refresh/startup. */
