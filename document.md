@@ -44,7 +44,7 @@ The general landing-page display selector must explicitly exclude `body.qs-show-
 
 ### Findings and fix
 
-The signup form had three submission routes: the form's native `submit` event, an explicit button `click` handler, and custom Enter-key handlers. A normal button click can trigger both click and form submit, and Enter can trigger both the custom key handler and native submit. On slow mobile networks this can issue repeated signup requests and repeated/ambiguous OTP messaging. The form now has one native submit entry point plus an in-flight guard.
+The signup container is a `div#signupForm`, not a native form, and `#btnSignup` is `type="button"`. The old code included an ineffective `submit` listener plus explicit button-click and Enter-key handlers. The current code removes the ineffective listener and routes click/Enter through the same handler guarded by `signupInFlight`, preventing overlapping network requests. Do not describe this as a native form submit flow.
 
 Supabase can return a successful-shaped signup response with an empty `user.identities` array when an email is already registered and email confirmation is enabled. The UI must not create a profile or claim a new verification code was sent for that response; it now routes back to sign-in and offers password reset. It also checks returned `email_confirmed_at` and `confirmed_at` fields so an already-verified email response does not enter the new-signup verification screen. This is a client-side response guard, not a guarantee that Supabase never attempts delivery; the backend response is authoritative and must be tested against the project's actual email-confirmation settings.
 
@@ -54,7 +54,7 @@ Supabase can return a successful-shaped signup response with an empty `user.iden
 |---|---|---|
 | Cold visit, no session | Landing | Do not treat `INITIAL_SESSION` with no user as explicit sign-out. |
 | Landing → Sign In | Auth / login form | Landing hidden; auth visible. |
-| Landing → Sign Up | Auth / signup form | One native submit route; duplicate submission guarded. |
+| Landing → Sign Up | Auth / signup form | Button click and Enter share one guarded handler; no native form submit event exists because the container is a `div`. |
 | New email signup accepted | Verification notice | Persist pending verification email; do not assume a delivery guarantee beyond Supabase response. |
 | Existing email detected by empty identities | Login form + sign-in/reset guidance | Do not create a new local profile or claim OTP sent. |
 | Resend verification | Verification notice remains | Read email from the displayed verification target; avoid duplicate handlers. |
@@ -130,7 +130,7 @@ Do not remove or rewrite existing referral, payout, admin, or offline-sync behav
 ## Incident: top Marketplace link missing beside Sign In
 
 ### Source comparison and correction
-The top navigation link exists in both `main` and the feature branch, but the feature branch added compact mobile navigation rules before the base navigation rules. Because the base rules occur later with the same selector specificity, they override the intended compact spacing. On narrow screens this can cause the navigation group to exceed the available width and clip an entry point. I moved the responsive overrides after the base styles so the compact layout actually wins in the CSS cascade. The Marketplace link itself remains the existing `search.html` link; no duplicate link or broad landing redesign was added.
+The top navigation link exists in both `main` and the feature branch. The feature branch had a narrow-screen layout risk: the Marketplace link and adjacent auth actions could shrink/clamp when the available nav width was tight. Responsive overrides are placed after base styles, and the Marketplace link now has a non-shrinking flex basis; Sign In and Sign Up also retain their own width. The link still targets `search.html`; no duplicate link or broad landing redesign was added. This is source/test verification, not a substitute for visual testing on the user's exact device.
 
 ### Permanent guard
 - Keep the top Marketplace link visible beside Sign In at narrow widths.
@@ -141,7 +141,7 @@ The top navigation link exists in both `main` and the feature branch, but the fe
 ## Incident: signup click handler removed while eliminating duplicate submit routes
 
 ### Root cause
-The signup UI is a `div#signupForm`, not a native `form`, and `#btnSignup` is `type="button"`. Removing the button click and Enter handlers while keeping only a `submit` listener meant the UI could not emit the event the code was waiting for. This was a regression introduced by the duplicate-submit cleanup.
+The signup UI is a `div#signupForm`, not a native `form`, and `#btnSignup` is `type="button"`. An intermediate cleanup removed the click and Enter handlers while leaving only an ineffective `submit` listener. That intermediate state was a regression; the current source restores the explicit click and Enter handlers and protects them with `signupInFlight`.
 
 ### Correction and guard
 - Restore explicit button-click and Enter-key routes to the same `handleSignupSubmit` function.
