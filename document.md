@@ -27,6 +27,19 @@ The general landing-page display selector must explicitly exclude `body.qs-show-
 
 `qs-init.js` owns the delegated Home-button handler and the canonical `window.__qs_showLanding` transition. `appss.js` must not register a competing direct click handler. The canonical transition must clear the auth/app/category-pending body states, hide auth/app/bottom navigation, reveal the landing page, and respect reduced-motion preferences. Delegation must support clicks on nested button content via `closest()`.
 
+## Incident: cold visit incorrectly opens the auth screen
+
+### Root cause
+
+`initAuth()` receives Supabase's `INITIAL_SESSION` event with no session on a normal public visit. Treating that event exactly like an explicit `SIGNED_OUT` event routed every first-time visitor into the login screen. That is an auth-flow decision, not a CSS visibility failure.
+
+### Permanent guard
+
+- An ordinary cold visit with no session returns to the public landing page through `window.__qs_showLanding()`.
+- If a pending email-verification or password-reset flow was saved before a mobile browser/PWA was suspended, restore that auth flow instead of losing the user's place.
+- Explicit sign-out remains a distinct path; do not conflate it with the initial no-session event.
+- Add regression coverage for the `INITIAL_SESSION` branch and the pending verification/reset exception.
+
 ## UI state invariants
 
 | State | Required invariant |
