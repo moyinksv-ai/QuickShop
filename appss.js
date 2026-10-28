@@ -1412,19 +1412,8 @@ function handleTouchEnd() {
       });
     }
 
-    const btnBackToLanding = $('btnBackToLanding');
-    if (btnBackToLanding) btnBackToLanding.addEventListener('click', function () {
-      const landing = $('qs-landing'), loginScreen = $('loginScreen'), appScreen = document.querySelector('.app');
-      document.body.classList.remove('qs-show-auth', 'qs-auth-pending', 'mode-app', 'qs-cat-early');
-      if (loginScreen) loginScreen.style.display = 'none';
-      if (appScreen) appScreen.style.display = 'none';
-      if (landing) {
-        landing.classList.remove('qs-hidden', 'qs-navigating');
-        landing.style.display = '';
-      }
-      setBottomNavVisible(false);
-      window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-    });
+    // Home navigation is delegated by qs-init.js through one canonical state transition.
+    // Do not add a second direct listener here: it can race with the delegated handler.
 
     const btnBackToResetEmail = $('btnBackToResetEmail');
     if (btnBackToResetEmail) btnBackToResetEmail.addEventListener('click', function () {
