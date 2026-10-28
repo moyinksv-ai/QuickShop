@@ -87,9 +87,11 @@ test('signup sends at most one request and does not fake OTP success for existin
     'Enter should call the same guarded signup handler');
   assert.doesNotMatch(appSource, /signupForm\.addEventListener\('submit', handleSignupSubmit\)/,
     'signupForm is not a native form and cannot emit the expected submit event');
-  assert.match(appSource, /Array\.isArray\(data\.user\.identities\) && data\.user\.identities\.length === 0/,
+  assert.match(appSource, /Array\.isArray\(returnedUser\.identities\) && returnedUser\.identities\.length === 0/,
     'Supabase empty identities response must not be treated as a new account');
-  assert.match(appSource, /Try signing in or resetting your password/);
+  assert.match(appSource, /returnedUser\.email_confirmed_at/);
+  assert.match(appSource, /returnedUser\.confirmed_at/);
+  assert.match(appSource, /already registered or verified/);
 });
 
 test('admin account filters use unique DOM IDs and do not mislabel unknown payments', () => {
