@@ -10,6 +10,7 @@ const appSource = fs.readFileSync(path.join(root, 'appss.js'), 'utf8');
 const adminHtml = fs.readFileSync(path.join(root, 'admin.html'), 'utf8');
 const adminApiSource = fs.readFileSync(path.join(root, 'api/admin.js'), 'utf8');
 const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const qsInitSource = fs.readFileSync(path.join(root, 'qs-init.js'), 'utf8');
 
 function countMatches(source, regex) {
   return Array.from(source.matchAll(regex)).length;
@@ -29,15 +30,23 @@ test('vendor sign-out supports the Settings button being rendered after startup'
   assert.match(appSource, /supabase\.auth\.signOut\(\{ scope: 'local' \}\)/);
   assert.match(appSource, /\['qs_session_active', 'qs_last_user_id', 'qs_user_cache'\]/);
   assert.match(appSource, /window\.location\.replace\(window\.location\.pathname\)/);
-  assert.match(appSource, /btnBackToLanding\.addEventListener\('click'/);
-  assert.match(appSource, /classList\.remove\('qs-show-auth', 'qs-auth-pending', 'mode-app', 'qs-cat-early'\)/);
+  assert.doesNotMatch(appSource, /btnBackToLanding\.addEventListener\('click'/, 'Home navigation must not have a competing appss.js handler');
+  assert.match(qsInitSource, /window\.__qs_showLanding\(\)/, 'the canonical delegated handler must call the shared landing transition');
 });
 
-test('landing Home control is hidden outside auth and can return to landing', () => {
+test('landing and auth visibility are mutually exclusive, with one canonical Home transition', () => {
   assert.match(indexHtml, /body:not\(\.qs-show-auth\) #btnBackToLanding \{ display: none !important; \}/);
   assert.match(indexHtml, /body\.qs-show-auth #loginScreen #btnBackToLanding/);
-  assert.match(appSource, /btnBackToLanding\.addEventListener\('click'/);
-  assert.match(appSource, /classList\.remove\('qs-show-auth', 'qs-auth-pending', 'mode-app', 'qs-cat-early'\)/);
+  assert.match(
+    indexHtml,
+    /body:not\(\.qs-show-auth\):not\(\.mode-app\):not\(\.qs-cat-early\):not\(\.qs-auth-pending\) #qs-landing:not\(\.qs-hidden\) \{ display: block !important; \}/,
+    'landing must never be force-shown while auth is active'
+  );
+  assert.doesNotMatch(appSource, /btnBackToLanding\.addEventListener\('click'/, 'avoid competing Home click handlers');
+  assert.match(qsInitSource, /body\.classList\.remove\('qs-show-auth', 'qs-auth-pending', 'mode-app', 'qs-cat-early'\)/);
+  assert.match(qsInitSource, /landing\.classList\.remove\('qs-hidden', 'qs-navigating'\)/);
+  assert.match(qsInitSource, /target\.closest\('#btnBackToLanding'\)/, 'delegation should support nested button content');
+  assert.match(qsInitSource, /window\.matchMedia\('(prefers-reduced-motion: reduce)'\)/);
 });
 
 test('admin account filters use unique DOM IDs and do not mislabel unknown payments', () => {
@@ -68,6 +77,7 @@ test('admin API keeps profiles visible when payment claims are absent or unavail
 test('application and admin scripts parse without syntax errors', () => {
   const vm = require('node:vm');
   new vm.Script(appSource, { filename: 'appss.js' });
+  new vm.Script(qsInitSource, { filename: 'qs-init.js' });
   assert.doesNotThrow(() => new vm.Script(adminApiSource), 'api/admin.js syntax');
   const inlineScripts = Array.from(adminHtml.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi))
     .filter(match => !/\bsrc\s*=/.test(match[1]) && match[2].trim());
