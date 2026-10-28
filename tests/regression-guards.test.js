@@ -173,8 +173,17 @@ test('referral payout dashboard reports database permission failures accurately 
   assert.match(migration, /GRANT SELECT ON TABLE public\.referral_payout_batches TO authenticated/i);
 });
  
-test('admin referral payout dashboard shows cycle progress, WhatsApp account requests, and manual paid tracking', () => {
+test('admin referral payout dashboard prioritizes active stores and provides independent queue filters', () => {
   assert.match(adminHtml, /id="payout-section"/);
+  assert.match(adminHtml, /id="payout-view-filter"/);
+  assert.match(adminHtml, /id="payout-search"/);
+  assert.match(adminHtml, /option value="priority">Priority queue/);
+  assert.match(adminHtml, /option value="outstanding">Outstanding requests/);
+  assert.match(adminHtml, /v\.is_active === true/);
+  assert.match(adminHtml, /if \(v\.activeBatch\) return 0/);
+  assert.match(adminHtml, /Outstanding requests remain visible until resolved/);
+  assert.match(adminHtml, /payout-view-filter'\)\.addEventListener\('change', renderReferralPayouts/);
+  assert.match(adminHtml, /payout-search'\)\.addEventListener\('input', renderReferralPayouts/);
   assert.match(adminHtml, /Approaching \(7–9\)/);
   assert.match(adminHtml, /Request account details · WhatsApp/);
   assert.match(adminHtml, /Please reply with your bank name, account name, and account number/);
