@@ -52,6 +52,19 @@ test('landing and auth visibility are mutually exclusive, with one canonical Hom
     'cold visits should return to landing unless an interrupted verification/reset flow must resume');
 });
 
+test('signup sends at most one request and does not fake OTP success for existing accounts', () => {
+  assert.match(appSource, /let signupInFlight = false;/);
+  assert.match(appSource, /if \(signupInFlight\) return;/);
+  assert.match(appSource, /signupForm\.addEventListener\('submit', handleSignupSubmit\);/);
+  assert.doesNotMatch(appSource, /_btnSignupEl\.addEventListener\('click', handleSignupSubmit\)/,
+    'the signup button must not register a second submit path');
+  assert.doesNotMatch(appSource, /el\.addEventListener\('keydown', \(e\) => \{\s*if \(e\.key === 'Enter'\)[\s\S]{0,100}handleSignupSubmit\(\)/,
+    'Enter must use native form submission rather than a parallel handler');
+  assert.match(appSource, /Array\.isArray\(data\.user\.identities\) && data\.user\.identities\.length === 0/,
+    'Supabase empty identities response must not be treated as a new account');
+  assert.match(appSource, /Try signing in or resetting your password/);
+});
+
 test('admin account filters use unique DOM IDs and do not mislabel unknown payments', () => {
   assert.equal(countMatches(adminHtml, /id="filters"/g), 1, 'there must be one filter section');
   for (const id of ['status-filter', 'created-from', 'created-to', 'account-search', 'filter-summary']) {
