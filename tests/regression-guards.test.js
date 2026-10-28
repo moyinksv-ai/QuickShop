@@ -189,6 +189,8 @@ test('admin referral payout dashboard prioritizes active stores and provides ind
   assert.match(adminHtml, /account-search'\)\.addEventListener\('input'/);
   assert.doesNotMatch(adminHtml, /id="payout-search"/);
   assert.match(adminHtml, /id="payout-overlay"/);
+  assert.match(adminHtml, /if\(e\.key==='Tab'\)/);
+  assert.match(adminHtml, /function renderActivationAttention/);
   assert.match(adminHtml, /id="payout-open-btn"/);
   assert.match(adminHtml, /pending-activation/);
   assert.match(adminHtml, /updateAttentionBadge/);
