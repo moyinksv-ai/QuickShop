@@ -1507,7 +1507,10 @@ function handleTouchEnd() {
             handleAuthUser(session.user);
           }
         } else {
-          handleAuthLogout();
+          // A cold visit with no session is a public landing-page visit, not an
+          // explicit sign-out. Preserve interrupted OTP/reset flows, but do not
+          // force every new visitor into the auth screen.
+          handleAuthLogout({ initialLoad: true });
         }
         return;
       }
@@ -1660,7 +1663,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     }
   }
 
-  function handleAuthLogout() {
+  function handleAuthLogout(options = {}) {
     currentUser = null;
     setSupabaseUser(null);
     localStorage.removeItem('qs_session_active');
@@ -1672,10 +1675,6 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     }
     document.body.classList.remove('qs-auth-pending');
     document.body.classList.remove('mode-app'); // auth resolved (logged out)
-    document.body.classList.add('qs-show-auth'); // CSS hides auth unless this state is explicit
-    const loginScreen = $('loginScreen'), appScreen = document.querySelector('.app');
-    if (loginScreen) loginScreen.style.display = 'flex';
-    if (appScreen) appScreen.style.display = 'none';
     // Restore interrupted auth steps after cold reload/app eviction on mobile.
     // Low-memory browsers can discard the page while the user switches to Gmail.
     let _pendingVerificationEmail = '';
@@ -1684,12 +1683,24 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       _pendingVerificationEmail = (localStorage.getItem('qs_pending_verification_email') || '').trim();
       _savedResetEmail = (localStorage.getItem('qs_pending_reset_email') || '').trim();
     } catch (_) {}
-    if (_pendingVerificationEmail) {
-      showVerificationNotice(_pendingVerificationEmail);
-    } else if (_savedResetEmail) {
-      showResetVerifyForm(_savedResetEmail);
+
+    // On an ordinary cold visit, no session means the public landing page should
+    // be shown. Pending verification/reset steps remain on auth so users can resume.
+    if (options.initialLoad && !_pendingVerificationEmail && !_savedResetEmail &&
+        typeof window.__qs_showLanding === 'function') {
+      window.__qs_showLanding();
     } else {
-      showLoginForm();
+      document.body.classList.add('qs-show-auth'); // explicit sign-out / pending auth flow
+      const loginScreen = $('loginScreen'), appScreen = document.querySelector('.app');
+      if (loginScreen) loginScreen.style.display = 'flex';
+      if (appScreen) appScreen.style.display = 'none';
+      if (_pendingVerificationEmail) {
+        showVerificationNotice(_pendingVerificationEmail);
+      } else if (_savedResetEmail) {
+        showResetVerifyForm(_savedResetEmail);
+      } else {
+        showLoginForm();
+      }
     }
     setBottomNavVisible(false);
     const userEmailEl = $('userEmail'), userDisplayNameEl = $('userDisplayName');
