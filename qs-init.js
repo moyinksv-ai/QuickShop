@@ -55,40 +55,50 @@
   // Guard: only run if the landing section is present (not catalog mode)
   if (document.getElementById('qs-landing')) {
 
-    // Expose globally so appss.js auth flow can call it — non-writable so
-    // no later script can overwrite the reference.
+    // One canonical state transition owns landing/auth visibility. Keeping this
+    // centralized prevents competing click handlers from restoring different UI states.
+    function showLandingNow() {
+      var body = document.body;
+      var auth = document.getElementById('loginScreen');
+      var landing = document.getElementById('qs-landing');
+      var app = document.querySelector('.app');
+      var bottomNav = document.querySelector('.bottom-nav');
+      body.classList.remove('qs-show-auth', 'qs-auth-pending', 'mode-app', 'qs-cat-early');
+      if (auth) { auth.removeAttribute('style'); auth.style.display = 'none'; }
+      if (app) { app.removeAttribute('style'); app.style.display = 'none'; }
+      if (bottomNav) { bottomNav.removeAttribute('style'); bottomNav.style.display = 'none'; }
+      if (landing) {
+        landing.classList.remove('qs-hidden', 'qs-navigating');
+        landing.removeAttribute('style');
+      }
+      var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+    }
+
+    // Expose globally so auth flow can return to landing using the same transition.
     try {
       Object.defineProperty(window, '__qs_showLanding', {
-        value: function () {
-          var auth    = document.getElementById('loginScreen');
-          var landing = document.getElementById('qs-landing');
-          document.body.classList.remove('qs-show-auth');
-          if (auth) { auth.removeAttribute('style'); auth.style.display = 'none'; }
-          if (landing) { landing.classList.remove('qs-hidden'); landing.removeAttribute('style'); }
-          window.scrollTo(0, 0);
-        },
+        value: showLandingNow,
         writable: false,
         configurable: false,
         enumerable: false
       });
     } catch (_) {
-      // Fallback for environments where defineProperty is restricted
-      window.__qs_showLanding = function () {
-        var auth    = document.getElementById('loginScreen');
-        var landing = document.getElementById('qs-landing');
-        document.body.classList.remove('qs-show-auth');
-        if (auth) { auth.removeAttribute('style'); auth.style.display = 'none'; }
-        if (landing) { landing.classList.remove('qs-hidden'); landing.removeAttribute('style'); }
-        window.scrollTo(0, 0);
-      };
+      window.__qs_showLanding = showLandingNow;
     }
 
     function showAuth() {
+      var body = document.body;
       var landing = document.getElementById('qs-landing');
-      var auth    = document.getElementById('loginScreen');
+      var auth = document.getElementById('loginScreen');
+      var app = document.querySelector('.app');
+      var bottomNav = document.querySelector('.bottom-nav');
+      body.classList.remove('mode-app', 'qs-auth-pending', 'qs-cat-early');
+      body.classList.add('qs-show-auth');
       if (landing) landing.classList.add('qs-hidden');
-      if (auth)    { auth.removeAttribute('style'); auth.style.display = 'flex'; }
-      document.body.classList.add('qs-show-auth');
+      if (auth) { auth.removeAttribute('style'); auth.style.display = 'flex'; }
+      if (app) { app.removeAttribute('style'); app.style.display = 'none'; }
+      if (bottomNav) { bottomNav.removeAttribute('style'); bottomNav.style.display = 'none'; }
       window.scrollTo(0, 0);
     }
 
@@ -128,11 +138,13 @@
 
     // Back-to-landing: event delegation so it works even if the button re-renders
     document.addEventListener('click', function (e) {
-      if (e.target && e.target.id === 'btnBackToLanding') {
-        e.preventDefault();
-        e.stopPropagation();
-        window.__qs_showLanding();
-      }
+      var target = e.target && typeof e.target.closest === 'function'
+        ? e.target.closest('#btnBackToLanding')
+        : null;
+      if (!target) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof window.__qs_showLanding === 'function') window.__qs_showLanding();
     });
 
     // Scroll-reveal via IntersectionObserver
