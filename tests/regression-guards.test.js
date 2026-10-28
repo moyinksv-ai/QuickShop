@@ -28,6 +28,8 @@ test('vendor sign-out supports the Settings button being rendered after startup'
   assert.match(appSource, /supabase\.auth\.signOut\(\{ scope: 'local' \}\)/);
   assert.match(appSource, /\['qs_session_active', 'qs_last_user_id', 'qs_user_cache'\]/);
   assert.match(appSource, /window\.location\.replace\(window\.location\.pathname\)/);
+  assert.match(appSource, /btnBackToLanding\.addEventListener\('click'/);
+  assert.match(appSource, /classList\.remove\('qs-show-auth', 'qs-auth-pending', 'mode-app', 'qs-cat-early'\)/);
 });
 
 test('admin account filters use unique DOM IDs and do not mislabel unknown payments', () => {
@@ -35,7 +37,9 @@ test('admin account filters use unique DOM IDs and do not mislabel unknown payme
   for (const id of ['status-filter', 'created-from', 'created-to', 'account-search', 'filter-summary']) {
     assert.equal(countMatches(adminHtml, new RegExp('id="' + id + '"', 'g')), 1, id + ' must be unique');
   }
-  assert.match(adminHtml, /placeholder="Email, store name, or name"/);
+  assert.match(adminHtml, /placeholder="Search store, owner, email, phone or ID/);
+  assert.match(adminHtml, /placeholder="Search store, owner, email, phone or ID/);
+  assert.match(adminHtml, /id="filters" aria-label="Filter accounts" hidden/);
   assert.match(adminHtml, /\[v\.business_name, v\.name, v\.email, v\.id\]/);
   assert.doesNotMatch(adminHtml, /Never paid/);
   assert.match(adminHtml, /v\.has_payment_claim !== false/);
@@ -183,7 +187,13 @@ test('admin referral payout dashboard prioritizes active stores and provides ind
   assert.match(adminHtml, /if \(v\.activeBatch\) return 0/);
   assert.match(adminHtml, /Outstanding requests remain visible until resolved/);
   assert.match(adminHtml, /payout-view-filter'\)\.addEventListener\('change', renderReferralPayouts/);
-  assert.match(adminHtml, /payout-search'\)\.addEventListener\('input', renderReferralPayouts/);
+  assert.match(adminHtml, /account-search'\)\.addEventListener\('input'/);
+  assert.doesNotMatch(adminHtml, /id="payout-search"/);
+  assert.match(adminHtml, /id="payout-overlay"/);
+  assert.match(adminHtml, /id="payout-open-btn"/);
+  assert.match(adminHtml, /pending-activation/);
+  assert.match(adminHtml, /updateAttentionBadge/);
+  assert.match(adminHtml, /vendor-referral-summary/);
   assert.match(adminHtml, /Approaching \(7–9\)/);
   assert.match(adminHtml, /Request account details · WhatsApp/);
   assert.match(adminHtml, /Please reply with your bank name, account name, and account number/);
