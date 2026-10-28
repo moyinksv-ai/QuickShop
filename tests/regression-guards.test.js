@@ -67,6 +67,10 @@ test('landing Marketplace navigation remains visible and compact styles override
   assert.doesNotMatch(mobileBlock, /ql-nav-browse[^}]*display:\\s*none|display:\\s*none[^}]*ql-nav-browse/,
     'do not hide Marketplace at small viewport widths');
   assert.match(mobileBlock, /@media \(max-width: 520px\)/);
+  assert.match(indexHtml, /\.ql-nav-browse\s*\{[^}]*flex:\s*0 0 auto/s,
+    'the top Marketplace link must not shrink out of view');
+  assert.match(indexHtml, /\.ql-nav-signin,[\s\S]{0,100}\.ql-nav-signup\s*\{\s*flex-shrink:\s*0;/,
+    'Sign In and Sign Up must retain their own visible width');
 });
 
 test('signup sends at most one request and does not fake OTP success for existing accounts', () => {
