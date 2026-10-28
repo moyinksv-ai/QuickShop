@@ -1,0 +1,89 @@
+# QuickShop Regression Guardrails
+
+## Purpose and release rule
+
+This document is the working checklist for changes to QuickShop. The production baseline is `main`; feature work belongs on a feature branch and must be verified in preview before any merge or production deployment. Never modify or deploy `main` without explicit authorization.
+
+A successful build is not the same as a production-ready release. Do not claim a fix is verified unless the relevant automated checks and browser-level checks have actually run.
+
+## Incident: landing page and auth Home button overlap
+
+### Root cause
+
+The landing page's general visibility rule used `!important` and was more specific than the later auth-specific hide rule:
+
+```css
+body:not(.mode-app):not(.qs-cat-early):not(.qs-auth-pending)
+  #qs-landing:not(.qs-hidden) { display: block !important; }
+```
+
+When `qs-show-auth` was active but the other three classes were absent and `#qs-landing` lacked `qs-hidden`, that general rule could still force the landing page visible. Because the Home control is positioned within `#loginScreen`, both screens could overlap. The earlier attempted fixes targeted the Home button without correcting the competing landing-page rule.
+
+### Permanent guard
+
+The general landing-page display selector must explicitly exclude `body.qs-show-auth`. Auth and landing visibility are mutually exclusive. The regression test must assert this exclusion; do not weaken it to a check that only verifies the Home button has a hide rule.
+
+### Single owner for the Home transition
+
+`qs-init.js` owns the delegated Home-button handler and the canonical `window.__qs_showLanding` transition. `appss.js` must not register a competing direct click handler. The canonical transition must clear the auth/app/category-pending body states, hide auth/app/bottom navigation, reveal the landing page, and respect reduced-motion preferences. Delegation must support clicks on nested button content via `closest()`.
+
+## UI state invariants
+
+| State | Required invariant |
+|---|---|
+| Landing / signed out | Landing visible; auth screen hidden; Home control hidden. |
+| Sign-in, sign-up, verification, password reset | Auth screen visible; landing hidden; Home control available. |
+| Authenticated app | App visible; landing and auth screens hidden; bottom navigation follows app state. |
+| Return to landing | Clear auth/app/category state classes; hide app/auth/nav; show landing; scroll to top. |
+| Category/catalog early route | Landing/auth/app shell hidden as intended by catalog routing; do not let generic landing CSS override this route. |
+
+Whenever changing a UI state, inspect all related sources together: `index.html`, `styless.css`, `qs-init.js`, and `appss.js`. Check CSS specificity, `!important`, inline styles, element classes, body classes, startup timing, event delegation, and reload paths. Avoid multiple independent owners for the same transition.
+
+## Required automated checks
+
+Run:
+
+```sh
+node --test tests/regression-guards.test.js
+```
+
+The regression suite should cover:
+- landing/auth visibility exclusivity and the CSS selector that enforces it;
+- a single delegated Home transition and reduced-motion behavior;
+- JavaScript syntax for `appss.js`, `qs-init.js`, admin API, and inline admin code;
+- vendor sign-out delegation and session cleanup;
+- admin search/filter semantics and unknown payment-state handling;
+- payout-cycle reservation/idempotency guards, permissions migration, and protected admin payout transitions.
+
+A source-pattern test is useful but does not prove runtime behavior. Add behavioral/browser tests for bugs involving CSS cascade, DOM state, focus, navigation, or responsive layout.
+
+## Required preview smoke test before merge
+
+Use a clean browser session and test at least a narrow mobile viewport (360–390 CSS px) and desktop:
+
+1. Open the landing URL directly and refresh. Confirm there is no floating Home button and no auth form overlay.
+2. Click Sign In and Sign Up from the landing page. Confirm the auth screen is shown, the landing page is not visible underneath, and Home is available.
+3. Click Home (including clicking its text/icon). Confirm landing returns, auth is hidden, and the page scrolls to the top.
+4. Complete a successful sign-in; confirm the app shell is shown.
+5. Sign out from Settings and confirm the correct signed-out state after the reload.
+6. Exercise verification and password-reset entry/return paths.
+7. Check mobile navigation for overlap, clipped labels, horizontal overflow, and tap targets.
+8. Check browser console and network for new errors, failed scripts, or missing assets.
+9. For admin changes, verify authorized and unauthorized access, search by store/owner/email/phone/ID, pending activation visibility, queue dismissal/keyboard behavior, and payout transitions against safe test data.
+
+Record what was actually tested. Do not claim authenticated admin or payment-flow validation if credentials or safe test data were unavailable.
+
+## Branch comparison and release safety
+
+This feature branch has a large accumulated difference from `main` (81 commits at the time this document was introduced). Review the changed-file list and functional diff before merge; prioritize auth/session routing, referral capture/routing, admin authorization and payout mutations, Supabase RLS/grants, and deployment configuration. A green check does not replace reviewing security-sensitive behavior.
+
+Do not remove or rewrite existing referral, payout, admin, or offline-sync behavior merely to fix a UI bug. Preserve the existing migration and guard tests. If a required production secret/configuration is missing, fail safely and report the blocker without exposing secret values.
+
+## Change discipline
+
+- Make the smallest root-cause fix that preserves established behavior.
+- Before editing, read the current file and compare it with `main`; do not patch from stale snippets.
+- Never make concurrent writes to the same file.
+- After edits, inspect the resulting diff and verify tests against the actual commit.
+- Preview only until the user explicitly authorizes production merge/deployment.
+- If a check could not run, state that limitation plainly.
