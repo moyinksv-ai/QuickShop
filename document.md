@@ -126,3 +126,23 @@ Do not remove or rewrite existing referral, payout, admin, or offline-sync behav
 - After edits, inspect the resulting diff and verify tests against the actual commit.
 - Preview only until the user explicitly authorizes production merge/deployment.
 - If a check could not run, state that limitation plainly.
+
+## Incident: top Marketplace link hidden on narrow mobile screens
+
+### Root cause
+A feature-branch-only media query hid `.ql-nav-browse` at viewport widths of 370px and below. The same rule was absent from `main`, so narrow mobile users lost the top navigation Marketplace entry point even though the separate hero CTA still worked.
+
+### Permanent guard
+- Keep the top Marketplace link visible at narrow widths; compact spacing around Sign In/Sign Up instead of removing the entry point.
+- The regression test must fail if a max-width 370px media query hides `.ql-nav-browse`.
+
+## Incident: signup validation could lock the form
+
+### Root cause
+The duplicate-submit guard was set before synchronous field validation. Any invalid name, email, or password returned early before reaching the `try/finally`, leaving `signupInFlight` true and preventing a corrected retry until the page was reloaded.
+
+### Permanent guard
+- Run synchronous validation before setting `signupInFlight`.
+- Set the in-flight guard immediately before asynchronous work and always release it in `finally`.
+- Keep regression assertions that invalid name, email, and password-confirmation paths occur before the guard is set.
+
