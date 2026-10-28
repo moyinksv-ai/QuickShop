@@ -1457,7 +1457,9 @@ function handleTouchEnd() {
         document.body.classList.add('qs-show-auth');
         if (signOutError) errlog('Supabase signout returned an error; local app session cleared', signOutError);
         toast('Signed out');
-        // Reset the page so the logged-out screen is rebuilt from a clean state.
+        // Preserve the explicit sign-out destination across the reload. A normal
+        // cold visit has no marker and should show the public landing page.
+        try { sessionStorage.setItem('qs_show_auth_after_signout', 'true'); } catch (_) {}
         window.location.replace(window.location.pathname);
       }
     });
@@ -1684,9 +1686,15 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       _savedResetEmail = (localStorage.getItem('qs_pending_reset_email') || '').trim();
     } catch (_) {}
 
-    // On an ordinary cold visit, no session means the public landing page should
-    // be shown. Pending verification/reset steps remain on auth so users can resume.
-    if (options.initialLoad && !_pendingVerificationEmail && !_savedResetEmail &&
+    // A one-time session marker preserves the explicit sign-out destination across
+    // the reload below; ordinary cold visits should show the public landing page.
+    let _explicitSignOut = false;
+    try {
+      _explicitSignOut = sessionStorage.getItem('qs_show_auth_after_signout') === 'true';
+      sessionStorage.removeItem('qs_show_auth_after_signout');
+    } catch (_) {}
+    // Pending verification/reset steps remain on auth so users can resume.
+    if (options.initialLoad && !_explicitSignOut && !_pendingVerificationEmail && !_savedResetEmail &&
         typeof window.__qs_showLanding === 'function') {
       window.__qs_showLanding();
     } else {
