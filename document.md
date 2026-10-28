@@ -40,6 +40,32 @@ The general landing-page display selector must explicitly exclude `body.qs-show-
 - Explicit sign-out remains a distinct path; do not conflate it with the initial no-session event.
 - Add regression coverage for the `INITIAL_SESSION` branch and the pending verification/reset exception.
 
+## Incident: signup may issue duplicate requests or misreport an existing account
+
+### Findings and fix
+
+The signup form had three submission routes: the form's native `submit` event, an explicit button `click` handler, and custom Enter-key handlers. A normal button click can trigger both click and form submit, and Enter can trigger both the custom key handler and native submit. On slow mobile networks this can issue repeated signup requests and repeated/ambiguous OTP messaging. The form now has one native submit entry point plus an in-flight guard.
+
+Supabase can return a successful-shaped signup response with an empty `user.identities` array when an email is already registered and email confirmation is enabled. The UI must not create a profile or claim a new verification code was sent for that response; it now routes back to sign-in and offers password reset.
+
+### Authentication flow map (current source-level map)
+
+| Entry / event | Expected screen transition | Guard / risk |
+|---|---|---|
+| Cold visit, no session | Landing | Do not treat `INITIAL_SESSION` with no user as explicit sign-out. |
+| Landing → Sign In | Auth / login form | Landing hidden; auth visible. |
+| Landing → Sign Up | Auth / signup form | One native submit route; duplicate submission guarded. |
+| New email signup accepted | Verification notice | Persist pending verification email; do not assume a delivery guarantee beyond Supabase response. |
+| Existing email detected by empty identities | Login form + sign-in/reset guidance | Do not create a new local profile or claim OTP sent. |
+| Resend verification | Verification notice remains | Read email from the displayed verification target; avoid duplicate handlers. |
+| Valid signup OTP | Authenticated app after session resolution | Must preserve session/referral attribution and not merely flip a body class. |
+| Password reset request | Reset OTP form | Persist reset email so a cold reload can resume. |
+| Valid recovery OTP | Set new password, then login | Clear pending reset state and session appropriately. |
+| Explicit sign-out | Landing after reload unless an interrupted verification/reset flow is pending | Preserve explicit sign-out intent separately from ordinary cold load. |
+| Authenticated app → Settings → Sign Out | Signed-out state | Remove app-owned session markers and local auth session. |
+
+**Scope limitation:** the current signup UI in `index.html` is email/password-based (`signupEmail`); it does not collect a phone number or invoke phone OTP APIs. The duplicate-account guard above therefore addresses the verified-email case in this code path. A verified phone-number OTP flow, if one exists in a separate service or deployment, is not evidenced by these source files and must not be claimed fixed based on this change.
+
 ## UI state invariants
 
 | State | Required invariant |
