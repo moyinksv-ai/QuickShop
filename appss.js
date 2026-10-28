@@ -1285,9 +1285,19 @@ function handleTouchEnd() {
         }
       };
 
-      // Native form submission handles both button clicks and Enter consistently.
-      // Do not attach a second click/keydown path that can submit twice.
-      signupForm.addEventListener('submit', handleSignupSubmit);
+      // signupForm is a div, not a native form, and btnSignup is type="button".
+      // Use explicit click/Enter handlers; signupInFlight is the single-request guard.
+      const btnSignupSubmit = $('btnSignup');
+      if (btnSignupSubmit) btnSignupSubmit.addEventListener('click', handleSignupSubmit);
+      ['signupName', 'signupBusiness', 'signupEmail', 'signupPass', 'signupPassConfirm'].forEach(function (id) {
+        const field = $(id);
+        if (field) field.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            handleSignupSubmit(e);
+          }
+        });
+      });
     }
 
     const btnSendReset = $('btnSendReset');
