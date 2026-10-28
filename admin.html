@@ -1176,7 +1176,11 @@
       var unavailable=document.createElement('div');unavailable.className='payout-empty payout-error';unavailable.textContent='Activation claim data is unavailable. Refresh to retry; this is not a zero-pending result.';
       list.appendChild(unavailable);return;
     }
-    var pending=_vendors.filter(function(v){return !v.is_active&&String((v.payment_claim||{}).status||'').toLowerCase()==='pending';});
+    var search=(document.getElementById('account-search').value||'').trim().toLowerCase();
+    var pending=_vendors.filter(function(v){
+      return !v.is_active&&String((v.payment_claim||{}).status||'').toLowerCase()==='pending'&&
+        [v.business_name,v.name,v.email,v.phone_number,v.id].join(' ').toLowerCase().indexOf(search)!==-1;
+    });
     count.textContent=String(pending.length);section.hidden=pending.length===0;
     pending.forEach(function(v){
       var row=document.createElement('div');row.className='activation-row';
@@ -1210,7 +1214,18 @@
   document.getElementById('payout-open-btn').addEventListener('click',openPayoutQueue);
   document.getElementById('payout-close-btn').addEventListener('click',closePayoutQueue);
   document.getElementById('payout-overlay').addEventListener('click',function(e){if(e.target===this)closePayoutQueue();});
-  document.addEventListener('keydown',function(e){if(e.key==='Escape')closePayoutQueue();});
+  document.addEventListener('keydown',function(e){
+    var overlay=document.getElementById('payout-overlay');
+    if(!overlay.classList.contains('open'))return;
+    if(e.key==='Escape'){closePayoutQueue();return;}
+    if(e.key==='Tab'){
+      var focusable=Array.from(document.getElementById('payout-section').querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),a[href],[tabindex="0"]'));
+      if(!focusable.length){e.preventDefault();document.getElementById('payout-section').focus();return;}
+      var first=focusable[0],last=focusable[focusable.length-1];
+      if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
+      else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+    }
+  });
 
 })();
 </script>
