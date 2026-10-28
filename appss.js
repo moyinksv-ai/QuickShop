@@ -1258,10 +1258,15 @@ function handleTouchEnd() {
           // With Supabase email-confirmation enabled, signUp can intentionally
           // return a user with no identities for an already-registered email.
           // Do not create a profile or claim that a new OTP was sent in that case.
-          if (data && data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+          const returnedUser = data && data.user;
+          const isDuplicateOrAlreadyVerified = !!returnedUser && (
+            (Array.isArray(returnedUser.identities) && returnedUser.identities.length === 0) ||
+            !!returnedUser.email_confirmed_at || !!returnedUser.confirmed_at
+          );
+          if (isDuplicateOrAlreadyVerified) {
             try { localStorage.removeItem('qs_pending_verification_email'); } catch (_) {}
             showLoginForm();
-            toast('This email could not be registered as a new account. Try signing in or resetting your password.', 'error');
+            toast('This email is already registered or verified. Please sign in or reset your password.', 'error');
             return;
           }
           const user = data && data.user;
