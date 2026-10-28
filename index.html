@@ -175,10 +175,15 @@
     #qs-landing .ql-brand-icon img { width:100%; height:100%; display:block; object-fit:cover; }
     #qs-landing .ql-nav-btns { display: flex; gap: 4px; align-items: center; }
     #qs-landing .ql-nav-browse {
+      display: inline-flex; align-items: center;
+      flex: 0 0 auto;
       font-size: 13px; font-weight: 500; color: var(--c-muted);
       padding: 7px 12px; border-radius: 7px; text-decoration: none;
       transition: color .12s, background .12s; white-space: nowrap;
     }
+    /* Keep every top-level navigation action from shrinking out of view. */
+    #qs-landing .ql-nav-signin,
+    #qs-landing .ql-nav-signup { flex-shrink: 0; }
     #qs-landing .ql-nav-browse:hover { color: var(--c-text); background: var(--c-surface); }
     #qs-landing .ql-nav-signin {
       background: none; border: 0; font-size: 13px; font-weight: 500;
