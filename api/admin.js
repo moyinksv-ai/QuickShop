@@ -79,7 +79,7 @@ async function fetchPaymentClaims() {
       const start = page * pageSize;
       const end = start + pageSize - 1;
       const res = await sbFetch(
-        '/rest/v1/payment_claims?select=user_id,status,claim_kind,amount_ngn,claimed_at,updated_at,reviewed_at&order=claimed_at.desc',
+        '/rest/v1/payment_claims?select=user_id,status,claim_kind,amount_ngn,claimed_at,updated_at,reviewed_at&claim_kind=eq.activation&order=claimed_at.desc',
         { method: 'GET', headers: { Range: start + '-' + end, 'Range-Unit': 'items' } }
       );
       if (!res.ok) return { available: false, claims: [] };
