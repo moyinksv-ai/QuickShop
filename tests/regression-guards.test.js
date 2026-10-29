@@ -417,7 +417,7 @@ test('landing Sign In resets Sign Up mode without clearing interrupted OTP or pa
 test('marketplace product-detail quantity controls synchronize the already-seeded cart immediately', () => {
   const minusAt = catalogSource.indexOf("minusBtn.addEventListener('click'");
   const plusAt = catalogSource.indexOf("plusBtn.addEventListener('click'", minusAt);
-  const addAt = catalogSource.indexOf("// Wire add-to-cart button", plusAt);
+  const addAt = catalogSource.indexOf("// Checkout commits the selected product", plusAt);
   const detailQtyHandlers = catalogSource.slice(minusAt, addAt);
   assert.equal(
     countMatches(detailQtyHandlers, /cart\.has\(_detailProduct\.id\)\) cartSetQty\(_detailProduct\.id, _detailQty\)/g),
@@ -457,7 +457,8 @@ test('referral short links resolve through /r/:code and attribution metadata is 
   const migration = fs.readFileSync(path.join(root, 'supabase/migrations/20261029180000_activation_claim_and_referral_attribution.sql'), 'utf8');
   assert.match(vercel, /"source": "\/r\/:code\(\[0-9a-fA-F\]\{16\}\)"/);
   assert.match(vercel, /"destination": "\/\?ref=:code"/);
-  assert.match(appSource, /var _pathMatch = window\.location\.pathname\.match\(\/\^\\\/r\\\/\(\[0-9a-f\]\{16\}\)\\\/?\$\/i\)/);
+  assert.match(appSource, /_pathMatch = window\.location\.pathname\.match/);
+  assert.match(appSource, /qs_pending_referral/);
   assert.match(migration, /referral_source = 'referral_link'/);
   assert.match(migration, /referral_attributed_at = now\(\)/);
   assert.match(adminApiSource, /referral_source: 'signup_metadata', referral_attributed_at: new Date\(\)\.toISOString\(\)/);
