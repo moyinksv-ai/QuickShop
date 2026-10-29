@@ -30,6 +30,15 @@ test('vendor sign-out supports the Settings button being rendered after startup'
     /const btnLogout = \$\('btnLogout'\);\s*if \(btnLogout\)\s*\{\s*btnLogout\.addEventListener/,
     'Do not bind the vendor Sign Out handler only during startup before Settings exists'
   );
+  assert.match(appSource, /const confirmed = await showConfirm\(\{[\s\S]*?title: 'Sign Out'[\s\S]*?message: 'Are you sure you want to sign out\?'/,
+    'vendor sign-out must show the confirmation modal before changing auth state');
+  assert.match(appSource, /if \(!confirmed\) return;/,
+    'canceling sign-out must leave the current session active');
+  const logoutStart = appSource.indexOf("document.addEventListener('click', async function (event)");
+  const logoutEnd = appSource.indexOf("\n    });", logoutStart);
+  const logoutHandler = appSource.slice(logoutStart, logoutEnd);
+  assert.ok(logoutHandler.indexOf('await showConfirm') < logoutHandler.indexOf("supabase.auth.signOut"),
+    'confirmation must happen before Supabase signOut');
   assert.match(appSource, /supabase\.auth\.signOut\(\{ scope: 'local' \}\)/);
   assert.match(appSource, /\['qs_session_active', 'qs_last_user_id', 'qs_user_cache'\]/);
   assert.match(appSource, /window\.location\.replace\(window\.location\.pathname\)/);
@@ -367,8 +376,12 @@ test('landing/auth history restores screens on browser Back and Forward without 
   assert.match(qsInitSource, /next\.qsScreen = screen/);
   assert.match(qsInitSource, /window\.history\.pushState\(mergeScreenState\('auth'\)/,
     'opening auth must create a same-document history entry');
-  assert.match(qsInitSource, /el\.addEventListener\('click', function \(\) \{ showAuth\(false\); \}\)/,
-    'Sign In click must not pass its Event object as the fromHistory flag');
+  assert.match(qsInitSource, /el\.addEventListener\('click', function \(\) \{ showAuth\(false, true\); \}\)/,
+    'Sign In click must not pass its Event object and must explicitly select the login form');
+  assert.match(qsInitSource, /window\.__QS_APP\.showLoginForm\(\)/,
+    'the landing Sign In CTA must use the app-owned canonical login form transition');
+  assert.match(appSource, /showLoginForm,/,
+    'the auth mode transition must be available to the landing bootstrap');
   assert.doesNotMatch(qsInitSource, /el\.addEventListener\('click', showAuth\)/,
     'a direct showAuth listener would accidentally treat the click Event as a history restoration');
   assert.match(qsInitSource, /window\.addEventListener\('popstate', function \(event\)/,
@@ -381,4 +394,44 @@ test('landing/auth history restores screens on browser Back and Forward without 
     'auth/landing history must not be overridden by the vendor app tab popstate handler');
   assert.match(qsInitSource, /window\.history\.back\(\)/,
     'the in-app Home button should use the auth history entry rather than leaving stale history');
+});
+
+
+test('landing Sign In resets Sign Up mode without clearing interrupted OTP or password-reset flow', () => {
+  assert.match(qsInitSource, /function showAuth\(fromHistory, forceLogin\)/);
+  assert.match(qsInitSource, /var hasPendingAuthFlow = body\.classList\.contains\('qs-auth-pending'\)/);
+  assert.match(qsInitSource, /if \(forceLogin && !hasPendingAuthFlow\)/,
+    'only an explicit Sign In CTA may switch to login, never an interrupted verification/reset screen');
+  assert.match(appSource, /localStorage\.setItem\('qs_pending_verification_email', _verificationEmail\)/);
+  assert.match(appSource, /localStorage\.setItem\('qs_pending_reset_email', _pendingResetEmail\)/);
+  assert.match(appSource, /_pendingVerificationEmail = \(localStorage\.getItem\('qs_pending_verification_email'\)/);
+  assert.match(appSource, /_savedResetEmail = \(localStorage\.getItem\('qs_pending_reset_email'\)/);
+  assert.match(appSource, /showVerificationNotice\(_pendingVerificationEmail\)/);
+  assert.match(appSource, /showResetVerifyForm\(_savedResetEmail\)/);
+});
+
+test('marketplace product-detail quantity controls synchronize the already-seeded cart immediately', () => {
+  const minusAt = catalogSource.indexOf("minusBtn.addEventListener('click'");
+  const plusAt = catalogSource.indexOf("plusBtn.addEventListener('click'", minusAt);
+  const addAt = catalogSource.indexOf("// Wire add-to-cart button", plusAt);
+  const detailQtyHandlers = catalogSource.slice(minusAt, addAt);
+  assert.equal(
+    countMatches(detailQtyHandlers, /cart\.has\(_detailProduct\.id\)\) cartSetQty\(_detailProduct\.id, _detailQty\)/g),
+    2,
+    'both decrease and increase controls must update the store-scoped cart immediately when the selected item is already in it'
+  );
+  assert.match(catalogSource, /_detailQty = cart\.has\(product\.id\) \? \(cart\.get\(product\.id\)\.qty \|\| 1\) : 1/,
+    'opening detail must hydrate the selector from the cart quantity');
+});
+
+test('marketplace deep-link detail opens without revealing the vendor catalog during the slide transition', () => {
+  assert.match(catalogSource, /if \(_detailReturnMode === 'market' && !alreadyOpen\)/);
+  assert.match(catalogSource, /overlay\.style\.transition = 'none'/);
+  assert.match(catalogSource, /void overlay\.offsetHeight/);
+  assert.match(catalogSource, /requestAnimationFrame\(function \(\) \{\s*if \(overlay\.isConnected\) overlay\.style\.transition = ''/);
+  const handoffStart = catalogSource.indexOf('// ── Deep link: auto-open product detail if ?pid= is present ──');
+  const handoffEnd = catalogSource.indexOf('})();', handoffStart);
+  const handoff = catalogSource.slice(handoffStart, handoffEnd);
+  assert.ok(handoff.indexOf('openDetailOverlay(_target') >= 0);
+  assert.doesNotMatch(handoff, /setTimeout\(/);
 });
