@@ -181,7 +181,9 @@
     });
     signinBtnIds.forEach(function (id) {
       var el = document.getElementById(id);
-      if (el) el.addEventListener('click', showAuth);
+      // Do not pass the click Event as showAuth's fromHistory flag. A direct
+      // listener would make that argument truthy and silently skip pushState.
+      if (el) el.addEventListener('click', function () { showAuth(false); });
     });
 
     // Back-to-landing: event delegation so it works even if the button re-renders
