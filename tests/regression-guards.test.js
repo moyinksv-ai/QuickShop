@@ -454,7 +454,7 @@ test('activation payment claim is persisted through the authenticated Supabase R
 
 test('referral short links resolve through /r/:code and attribution metadata is preserved', () => {
   const vercel = fs.readFileSync(path.join(root, 'vercel.json'), 'utf8');
-  const migration = fs.readFileSync(path.join(root, 'supabase/migrations/20261029180000_activation_claim_and_referral_attribution.sql'), 'utf8');
+  const migration = fs.readFileSync(path.join(root, 'supabase/migrations/20261029064612_activation_claim_and_referral_attribution.sql'), 'utf8');
   assert.match(vercel, /"source": "\/r\/:code\(\[0-9a-fA-F\]\{16\}\)"/);
   assert.match(vercel, /"destination": "\/\?ref=:code"/);
   assert.match(appSource, /_pathMatch = window\.location\.pathname\.match/);
