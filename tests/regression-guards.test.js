@@ -290,3 +290,21 @@ test('admin payout API protects state transitions and records activity', () => {
   assert.match(adminApiSource, /items\.length !== Number\(batch\.referral_count\)/);
   assert.match(adminApiSource, /fetchAllRows\(path\)/);
 });
+
+
+test('landing/auth history restores screens on browser Back and Forward without colliding with vendor tab history', () => {
+  assert.match(qsInitSource, /function mergeScreenState\(screen\)/);
+  assert.match(qsInitSource, /next\.qsScreen = screen/);
+  assert.match(qsInitSource, /window\.history\.pushState\(mergeScreenState\('auth'\)/,
+    'opening auth must create a same-document history entry');
+  assert.match(qsInitSource, /window\.addEventListener\('popstate', function \(event\)/,
+    'system/browser Back and Forward must restore landing/auth screens');
+  assert.match(qsInitSource, /if \(screen === 'auth'\) \{\s*showAuth\(true\)/,
+    'Forward to the auth entry must restore auth without pushing a duplicate entry');
+  assert.match(qsInitSource, /if \(screen === 'landing' \|\| authIsVisible\) \{\s*showLandingNow\(\)/,
+    'Back from auth must restore the landing screen even if history state is missing');
+  assert.match(qsInitSource, /event\.stopImmediatePropagation\(\)/,
+    'auth/landing history must not be overridden by the vendor app tab popstate handler');
+  assert.match(qsInitSource, /window\.history\.back\(\)/,
+    'the in-app Home button should use the auth history entry rather than leaving stale history');
+});
