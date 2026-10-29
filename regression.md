@@ -34,12 +34,12 @@ The original Sign In wiring registered `showAuth` directly as a click listener. 
 
 ### Verification status and limits
 
-- Latest source/documentation commit during this review: `61c44644c3c5dce8e00a100d11b9a7cf96116b5c` (re-fetch branch HEAD before release).
+- Navigation implementation commit: `150b746836afe58f1bf2cdcfb795a34cf51f3c08`; the regression test and documentation updates follow it on the same feature branch. Re-fetch the exact branch HEAD before release.
 - `node --test tests/regression-guards.test.js` ran in a Vercel sandbox using Node.js 22: **15 passed, 0 failed**.
 - A Playwright Chromium smoke test against the checked-out feature source and a local static server passed desktop, Android-sized (393×873), and iPhone-sized (390×844) viewports for landing → Sign In → browser Back → browser Forward → in-auth Home. It verified the landing/auth display states and history state transitions; no uncaught page errors were observed.
 - This was Chromium viewport emulation, not a physical Android device, Android system gesture, or iPhone Safari/WebKit test.
 - The current Vercel preview is protected by Vercel SSO. Automated browser access reached the Vercel login page (403), so the deployed preview could not be smoke-tested in this run. The local harness also lacks the untracked `supabase-config.js`, so live Supabase auth/session startup and verification/recovery flows were not validated by this browser run.
-- Local browser console also reported the Sentry CDN script blocked by an integrity-hash mismatch. This was outside the targeted Back fix and should be compared with `main` before deciding whether it is a pre-existing issue.
+- Local browser console reported the Sentry CDN script blocked by an integrity-hash mismatch. The `index.html` integrity attribute is identical on `main` and the feature branch, so this appears to be a pre-existing issue rather than a regression from this fix; it remains a separate cleanup item.
 - Re-run the suite and verify the deployment/CI status for the exact latest feature commit before release. Do not merge to `main` or deploy production on static guards and local browser smoke alone.
 
 ## Checks confirmed from repository/CI metadata
