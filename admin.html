@@ -1227,11 +1227,7 @@
       var meta=document.createElement('small');meta.textContent=v.email||v.id;
       var claim=document.createElement('small');
       var claimStatus=String((v.payment_claim||{}).status||'').toLowerCase();
-      claim.textContent=!_paymentClaimsAvailable?'Claim status unavailable':
-        claimStatus==='pending'?'Payment claimed · Awaiting verification':
-        claimStatus==='rejected'?'Claim rejected · Follow-up needed':
-        claimStatus==='cancelled'?'Previous claim cancelled · Awaiting payment':
-        'Awaiting payment claim';
+      claim.textContent=claimStatus==='rejected'?'Claim rejected · Follow-up needed':'Payment claimed · Awaiting verification';
       info.appendChild(name);info.appendChild(meta);info.appendChild(claim);
       var review=document.createElement('button');review.type='button';review.className='activation-review';review.textContent='Review vendor';
       review.addEventListener('click',function(){
