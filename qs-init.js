@@ -110,18 +110,39 @@
       window.__qs_showLanding = showLandingNow;
     }
 
-    function showAuth(fromHistory) {
+    function showAuth(fromHistory, forceLogin) {
       var body = document.body;
       var landing = document.getElementById('qs-landing');
       var auth = document.getElementById('loginScreen');
       var app = document.querySelector('.app');
       var bottomNav = document.querySelector('.bottom-nav');
-      body.classList.remove('mode-app', 'qs-auth-pending', 'qs-cat-early');
+      // A pending verification/reset step owns the auth surface. Do not clear its
+      // persistence marker just because browser Back/Forward restores this entry.
+      var hasPendingAuthFlow = body.classList.contains('qs-auth-pending');
+      body.classList.remove('mode-app', 'qs-cat-early');
+      if (!hasPendingAuthFlow) body.classList.remove('qs-auth-pending');
       body.classList.add('qs-show-auth');
       if (landing) landing.classList.add('qs-hidden');
       if (auth) { auth.removeAttribute('style'); auth.style.display = 'flex'; }
       if (app) { app.removeAttribute('style'); app.style.display = 'none'; }
       if (bottomNav) { bottomNav.removeAttribute('style'); bottomNav.style.display = 'none'; }
+
+      // Only a deliberate landing-page Sign In CTA resets the visible form to login.
+      // Sign Up uses its own explicit switch; popstate restoration leaves interrupted
+      // verification/reset screens untouched.
+      if (forceLogin && !hasPendingAuthFlow) {
+        if (window.__QS_APP && typeof window.__QS_APP.showLoginForm === 'function') {
+          window.__QS_APP.showLoginForm();
+        } else {
+          ['signupForm', 'resetForm', 'resetVerifyForm', 'verificationNotice', 'authLoading'].forEach(function (id) {
+            var form = document.getElementById(id);
+            if (form) form.style.display = 'none';
+          });
+          var loginForm = document.getElementById('loginForm');
+          if (loginForm) loginForm.style.display = 'flex';
+        }
+      }
+
       // Add one same-document history entry for auth. Do not add another entry
       // when restoring auth through Forward or when the CTA switches to signup.
       try {
@@ -189,7 +210,7 @@
       var el = document.getElementById(id);
       // Do not pass the click Event as showAuth's fromHistory flag. A direct
       // listener would make that argument truthy and silently skip pushState.
-      if (el) el.addEventListener('click', function () { showAuth(false); });
+      if (el) el.addEventListener('click', function () { showAuth(false, true); });
     });
 
     // Back-to-landing: event delegation so it works even if the button re-renders
