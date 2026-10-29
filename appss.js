@@ -1443,44 +1443,64 @@ function handleTouchEnd() {
     });
 
     // The Sign Out button is created dynamically when the Settings panel renders.
-    // Delegate the click at document level so the handler exists before that button.
+    // Delegate the click, but keep the destructive action behind one explicit confirmation.
     document.addEventListener('click', async function (event) {
       const target = event.target;
       const btnLogout = target && typeof target.closest === 'function'
         ? target.closest('#btnLogout')
         : null;
       if (!btnLogout) return;
+      event.preventDefault();
 
-      // Sign out immediately. A missing/broken confirmation modal must never
-      // prevent the vendor from leaving their account.
-      const supabase = getClient();
-      let signOutError = null;
+      // Guard double taps while the confirmation modal or sign-out request is active.
+      if (btnLogout.dataset.qsSignoutPending === 'true') return;
+      btnLogout.dataset.qsSignoutPending = 'true';
+      btnLogout.disabled = true;
+
       try {
-        if (supabase) {
-          const result = await supabase.auth.signOut({ scope: 'local' });
-          signOutError = result && result.error ? result.error : null;
-        }
-      } catch (e) {
-        signOutError = e;
-      } finally {
-        // Clear app-owned state and any persisted Supabase auth token as a fallback.
-        ['qs_session_active', 'qs_last_user_id', 'qs_user_cache'].forEach((key) => {
-          try { localStorage.removeItem(key); } catch (_) {}
+        const confirmed = await showConfirm({
+          title: 'Sign Out',
+          message: 'Are you sure you want to sign out?',
+          okText: 'Sign Out',
+          okDanger: true
         });
+        // Fail closed: cancel or a missing confirmation modal must never sign out.
+        if (!confirmed) return;
+
+        const supabase = getClient();
+        let signOutError = null;
         try {
-          Object.keys(localStorage).forEach((key) => {
-            if (/^sb-.+-auth-token$/.test(key)) localStorage.removeItem(key);
+          if (supabase) {
+            const result = await supabase.auth.signOut({ scope: 'local' });
+            signOutError = result && result.error ? result.error : null;
+          }
+        } catch (e) {
+          signOutError = e;
+        } finally {
+          // Clear app-owned state and any persisted Supabase auth token as a fallback.
+          ['qs_session_active', 'qs_last_user_id', 'qs_user_cache'].forEach((key) => {
+            try { localStorage.removeItem(key); } catch (_) {}
           });
-        } catch (_) {}
-        currentUser = null;
-        document.body.classList.remove('mode-app', 'qs-auth-pending');
-        document.body.classList.add('qs-show-auth');
-        if (signOutError) errlog('Supabase signout returned an error; local app session cleared', signOutError);
-        toast('Signed out');
-        // Preserve the explicit sign-out destination across the reload. A normal
-        // cold visit has no marker and should show the public landing page.
-        try { sessionStorage.setItem('qs_show_auth_after_signout', 'true'); } catch (_) {}
-        window.location.replace(window.location.pathname);
+          try {
+            Object.keys(localStorage).forEach((key) => {
+              if (/^sb-.+-auth-token$/.test(key)) localStorage.removeItem(key);
+            });
+          } catch (_) {}
+          currentUser = null;
+          document.body.classList.remove('mode-app', 'qs-auth-pending');
+          document.body.classList.add('qs-show-auth');
+          if (signOutError) errlog('Supabase signout returned an error; local app session cleared', signOutError);
+          toast('Signed out');
+          // Preserve the explicit sign-out destination across the reload. A normal
+          // cold visit has no marker and should show the public landing page.
+          try { sessionStorage.setItem('qs_show_auth_after_signout', 'true'); } catch (_) {}
+          window.location.replace(window.location.pathname);
+        }
+      } finally {
+        if (btnLogout.isConnected) {
+          btnLogout.disabled = false;
+          delete btnLogout.dataset.qsSignoutPending;
+        }
       }
     });
   }
@@ -7354,6 +7374,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
   window.__QS_APP = {
     getClient,
     getUser: () => currentUser,
+    showLoginForm,
     get currentUser() { return currentUser; },
     saveState,
     // Returns a frozen shallow copy — callers can read but cannot mutate arrays
