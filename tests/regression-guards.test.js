@@ -2,6 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -11,6 +12,8 @@ const adminHtml = fs.readFileSync(path.join(root, 'admin.html'), 'utf8');
 const adminApiSource = fs.readFileSync(path.join(root, 'api/admin.js'), 'utf8');
 const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const qsInitSource = fs.readFileSync(path.join(root, 'qs-init.js'), 'utf8');
+const catalogSource = fs.readFileSync(path.join(root, 'catalog.js'), 'utf8');
+const marketHtml = fs.readFileSync(path.join(root, 'search.html'), 'utf8');
 
 function countMatches(source, regex) {
   return Array.from(source.matchAll(regex)).length;
@@ -71,6 +74,73 @@ test('landing Marketplace navigation remains visible and compact styles override
     'the top Marketplace link must not shrink out of view');
   assert.match(indexHtml, /\.ql-nav-signin,[\s\S]{0,100}\.ql-nav-signup\s*\{\s*flex-shrink:\s*0;/,
     'Sign In and Sign Up must retain their own visible width');
+});
+
+test('landing Back restoration clears the fade class and keeps its CSP hash valid', () => {
+  assert.match(indexHtml, /window\.addEventListener\('pageshow', function \(\) \{[\s\S]*?landing\.classList\.remove\('qs-navigating'\)/,
+    'pages restored from the back-forward cache must not remain faded out');
+  const inlineScripts = Array.from(indexHtml.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi), match => match[1]);
+  const transitionScript = inlineScripts.find(script =>
+    script.includes('document.querySelectorAll(\'a[href="search.html"]\')'));
+  assert.ok(transitionScript, 'marketplace transition script should remain inline and discoverable');
+  const digest = crypto.createHash('sha256').update(transitionScript).digest('base64');
+  assert.ok(indexHtml.includes("'sha256-" + digest + "'"),
+    'CSP must allow the exact updated marketplace transition script hash');
+});
+
+test('marketplace product handoff seeds a store-scoped cart and exposes review, checkout, and continue-shopping actions', () => {
+  assert.ok(catalogSource.includes("CART_KEY = 'qs_cart_v2:' + String(storeId"),
+    'cart storage must remain scoped to one vendor/store');
+  const handoffStart = catalogSource.indexOf('// ── Deep link: auto-open product detail if ?pid= is present ──');
+  const handoffEnd = catalogSource.indexOf('})();', handoffStart);
+  const handoff = catalogSource.slice(handoffStart, handoffEnd);
+  assert.ok(handoff.includes('cartAdd(_target)'), 'the selected marketplace product must be added to the cart');
+  assert.ok(handoff.indexOf('cartAdd(_target)') < handoff.indexOf('openDetailOverlay(_target'),
+    'seed cart before opening details');
+  assert.doesNotMatch(handoff, /setTimeout\(/,
+    'deep-linked product details must open before the catalog grid can paint');
+  assert.ok(catalogSource.includes("id = 'cat-market-cart-btn'"));
+  assert.ok(catalogSource.includes("id = 'cat-detail-checkout'"));
+  assert.ok(catalogSource.includes('checkoutTopBtn.hidden = !MARKET_ORIGIN;'));
+  assert.ok(catalogSource.includes("id = 'cat-detail-keep-shopping'"));
+  assert.ok(catalogSource.includes("id = 'cat-continue-shopping'"));
+  assert.ok(catalogSource.includes('Cart is for this store only'));
+});
+
+test('catalog routes do not inherit landing history ownership from the hidden landing DOM', () => {
+  assert.ok(qsInitSource.includes("var isCatalog = params.has('store') || params.has('token');"));
+  assert.ok(qsInitSource.includes("if (!isCatalog && document.getElementById('qs-landing')) {"),
+    'catalog pages contain landing markup but must not register its auth/landing popstate handler');
+});
+
+test('marketplace-origin native Back returns without revealing the vendor catalog grid', () => {
+  const start = catalogSource.indexOf('// Close on Android back gesture (popstate)');
+  const end = catalogSource.indexOf("document.getElementById('qs-catalog').appendChild(overlay);", start);
+  const handler = catalogSource.slice(start, end);
+  assert.ok(handler.includes("window.location.replace(MARKET_RETURN_URL || '/search.html')"));
+  assert.doesNotMatch(handler, /if \(returnMode === 'market'\) \{\s*closeDetailOverlay\(\);/,
+    'redirect to marketplace before closing the overlay to avoid exposing the underlying vendor grid');
+  assert.ok(handler.includes("marketAction === 'keep-shopping'"));
+  assert.ok(handler.includes("marketAction === 'checkout'"));
+});
+
+test('marketplace detail Back pops its existing history entry and invalidates stale product requests', () => {
+  const start = marketHtml.indexOf('function goBack() {');
+  const end = marketHtml.indexOf('detailBack.addEventListener', start);
+  const goBackSource = marketHtml.slice(start, end);
+  assert.ok(goBackSource.includes('history.state.qsMarketProductEntry'));
+  assert.ok(goBackSource.includes('history.back()'));
+  assert.ok(goBackSource.includes('_navSeq += 1'));
+  assert.doesNotMatch(goBackSource, /navigate\(params, false\)/,
+    'Back must not push another listing entry that lets phone Back reopen the detail');
+  assert.ok(marketHtml.includes('productEntryState.qsMarketProductEntry = true;'));
+  assert.ok(marketHtml.includes("initialMarketState.qsMarketDepth = 0;"));
+  const inlineScripts = Array.from(marketHtml.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi), match => match[1]);
+  const routerScript = inlineScripts.find(script => script.includes('function navigate(params, replace)'));
+  assert.ok(routerScript, 'marketplace router script should be discoverable');
+  const digest = crypto.createHash('sha256').update(routerScript).digest('base64');
+  assert.ok(marketHtml.includes("'sha256-" + digest + "'"),
+    'CSP must allow the exact marketplace router script hash');
 });
 
 test('signup sends at most one request and does not fake OTP success for existing accounts', () => {

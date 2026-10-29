@@ -32,6 +32,12 @@
 (function () {
   'use strict';
 
+  // Decide the document mode before registering any screen-history handlers.
+  // index.html contains the landing DOM even on /?store=... catalog routes, but
+  // those routes belong to catalog.js and must not inherit landing history state.
+  var params = new URLSearchParams(window.location.search);
+  var isCatalog = params.has('store') || params.has('token');
+
   /* ── 1. Service-worker registration ───────────────────────────────────── */
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
@@ -53,7 +59,7 @@
 
   /* ── 2. Landing page CTA wiring + scroll-reveal ───────────────────────── */
   // Guard: only run if the landing section is present (not catalog mode)
-  if (document.getElementById('qs-landing')) {
+  if (!isCatalog && document.getElementById('qs-landing')) {
 
     // One canonical state transition owns landing/auth visibility. Keeping this
     // centralized prevents competing click handlers from restoring different UI states.
@@ -255,9 +261,6 @@
     if (ordered) s.async = false;
     (document.body || document.head || document.documentElement).appendChild(s);
   }
-
-  var params    = new URLSearchParams(window.location.search);
-  var isCatalog = params.has('store') || params.has('token');
 
   if (isCatalog) {
     // Customer storefront — catalog.js is fully standalone, no load-order

@@ -28,7 +28,7 @@
     default-src 'self';
     script-src 'self'
                'sha256-eSpIvWwELLQenk+JZ2B5OZ1KSCqJomPFU/uQbg67J8Q='
-               'sha256-JF0GDwCUTXtf5PGfP7bRtMxmOoAz1tJOVz+hSmoq0j0='
+               'sha256-H9D2721gaHb9zqSBbdjWBLDKEMqEtOpMRmtNzDJlKbM='
                https://unpkg.com
                https://cdn.jsdelivr.net
                https://browser.sentry-cdn.com;
@@ -1407,6 +1407,14 @@
           /* 180ms matches the animation duration; fall back on transitionend */
           setTimeout(function () { window.location.href = dest; }, 180);
         });
+      });
+
+      // A page restored from the browser's back-forward cache retains its DOM
+      // classes. Remove the outgoing fade class before the restored page paints.
+      // This covers Android system Back and iPhone Safari Back/edge-swipe.
+      window.addEventListener('pageshow', function () {
+        var landing = document.getElementById('qs-landing');
+        if (landing) landing.classList.remove('qs-navigating');
       });
 
       if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {

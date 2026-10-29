@@ -97,3 +97,32 @@ The original Sign In wiring registered `showAuth` directly as a click listener. 
 - [ ] Merge only if all applicable checks pass; record merge SHA and deployment URL. If any check is unavailable or fails, keep the branch unmerged and report the blocker.
 
 **Status:** Automated source-level checks have passed on a prior commit and the latest preview deployment is READY. Browser-level, live admin/payout/RLS, and controlled end-to-end signup/referral checks are not fully evidenced here. Therefore this is not yet a clean release sign-off.
+
+
+## Follow-up: marketplace Back restoration and vendor-scoped checkout — 2026-10-29
+
+### Root causes
+
+- The landing-to-marketplace transition adds qs-navigating and animates the landing page to opacity zero. Browsers can restore that DOM from the back-forward cache with the class still present, producing a blank-looking landing page on Android Back or iPhone Safari Back/edge-swipe.
+- Marketplace product links pass from=market, market_product, and the selected vendor's local pid to the vendor catalog. The catalog opened the selected product after a 120 ms timeout, allowing the underlying vendor grid to paint before the detail overlay appeared. The native Back handler also closed the overlay before navigating back to the marketplace, exposing the grid during the redirect.
+- A deeper history-owner collision was found: qs-init.js registered the landing/auth popstate handler whenever #qs-landing existed in the DOM. That markup is still present on catalog URLs, even though hidden in catalog mode. The handler initialized catalog history as qsScreen=landing and used stopImmediatePropagation(), preventing catalog.js from handling the detail Back event. This is why the previous landing/auth fix could interfere with marketplace navigation.
+- The marketplace handoff opened product details but did not add the selected product to the vendor cart. The existing cart and WhatsApp checkout were store-scoped, but the handoff did not connect the selected marketplace intent to that cart.
+- In search.html, the product-detail Back button pushed a new listing URL instead of popping the existing detail history entry. That left the product detail one step behind in browser history, so a later phone/browser Back could reopen it. The button also did not invalidate in-flight product/vendor fetches before changing visible state.
+
+### Fix on isolated branch
+
+- index.html: clear qs-navigating on pageshow so back-forward-cache restoration returns the landing page to full visibility. Updated the exact CSP SHA-256 allowlist hash for the modified inline transition script.
+- qs-init.js: resolve store/token catalog mode before registering landing/auth history handlers, so hidden landing markup cannot claim the catalog page's history state or swallow its popstate event.
+- catalog.js: seed the selected marketplace product into the existing store-scoped cart idempotently; open the deep-linked detail overlay in the same task to prevent the 120 ms grid flash; and redirect directly to the marketplace on native Back without first exposing the vendor grid.
+- Added a visible, store-scoped cart summary/review action at the top of marketplace-origin vendor catalogs, plus Checkout and Keep shopping actions on the marketplace-selected product detail. Checkout remains available while viewing other products from the same store. The cart drawer includes Continue shopping alongside WhatsApp checkout. Existing quantity controls, item removal, stock limits, totals, and store-scoped cart storage remain the source of truth.
+- search.html: mark product-detail history entries created from marketplace listings and use history.back() for the detail Back button instead of pushing a duplicate listing URL. Direct product URLs use a replace-and-route fallback. Increment the navigation sequence when Back occurs so stale async detail/vendor results cannot repaint after leaving the screen. Updated the exact CSP hash for the modified inline marketplace router.
+- tests/regression-guards.test.js: added guards for back-forward-cache restoration and both inline CSP hashes, marketplace cart seeding, store scoping, same-task detail opening, landing/catalog history ownership, no-grid-flash Back routing, and marketplace product-detail Back behavior.
+
+### Verification performed
+
+- Syntax checks passed for catalog.js, qs-init.js, and tests/regression-guards.test.js.
+- Regression suite: 20 tests passed, 0 failed.
+- Playwright Chromium smoke tests passed at 393×873 (Android-sized), 390×844 (iPhone-sized), and 1280×900 for landing → marketplace → Back, confirming the landing fade class is cleared and opacity returns to 1.
+- Playwright catalog-flow smoke tests passed with a mocked Supabase client: marketplace-selected item auto-added to cart; Keep shopping reveals the store grid without leaving the vendor; a second same-store product can be added; Checkout remains available on additional product details; cart quantity increment/decrement and removal update totals; Continue shopping works; WhatsApp checkout contains both product lines and the correct total; a second vendor does not inherit the first vendor's cart; native Back from the marketplace-selected detail returns to search.html without leaving the vendor grid visible.
+- The landing-to-marketplace browser smoke also loaded search.html with no new CSP-blocked-script errors. The new search.html history behavior has source-level regression coverage; a fully data-backed interactive test of that marketplace product-detail button was not available because the local environment lacks the live Supabase configuration.
+- Limits: these were Chromium viewport simulations, not physical Android/iPhone Safari tests. The catalog test used mocked Supabase data; live Supabase reads, actual vendor records, and real WhatsApp launch were not exercised. The local static server also shows pre-existing missing supabase-config.js and Sentry SRI warnings; no new CSP/runtime errors were observed in the targeted smoke tests. Do not merge to main or promote to production until a protected preview can be checked against live data and physical mobile Back behavior.
