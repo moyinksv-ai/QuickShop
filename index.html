@@ -28,7 +28,7 @@
     default-src 'self';
     script-src 'self'
                'sha256-eSpIvWwELLQenk+JZ2B5OZ1KSCqJomPFU/uQbg67J8Q='
-               'sha256-JF0GDwCUTXtf5PGfP7bRtMxmOoAz1tJOVz+hSmoq0j0='
+               'sha256-H9D2721gaHb9zqSBbdjWBLDKEMqEtOpMRmtNzDJlKbM='
                https://unpkg.com
                https://cdn.jsdelivr.net
                https://browser.sentry-cdn.com;
@@ -62,6 +62,7 @@
   <meta name="apple-mobile-web-app-title" content="QuickShop">
   <meta name="description" content="QuickShop — Inventory, sales, and profits in real time. Works offline." />
   <title>QuickShop — Inventory + Sales + Notes</title>
+  <script src="referral-capture.js" defer></script>
   <link rel="stylesheet" href="styless.css">
   <!-- Sentry error monitoring — load first so it catches all subsequent errors -->
   <script
@@ -77,7 +78,19 @@
      */
 
     #loginScreen { display: none !important; }
+    /* The auth-only Home button must never leak onto the landing page. */
+    #btnBackToLanding { display: none !important; }
+    body:not(.qs-show-auth) #btnBackToLanding { display: none !important; }
+    body.qs-show-auth #loginScreen #btnBackToLanding:not([hidden]) { display: flex !important; }
+    /* Keep the auth-only control hidden even if legacy/global button styles load later. */
+    #btnBackToLanding[hidden],
+    body:not(.qs-show-auth) #btnBackToLanding { display: none !important; }
+
     .qs-hidden { display: none !important; }
+
+    /* Auth and landing are mutually exclusive, including on refresh/startup. */
+    body.qs-show-auth #qs-landing { display: none !important; }
+    body:not(.qs-show-auth) #loginScreen { display: none !important; }
 
     body.qs-show-auth #loginScreen {
       display: flex   !important;
@@ -103,11 +116,9 @@
     body.mode-app .bottom-nav    { display: flex  !important; }
 
     #qs-landing { display: none !important; }
-    body:not(.mode-app):not(.qs-cat-early):not(.qs-auth-pending) #qs-landing:not(.qs-hidden) { display: block !important; }
+    body:not(.qs-show-auth):not(.mode-app):not(.qs-cat-early):not(.qs-auth-pending) #qs-landing:not(.qs-hidden) { display: block !important; }
 
-    body.qs-auth-pending #qs-landing      { display: none !important; }
-    body.qs-auth-pending.mode-app .app    { display: block !important; }
-    body.qs-auth-pending.mode-app .bottom-nav { display: flex !important; }
+    /* During auth startup, keep the landing hidden until session routing resolves. */
 
     @keyframes spin     { to { transform: rotate(360deg); } }
     @keyframes scanLine { 0%,100%{opacity:0;transform:translateY(-100%)} 50%{opacity:1;transform:translateY(100%)} }
@@ -164,10 +175,15 @@
     #qs-landing .ql-brand-icon img { width:100%; height:100%; display:block; object-fit:cover; }
     #qs-landing .ql-nav-btns { display: flex; gap: 4px; align-items: center; }
     #qs-landing .ql-nav-browse {
+      display: inline-flex; align-items: center;
+      flex: 0 0 auto;
       font-size: 13px; font-weight: 500; color: var(--c-muted);
       padding: 7px 12px; border-radius: 7px; text-decoration: none;
       transition: color .12s, background .12s; white-space: nowrap;
     }
+    /* Keep every top-level navigation action from shrinking out of view. */
+    #qs-landing .ql-nav-signin,
+    #qs-landing .ql-nav-signup { flex-shrink: 0; }
     #qs-landing .ql-nav-browse:hover { color: var(--c-text); background: var(--c-surface); }
     #qs-landing .ql-nav-signin {
       background: none; border: 0; font-size: 13px; font-weight: 500;
@@ -646,7 +662,24 @@
       @keyframes qs-fade-out { to { opacity: 0; } }
       #qs-landing.qs-navigating { animation: qs-fade-out 0.18s ease forwards; }
     }
-  </style></head>
+  
+    /* Keep the top Marketplace link and auth actions visible on narrow phones.
+       This block intentionally follows the base nav styles so its compact
+       spacing wins in the cascade instead of being overwritten. */
+    /* The landing navigation must remain a single clean row on narrow phones. */
+    @media (max-width: 520px) {
+      #qs-landing .ql-nav { gap: 8px; padding-left: 16px; padding-right: 16px; }
+      #qs-landing .ql-brand { min-width: 0; flex: 1 1 auto; }
+      #qs-landing .ql-nav-btns { flex: 0 0 auto; gap: 2px; }
+      #qs-landing .ql-nav-browse,
+      #qs-landing .ql-nav-signin { padding: 7px 6px; font-size: 12px; }
+      #qs-landing .ql-nav-signup { padding: 8px 11px; font-size: 12px; white-space: nowrap; }
+    }
+    @media (max-width: 370px) {
+      /* Keep the marketplace entry point available on narrow phones too. */
+      #qs-landing .ql-nav-signin { padding-left: 4px; padding-right: 4px; }
+    }
+</style></head>
 <body class="qs-auth-pending">  <script>
     (function() {
       try {
@@ -1248,7 +1281,7 @@
       Full history of all actions performed in this store.
     </div>
     <div id="fullAuditLogList" class="full-log-list"></div>
-  </div>  <div id="modalBackdrop" class="modal-backdrop" aria-hidden="true">
+  </div>  <div id="modalBackdrop" class="modal-backdrop" aria-hidden="true" style="display:none;">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <h3 id="modalTitle">Sell Items</h3>
       <div id="modalItem" class="modal-product-name">Item name</div>
@@ -1374,6 +1407,14 @@
           /* 180ms matches the animation duration; fall back on transitionend */
           setTimeout(function () { window.location.href = dest; }, 180);
         });
+      });
+
+      // A page restored from the browser's back-forward cache retains its DOM
+      // classes. Remove the outgoing fade class before the restored page paints.
+      // This covers Android system Back and iPhone Safari Back/edge-swipe.
+      window.addEventListener('pageshow', function () {
+        var landing = document.getElementById('qs-landing');
+        if (landing) landing.classList.remove('qs-navigating');
       });
 
       if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {

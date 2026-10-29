@@ -64,15 +64,19 @@ function initApp() {
   const log = IS_PROD ? () => {} : (...a) => console.log('[QS]', ...a);
 
   // ── Referral capture ─────────────────────────────────────────────────────
-  // If the user arrived via a catalog's branding link (?ref=<UUID>), capture
-  // the referrer's user_id into sessionStorage immediately at boot so it
-  // survives navigation between Login ↔ Signup tabs. Consumed once at signup
-  // then cleared. UUID-validated here to prevent garbage data reaching the DB.
+  // Persist only well-formed referral tokens. A later valid click replaces an
+  // earlier pending click; malformed query strings never erase a good token.
+  // UUID links remain supported while /r/<16-hex-code> links use the resolver.
   (function captureReferral() {
     try {
-      var _refParam = new URLSearchParams(window.location.search).get('ref');
-      if (_refParam && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_refParam)) {
-        sessionStorage.setItem('qs_referrer_id', _refParam);
+      var _refParam = new URLSearchParams(window.location.search).get('ref') || '';
+      var _pathMatch = window.location.pathname.match(/^\/r\/([0-9a-f]{16})\/?$/i);
+      var _refCandidate = _pathMatch ? _pathMatch[1] : _refParam;
+      var _validRef = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_refCandidate) ||
+                     /^[0-9a-f]{16}$/i.test(_refCandidate);
+      if (_validRef) {
+        localStorage.setItem('qs_pending_referral', _refCandidate);
+        try { sessionStorage.setItem('qs_referrer_id', _refCandidate); } catch (_) {}
       }
     } catch (_) {}
   })();
@@ -658,13 +662,30 @@ function handleTouchEnd() {
   function showLoginForm() { hideAllAuthForms(); const el = $('loginForm'); if (el) el.style.display = 'flex'; clearAuths(); }
   function showSignupForm() { hideAllAuthForms(); const el = $('signupForm'); if (el) el.style.display = 'flex'; clearAuths(); }
   function showResetForm() { hideAllAuthForms(); const el = $('resetForm'); if (el) el.style.display = 'flex'; clearAuths(); }
-  function showResetVerifyForm(email) { hideAllAuthForms(); _pendingResetEmail = email || ''; const el = $('resetVerifyForm'); if (el) el.style.display = 'flex'; }
-  function showVerificationNotice(email) {
+  function showResetVerifyForm(email) {
+    // Keep the auth surface visible after cold reloads, including standalone PWAs.
+    document.body.classList.add('qs-auth-pending', 'qs-show-auth');
     hideAllAuthForms();
+    _pendingResetEmail = email || '';
+    try {
+      if (_pendingResetEmail) localStorage.setItem('qs_pending_reset_email', _pendingResetEmail);
+    } catch (_) {}
+    const el = $('resetVerifyForm');
+    if (el) el.style.display = 'flex';
+  }
+  function showVerificationNotice(email) {
+    // The CSS intentionally hides #loginScreen unless qs-show-auth is present.
+    // Restore both classes so the landing page stays hidden and the OTP panel is visible.
+    document.body.classList.add('qs-auth-pending', 'qs-show-auth');
+    hideAllAuthForms();
+    const _verificationEmail = (email || (getUser() && getUser().email) || '').trim();
+    if (_verificationEmail) {
+      try { localStorage.setItem('qs_pending_verification_email', _verificationEmail); } catch (_) {}
+    }
     const el = $('verificationNotice');
     if (el) el.style.display = 'flex';
     const emailEl = $('verificationEmail');
-    if (emailEl) emailEl.textContent = email || (getUser() && getUser().email) || '';
+    if (emailEl) emailEl.textContent = _verificationEmail;
   }
   function showAuthLoading() { hideAllAuthForms(); const el = $('authLoading'); if (el) el.style.display = 'flex'; }
   function clearAuths() {
@@ -1192,8 +1213,12 @@ function handleTouchEnd() {
 
     const signupForm = $('signupForm');
     if (signupForm) {
+      let signupInFlight = false;
       const handleSignupSubmit = async (e) => {
         if (e) e.preventDefault();
+        // The form submit event is the single entry point. Guard repeated taps,
+        // Enter presses, and slow mobile networks from creating duplicate requests.
+        if (signupInFlight) return;
         const signupName = $('signupName'), signupBusiness = $('signupBusiness');
         const signupEmail = $('signupEmail'), signupPass = $('signupPass'), signupPassConfirm = $('signupPassConfirm');
         const name = (signupName && signupName.value || '').trim();
@@ -1205,46 +1230,51 @@ function handleTouchEnd() {
         if (!validateEmail(email)) { toast('Please enter a valid email', 'error'); if (signupEmail) signupEmail.classList.add('error'); return; }
         if (!pass || pass.length < 6) { toast('Password must be at least 6 characters', 'error'); if (signupPass) signupPass.classList.add('error'); return; }
         if (pass !== passConfirm) { toast('Passwords do not match', 'error'); if (signupPassConfirm) signupPassConfirm.classList.add('error'); return; }
+        // Only lock submission after synchronous validation passes; invalid input
+        // must remain correctable without requiring a page reload.
+        signupInFlight = true;
+        const btnSignup = $('btnSignup');
         try {
           showAuthLoading();
-          const btnSignup = $('btnSignup');
           disableBtn(btnSignup, true);
           const supabase = getClient();
           if (!supabase) throw new Error('Supabase not initialized');
+          // Store the pending referral in auth metadata as a cross-device fallback.
+          // The durable local value remains authoritative for the latest valid click.
+          var _signupReferral = '';
+          try { _signupReferral = localStorage.getItem('qs_pending_referral') || sessionStorage.getItem('qs_referrer_id') || ''; } catch (_) {}
+          var _signupReferralIsUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_signupReferral);
+          var _signupReferralIsCode = /^[0-9a-f]{16}$/i.test(_signupReferral);
           const { data, error } = await supabase.auth.signUp({
             email: email, password: pass,
-            options: { data: { full_name: name, business_name: business || null } }
+            options: { data: {
+              full_name: name,
+              business_name: business || null,
+              referral_id: _signupReferralIsUuid ? _signupReferral : null,
+              referral_code: _signupReferralIsCode ? _signupReferral.toLowerCase() : null
+            } }
           });
           if (error) throw error;
-          const user = data.user;
+          // With Supabase email-confirmation enabled, signUp can intentionally
+          // return a user with no identities for an already-registered email.
+          // Do not create a profile or claim that a new OTP was sent in that case.
+          const returnedUser = data && data.user;
+          const isDuplicateOrAlreadyVerified = !!returnedUser && (
+            (Array.isArray(returnedUser.identities) && returnedUser.identities.length === 0) ||
+            !!returnedUser.email_confirmed_at || !!returnedUser.confirmed_at
+          );
+          if (isDuplicateOrAlreadyVerified) {
+            try { localStorage.removeItem('qs_pending_verification_email'); } catch (_) {}
+            showLoginForm();
+            toast('This email is already registered or verified. Please sign in or reset your password.', 'error');
+            return;
+          }
+          const user = data && data.user;
+          if (!user || !user.id) throw new Error('Signup did not return a valid user');
           const profile = { uid: user.id, name, businessName: business || null, email: user.email, createdAt: Date.now() };
           await setUserProfile(user.id, profile);
 
-          // ── Referral attribution ────────────────────────────────────────
-          // Consume the pending referral captured at boot or from catalog.js.
-          // Written once — never overwritten. Self-referral blocked here and
-          // at DB level (set_my_referrer RPC re-checks ref_id <> auth.uid()
-          // and only ever sets referred_by once — WHERE referred_by IS NULL —
-          // so this can't be re-attributed via a direct API call either).
-          try {
-            var _pendingRef = sessionStorage.getItem('qs_referrer_id');
-            if (
-              _pendingRef &&
-              /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_pendingRef) &&
-              _pendingRef !== user.id
-            ) {
-              const supabaseRef = getClient();
-              if (supabaseRef) {
-                // Routed through set_my_referrer RPC -- authenticated has no
-                // direct UPDATE grant on referred_by (profiles_authenticated_read
-                // is USING(true), so a plain column grant would let any
-                // logged-in user rewrite anyone's referred_by, not just their own).
-                await supabaseRef.rpc('set_my_referrer', { ref_id: _pendingRef });
-              }
-            }
-            sessionStorage.removeItem('qs_referrer_id');
-          } catch (_refErr) { errlog('referral attribution', _refErr); }
-          // ── End referral attribution ─────────────────────────────────────
+          // Keep the captured referral until authenticated attribution resolves it.
 
           showVerificationNotice(email);
           toast('Account created — verification email sent. Please verify before logging in.');
@@ -1253,28 +1283,26 @@ function handleTouchEnd() {
           showSignupForm();
           toast(mapAuthError(e), 'error');
         } finally {
-          const btnSignup = $('btnSignup');
+          signupInFlight = false;
           disableBtn(btnSignup, false);
           const authLoading = $('authLoading');
           if (authLoading) authLoading.style.display = 'none';
         }
       };
 
-      signupForm.addEventListener('submit', handleSignupSubmit);
-      const signups = ['signupName', 'signupBusiness', 'signupEmail', 'signupPass', 'signupPassConfirm'];
-      signups.forEach(Id => {
-        const el = $(Id);
-        if (el) {
-          el.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              handleSignupSubmit();
-            }
-          });
-        }
+      // signupForm is a div, not a native form, and btnSignup is type="button".
+      // Use explicit click/Enter handlers; signupInFlight is the single-request guard.
+      const btnSignupSubmit = $('btnSignup');
+      if (btnSignupSubmit) btnSignupSubmit.addEventListener('click', handleSignupSubmit);
+      ['signupName', 'signupBusiness', 'signupEmail', 'signupPass', 'signupPassConfirm'].forEach(function (id) {
+        const field = $(id);
+        if (field) field.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            handleSignupSubmit(e);
+          }
+        });
       });
-      const _btnSignupEl = $('btnSignup');
-      if (_btnSignupEl) _btnSignupEl.addEventListener('click', handleSignupSubmit);
     }
 
     const btnSendReset = $('btnSendReset');
@@ -1289,6 +1317,7 @@ function handleTouchEnd() {
           if (!supabase) throw new Error('Supabase not initialized');
           const { error } = await supabase.auth.resetPasswordForEmail(email);
           if (error) throw error;
+          try { localStorage.setItem('qs_pending_reset_email', email); } catch (_) {}
           showResetVerifyForm(email);
           toast('6-digit code sent. Check your inbox.');
         } catch (e) {
@@ -1317,6 +1346,7 @@ function handleTouchEnd() {
           if (!email) { toast('Could not determine your email. Please try signing up again.', 'error'); return; }
           const { error } = await supabase.auth.resend({ type: 'signup', email });
           if (error) throw error;
+          try { localStorage.setItem('qs_pending_verification_email', email); } catch (_) {}
           toast('New 6-digit code sent. Check your inbox.');
         } catch (e) { errlog('resend verification error', e); toast('Failed to resend verification. Try again later.', 'error'); }
       });
@@ -1336,6 +1366,7 @@ function handleTouchEnd() {
           if (!supabase) throw new Error('Supabase not initialized');
           const { error } = await supabase.auth.verifyOtp({ email, token: code, type: 'signup' });
           if (error) throw error;
+          try { localStorage.removeItem('qs_pending_verification_email'); } catch (_) {}
           localStorage.setItem('qs_session_active', 'true');
           document.body.classList.add('mode-app');
           toast('Email verified! Welcome to QuickShop.');
@@ -1387,6 +1418,7 @@ function handleTouchEnd() {
           if (updateError) throw updateError;
           await supabase.auth.signOut();
           _pendingResetEmail = '';
+          try { localStorage.removeItem('qs_pending_reset_email'); } catch (_) {}
           toast('Password reset! Please sign in with your new password.');
           showLoginForm();
         } catch (e) {
@@ -1400,29 +1432,77 @@ function handleTouchEnd() {
       });
     }
 
-    const btnBackToResetEmail = $('btnBackToResetEmail');
-    if (btnBackToResetEmail) btnBackToResetEmail.addEventListener('click', showResetForm);
+    // Home navigation is delegated by qs-init.js through one canonical state transition.
+    // Do not add a second direct listener here: it can race with the delegated handler.
 
-    const btnLogout = $('btnLogout');
-    if (btnLogout) {
-      btnLogout.addEventListener('click', async function () {
+    const btnBackToResetEmail = $('btnBackToResetEmail');
+    if (btnBackToResetEmail) btnBackToResetEmail.addEventListener('click', function () {
+      _pendingResetEmail = '';
+      try { localStorage.removeItem('qs_pending_reset_email'); } catch (_) {}
+      showResetForm();
+    });
+
+    // The Sign Out button is created dynamically when the Settings panel renders.
+    // Delegate the click, but keep the destructive action behind one explicit confirmation.
+    document.addEventListener('click', async function (event) {
+      const target = event.target;
+      const btnLogout = target && typeof target.closest === 'function'
+        ? target.closest('#btnLogout')
+        : null;
+      if (!btnLogout) return;
+      event.preventDefault();
+
+      // Guard double taps while the confirmation modal or sign-out request is active.
+      if (btnLogout.dataset.qsSignoutPending === 'true') return;
+      btnLogout.dataset.qsSignoutPending = 'true';
+      btnLogout.disabled = true;
+
+      try {
         const confirmed = await showConfirm({
           title: 'Sign Out',
           message: 'Are you sure you want to sign out?',
           okText: 'Sign Out',
           okDanger: true
         });
+        // Fail closed: cancel or a missing confirmation modal must never sign out.
         if (!confirmed) return;
+
+        const supabase = getClient();
+        let signOutError = null;
         try {
-          const supabase = getClient();
-          if (supabase) await supabase.auth.signOut();
-          localStorage.removeItem('qs_session_active');
-          document.body.classList.remove('mode-app');
+          if (supabase) {
+            const result = await supabase.auth.signOut({ scope: 'local' });
+            signOutError = result && result.error ? result.error : null;
+          }
+        } catch (e) {
+          signOutError = e;
+        } finally {
+          // Clear app-owned state and any persisted Supabase auth token as a fallback.
+          ['qs_session_active', 'qs_last_user_id', 'qs_user_cache'].forEach((key) => {
+            try { localStorage.removeItem(key); } catch (_) {}
+          });
+          try {
+            Object.keys(localStorage).forEach((key) => {
+              if (/^sb-.+-auth-token$/.test(key)) localStorage.removeItem(key);
+            });
+          } catch (_) {}
+          currentUser = null;
+          document.body.classList.remove('mode-app', 'qs-auth-pending');
+          document.body.classList.add('qs-show-auth');
+          if (signOutError) errlog('Supabase signout returned an error; local app session cleared', signOutError);
           toast('Signed out');
-          window.location.reload();
-        } catch (e) { errlog('signout error', e); toast('Sign out failed: ' + (e.message || ''), 'error'); }
-      });
-    }
+          // Preserve the explicit sign-out destination across the reload. A normal
+          // cold visit has no marker and should show the public landing page.
+          try { sessionStorage.setItem('qs_show_auth_after_signout', 'true'); } catch (_) {}
+          window.location.replace(window.location.pathname);
+        }
+      } finally {
+        if (btnLogout.isConnected) {
+          btnLogout.disabled = false;
+          delete btnLogout.dataset.qsSignoutPending;
+        }
+      }
+    });
   }
 
   async function initAuth() {
@@ -1469,7 +1549,10 @@ function handleTouchEnd() {
             handleAuthUser(session.user);
           }
         } else {
-          handleAuthLogout();
+          // A cold visit with no session is a public landing-page visit, not an
+          // explicit sign-out. Preserve interrupted OTP/reset flows, but do not
+          // force every new visitor into the auth screen.
+          handleAuthLogout({ initialLoad: true });
         }
         return;
       }
@@ -1546,6 +1629,57 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     }
     loadLocalData(user.id);
     await syncCloudData(user);
+
+    // ── Durable referral attribution ─────────────────────────────────────
+    // Pending click survives navigation, refresh, PWA restarts, and OTP delay.
+    // Prefer the latest locally captured click; auth metadata is a fallback
+    // for users who complete verification on a different device.
+    try {
+      const _meta = user.user_metadata || {};
+      let _pendingReferral = '';
+      try {
+        _pendingReferral = localStorage.getItem('qs_pending_referral') || '';
+        if (!_pendingReferral) _pendingReferral = sessionStorage.getItem('qs_referrer_id') || '';
+      } catch (_) {}
+      if (!_pendingReferral) {
+        let _alreadyAttributed = false;
+        try { _alreadyAttributed = localStorage.getItem('qs_referral_attributed_' + user.id) === 'true'; } catch (_) {}
+        if (!_alreadyAttributed) _pendingReferral = _meta.referral_code || _meta.referral_id || '';
+      }
+
+      const _isRefUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_pendingReferral);
+      const _isRefCode = /^[0-9a-f]{16}$/i.test(_pendingReferral);
+      if (_isRefUuid || _isRefCode) {
+        let _referrerId = _isRefUuid ? _pendingReferral : null;
+        const _refClient = getClient();
+        if (_isRefCode && _refClient) {
+          const { data: _resolvedRef, error: _resolveError } = await _refClient.rpc('resolve_referral_code', { p_code: _pendingReferral.toLowerCase() });
+          if (_resolveError) throw _resolveError;
+          _referrerId = typeof _resolvedRef === 'string' ? _resolvedRef : null;
+          if (!_referrerId) {
+            // Well-formed but unknown codes are invalid, not transient failures.
+            try { localStorage.removeItem('qs_pending_referral'); sessionStorage.removeItem('qs_referrer_id'); } catch (_) {}
+          }
+        }
+        if (_referrerId && _referrerId !== user.id && _refClient) {
+          const { error: _attribError } = await _refClient.rpc('set_my_referrer', { ref_id: _referrerId });
+          if (_attribError) throw _attribError;
+          try {
+            localStorage.removeItem('qs_pending_referral');
+            sessionStorage.removeItem('qs_referrer_id');
+            localStorage.setItem('qs_referral_attributed_' + user.id, 'true');
+          } catch (_) {}
+        } else if (_referrerId === user.id) {
+          // Reject self-referral and discard it so it cannot be retried forever.
+          try { localStorage.removeItem('qs_pending_referral'); sessionStorage.removeItem('qs_referrer_id'); } catch (_) {}
+        }
+      }
+    } catch (_referralError) {
+      // Keep pending data on transient errors; a later auth event/login retries.
+      errlog('referral attribution', _referralError);
+    }
+    // ── End durable referral attribution ──────────────────────────────────
+
     // After cloud sync: if local products exist but cloud had none, queue them all for upload.
     // This recovers from the case where products were created offline or before Supabase tables existed.
     if (window.qsdb && window.qsdb.addPendingChange && state.products && state.products.length > 0) {
@@ -1571,7 +1705,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     }
   }
 
-  function handleAuthLogout() {
+  function handleAuthLogout(options = {}) {
     currentUser = null;
     setSupabaseUser(null);
     localStorage.removeItem('qs_session_active');
@@ -1582,11 +1716,40 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       Sentry.setUser(null);
     }
     document.body.classList.remove('qs-auth-pending');
-document.body.classList.remove('mode-app'); // auth resolved (logged out)
-    const loginScreen = $('loginScreen'), appScreen = document.querySelector('.app');
-    if (loginScreen) loginScreen.style.display = 'flex';
-    if (appScreen) appScreen.style.display = 'none';
-    showLoginForm();
+    document.body.classList.remove('mode-app'); // auth resolved (logged out)
+    // Restore interrupted auth steps after cold reload/app eviction on mobile.
+    // Low-memory browsers can discard the page while the user switches to Gmail.
+    let _pendingVerificationEmail = '';
+    let _savedResetEmail = '';
+    try {
+      _pendingVerificationEmail = (localStorage.getItem('qs_pending_verification_email') || '').trim();
+      _savedResetEmail = (localStorage.getItem('qs_pending_reset_email') || '').trim();
+    } catch (_) {}
+
+    // A one-time session marker preserves the explicit sign-out destination across
+    // the reload below; ordinary cold visits should show the public landing page.
+    let _explicitSignOut = false;
+    try {
+      _explicitSignOut = sessionStorage.getItem('qs_show_auth_after_signout') === 'true';
+      sessionStorage.removeItem('qs_show_auth_after_signout');
+    } catch (_) {}
+    // Pending verification/reset steps remain on auth so users can resume.
+    if (options.initialLoad && !_explicitSignOut && !_pendingVerificationEmail && !_savedResetEmail &&
+        typeof window.__qs_showLanding === 'function') {
+      window.__qs_showLanding();
+    } else {
+      document.body.classList.add('qs-show-auth'); // explicit sign-out / pending auth flow
+      const loginScreen = $('loginScreen'), appScreen = document.querySelector('.app');
+      if (loginScreen) loginScreen.style.display = 'flex';
+      if (appScreen) appScreen.style.display = 'none';
+      if (_pendingVerificationEmail) {
+        showVerificationNotice(_pendingVerificationEmail);
+      } else if (_savedResetEmail) {
+        showResetVerifyForm(_savedResetEmail);
+      } else {
+        showLoginForm();
+      }
+    }
     setBottomNavVisible(false);
     const userEmailEl = $('userEmail'), userDisplayNameEl = $('userDisplayName');
     if (userEmailEl) userEmailEl.textContent = '—';
@@ -6176,6 +6339,14 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
           <div id="activityLogArea"></div>
         </div>
 
+        <!-- ── Activation & Payment ─────────────────────────────────── -->
+        <div>
+          <div class="qs-s-section-title">Activation &amp; Payment</div>
+          <div class="qs-s-section" id="qs-activation-payment-section">
+            <div id="qs-activation-payment-body" style="padding:16px;color:var(--text-muted);font-size:13px;">Checking activation status…</div>
+          </div>
+        </div>
+
         <!-- ── Referral Programme ──────────────────────────────────── -->
         <div>
           <div class="qs-s-section-title">Referral Programme</div>
@@ -6645,12 +6816,124 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     // Render categories into the store drawer slot
     renderCategoryEditor();
 
+    // ── Activation payment claim — server-verified, never self-activates ───
+    (async function renderActivationPaymentStatus() {
+      const _u = getUser();
+      const _sb = getClient();
+      const _body = settingsPanel.querySelector('#qs-activation-payment-body');
+      if (!_u || !_sb || !_body) return;
+
+      function makeClaimRequestId() {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+          return window.crypto.randomUUID();
+        }
+        const bytes = new Uint8Array(16);
+        if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+          window.crypto.getRandomValues(bytes);
+        } else {
+          for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+        }
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+        return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' +
+          hex.slice(16, 20) + '-' + hex.slice(20);
+      }
+
+      function showStatus(message, kind) {
+        _body.replaceChildren();
+        const note = document.createElement('div');
+        note.style.cssText = 'font-size:13px;line-height:1.55;color:' +
+          (kind === 'success' ? 'var(--accent-emerald)' : kind === 'error' ? 'var(--danger)' : 'var(--text-muted)') + ';';
+        note.textContent = message;
+        _body.appendChild(note);
+      }
+
+      function addClaimButton(label, disabled) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'save-btn';
+        button.style.cssText = 'width:100%;margin-top:12px;padding:12px;border-radius:12px;font-weight:750;';
+        button.textContent = label;
+        button.disabled = !!disabled;
+        _body.appendChild(button);
+        return button;
+      }
+
+      try {
+        const [profileResult, claimsResult] = await Promise.all([
+          _sb.rpc('qs_get_my_activation_status_v2'),
+          _sb.rpc('qs_get_my_payment_claims_v2')
+        ]);
+        if (profileResult.error) throw profileResult.error;
+        if (claimsResult.error) throw claimsResult.error;
+        const profileRows = Array.isArray(profileResult.data) ? profileResult.data : [];
+        const profile = profileRows[0] || {};
+        const claims = Array.isArray(claimsResult.data) ? claimsResult.data : [];
+        claims.sort(function (a, b) { return new Date(b.claimed_at || 0) - new Date(a.claimed_at || 0); });
+        const latest = claims[0] || null;
+
+        if (profile.is_active || profile.is_founder) {
+          showStatus('Your store is active. No activation payment claim is needed.', 'success');
+          return;
+        }
+
+        if (latest && String(latest.status || '').toLowerCase() === 'pending') {
+          showStatus('Payment claim submitted · Awaiting admin verification. Your store will activate only after the transfer is confirmed.', 'success');
+          const submitted = document.createElement('div');
+          submitted.style.cssText = 'font-size:11px;color:var(--text-muted);margin-top:6px;';
+          submitted.textContent = latest.claimed_at
+            ? 'Submitted ' + new Date(latest.claimed_at).toLocaleString()
+            : 'Your claim is in the review queue.';
+          _body.appendChild(submitted);
+          return;
+        }
+
+        if (latest && String(latest.status || '').toLowerCase() === 'rejected') {
+          showStatus('Your previous payment claim was not approved. If you have completed the transfer, you can submit a new claim for review.', 'error');
+        } else {
+          showStatus('After transferring the ₦1,500 activation fee, submit a claim here. This only notifies QuickShop; it does not activate your store automatically.');
+        }
+
+        const claimButton = addClaimButton('I’ve transferred ₦1,500', false);
+        claimButton.addEventListener('click', async function () {
+          if (claimButton.disabled) return;
+          claimButton.disabled = true;
+          claimButton.textContent = 'Submitting claim…';
+          try {
+            const { data, error } = await _sb.rpc('qs_submit_payment_claim_v2', {
+              p_claim_kind: 'activation',
+              p_client_request_id: makeClaimRequestId()
+            });
+            if (error) throw error;
+            const row = Array.isArray(data) ? data[0] : data;
+            if (!row || !row.id || String(row.status || '').toLowerCase() !== 'pending') {
+              throw new Error('QuickShop did not confirm that the payment claim was saved.');
+            }
+            showStatus('Payment claim submitted · Awaiting admin verification. Your store will activate only after the transfer is confirmed.', 'success');
+            const submitted = document.createElement('div');
+            submitted.style.cssText = 'font-size:11px;color:var(--text-muted);margin-top:6px;';
+            submitted.textContent = 'Submitted ' + new Date(row.claimed_at || Date.now()).toLocaleString();
+            _body.appendChild(submitted);
+          } catch (err) {
+            showStatus('Could not submit the payment claim: ' + String(err && err.message || 'Please try again.'), 'error');
+            const retry = addClaimButton('Try again', false);
+            retry.addEventListener('click', function () { renderActivationPaymentStatus(); });
+          }
+        });
+      } catch (err) {
+        showStatus('Activation status is temporarily unavailable. Refresh Settings and try again. ' +
+          String(err && err.message || ''), 'error');
+      }
+    })();
+
     // ── Referral dashboard — async, non-blocking ──────────────────────────
-    // Queries the referrals and payout_requests tables for the current user.
-    // Computes totals from ledger rows — never from stored counters.
-    // Renders into #qs-referral-body which is already in the DOM above.
+    // Uses the payout-batch ledger as the source of truth. Reserved referrals
+    // are excluded from the next milestone without deleting historical rows.
+    // Payout requests use the database RPC so batch creation + referral
+    // reservation happen atomically and concurrent clicks cannot double-claim.
     (async function renderReferralDashboard() {
-      const _u  = getUser();
+      const _u = getUser();
       const _sb = getClient();
       const _body = settingsPanel.querySelector('#qs-referral-body');
       if (!_u || !_sb || !_body) return;
@@ -6658,96 +6941,160 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
       const MILESTONE = 10;
       const AMOUNT_PER = 500;
 
+      function makeRequestId() {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+          return window.crypto.randomUUID();
+        }
+        const bytes = new Uint8Array(16);
+        if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+          window.crypto.getRandomValues(bytes);
+        } else {
+          for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+        }
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+        return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' +
+          hex.slice(16, 20) + '-' + hex.slice(20);
+      }
+
+      async function ensurePayoutActivityLog(batch) {
+        if (!batch || !batch.id) return null;
+        // Stable ID makes logging idempotent. The dashboard retries this upsert
+        // on later opens if the payout RPC succeeded but this separate write failed.
+        const logId = 'payoutreq_' + String(batch.id).replace(/-/g, '');
+        const amount = Number(batch.amount_ngn) || 0;
+        const count = Number(batch.referral_count) || MILESTONE;
+        const logRow = {
+          id: logId,
+          user_id: _u.id,
+          action: 'Payout requested',
+          details: 'Referral payout requested: ₦' + amount.toLocaleString('en-NG') +
+            ' for ' + count + ' referrals. Request ID: ' + batch.id,
+          performed_by: String(_u.email || _u.user_metadata && (_u.user_metadata.full_name || _u.user_metadata.name) || _u.id).slice(0, 100),
+          created_at: batch.requested_at || new Date().toISOString()
+        };
+        // Keep the visible in-app Activity Log in sync immediately. The same
+        // stable ID is used for the cloud row, so saveState's upsert cannot
+        // create a duplicate if the direct audit write is retried.
+        if (!Array.isArray(state.logs)) state.logs = [];
+        if (!state.logs.some(entry => entry.id === logId)) {
+          state.logs.unshift({
+            id: logId,
+            ts: new Date(logRow.created_at).getTime(),
+            action: logRow.action,
+            details: logRow.details,
+            user: logRow.performed_by
+          });
+          state.logs = state.logs.slice(0, 200);
+          saveState();
+        }
+        const { error } = await _sb.from('audit_logs').upsert(logRow, {
+          onConflict: 'id',
+          ignoreDuplicates: true
+        });
+        if (error) throw error;
+        return logRow;
+      }
+
       try {
-        // Fetch referrals + pending payout requests in parallel
-        const [refResult, payResult] = await Promise.all([
+        const [refResult, itemResult, batchResult] = await Promise.all([
           _sb.from('referrals')
-            .select('id, status, created_at')
+            .select('id, status, amount, created_at')
             .eq('referrer_id', _u.id),
-          _sb.from('payout_requests')
-            .select('id, status')
+          _sb.from('referral_payout_items')
+            .select('referral_id'),
+          _sb.from('referral_payout_batches')
+            .select('id, status, referral_count, amount_ngn, requested_at, paid_at')
             .eq('user_id', _u.id)
-            .eq('status', 'pending')
+            .order('requested_at', { ascending: false })
         ]);
 
-        const rows       = refResult.data  || [];
-        const pendingPay = payResult.data  || [];
+        if (refResult.error) throw refResult.error;
+        if (itemResult.error) throw itemResult.error;
+        if (batchResult.error) throw batchResult.error;
 
-        const earned = rows.filter(r => r.status === 'earned').length;
-        const paid   = rows.filter(r => r.status === 'paid').length;
-        const total  = rows.length;
+        const rows = Array.isArray(refResult.data) ? refResult.data : [];
+        const reservedIds = new Set((itemResult.data || []).map(item => item.referral_id));
+        const batches = Array.isArray(batchResult.data) ? batchResult.data : [];
+        const eligible = rows.filter(r => r.status === 'earned' && !reservedIds.has(r.id));
+        const pendingBatch = batches.find(b => b.status === 'pending' || b.status === 'details_requested') || null;
+        const eligibleCount = eligible.length;
+        const cycleCount = Math.min(eligibleCount, MILESTONE);
+        const earningsNgn = eligible.reduce((sum, row) => sum + (Number(row.amount) || AMOUNT_PER), 0);
+        const nextBatchAmount = eligible.slice(0, MILESTONE)
+          .reduce((sum, row) => sum + (Number(row.amount) || AMOUNT_PER), 0);
+        const canRequest = eligibleCount >= MILESTONE && !pendingBatch && nextBatchAmount === 5000;
 
-        const earningsNgn  = earned * AMOUNT_PER;
-        const hasPending   = pendingPay.length > 0;
-        const canRequest   = total >= MILESTONE && !hasPending;
+        // Repair any missed activity-log write from a prior successful request.
+        // One deterministic audit-log ID per batch prevents duplicate entries.
+        for (const batch of batches) {
+          try { await ensurePayoutActivityLog(batch); }
+          catch (logError) { errlog('payout activity log sync failed', logError); }
+        }
 
-        // Build UI — Obsidian Glass style, dark, 16px radius, glassmorphism
         _body.innerHTML = '';
 
-        // Stats row
         const stats = document.createElement('div');
         stats.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;';
 
         function statCard(label, value, accent) {
-          const c = document.createElement('div');
-          c.style.cssText = [
-            'background:var(--card-glass);',
-            'border:1px solid var(--border-glass);',
-            'border-radius:16px;padding:14px 16px;',
-          ].join('');
-          const v = document.createElement('div');
-          v.style.cssText = 'font-size:22px;font-weight:800;color:' + accent + ';letter-spacing:-0.5px;margin-bottom:3px;';
-          v.textContent = value;
-          const l = document.createElement('div');
-          l.style.cssText = 'font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;';
-          l.textContent = label;
-          c.appendChild(v);
-          c.appendChild(l);
-          return c;
+          const card = document.createElement('div');
+          card.style.cssText = 'background:var(--card-glass);border:1px solid var(--border-glass);border-radius:16px;padding:14px 16px;';
+          const valueEl = document.createElement('div');
+          valueEl.style.cssText = 'font-size:22px;font-weight:800;color:' + accent + ';letter-spacing:-0.5px;margin-bottom:3px;';
+          valueEl.textContent = value;
+          const labelEl = document.createElement('div');
+          labelEl.style.cssText = 'font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;';
+          labelEl.textContent = label;
+          card.appendChild(valueEl);
+          card.appendChild(labelEl);
+          return card;
         }
 
-        stats.appendChild(statCard('Referrals', total + ' / ' + MILESTONE, '#a78bfa'));
-        stats.appendChild(statCard('Earnings',  '₦' + earningsNgn.toLocaleString('en-NG'), '#10b981'));
+        const currentCycleStat = statCard('Current cycle', cycleCount + ' / ' + MILESTONE, '#a78bfa');
+        const availableBalanceStat = statCard('Available balance', '₦' + earningsNgn.toLocaleString('en-NG'), '#10b981');
+        stats.appendChild(currentCycleStat);
+        stats.appendChild(availableBalanceStat);
         _body.appendChild(stats);
 
-        // Progress bar toward milestone
         const progressWrap = document.createElement('div');
         progressWrap.style.cssText = 'margin-bottom:14px;';
         const progressLbl = document.createElement('div');
         progressLbl.style.cssText = 'display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-bottom:6px;font-weight:600;';
         const progressLeft = document.createElement('span');
-        progressLeft.textContent = total >= MILESTONE
+        progressLeft.textContent = cycleCount >= MILESTONE
           ? '🎉 Milestone reached!'
-          : (MILESTONE - total) + ' more referral' + (MILESTONE - total === 1 ? '' : 's') + ' to unlock payout';
+          : (MILESTONE - cycleCount) + ' more eligible referral' + (MILESTONE - cycleCount === 1 ? '' : 's') + ' to unlock payout';
         const progressRight = document.createElement('span');
-        progressRight.textContent = total + ' / ' + MILESTONE;
+        progressRight.textContent = cycleCount + ' / ' + MILESTONE;
         progressLbl.appendChild(progressLeft);
         progressLbl.appendChild(progressRight);
 
         const track = document.createElement('div');
         track.style.cssText = 'height:6px;background:var(--border-glass);border-radius:99px;overflow:hidden;';
         const fill = document.createElement('div');
-        const fillPct = Math.min(100, Math.round((total / MILESTONE) * 100));
+        const fillPct = Math.min(100, Math.round((cycleCount / MILESTONE) * 100));
         fill.style.cssText = 'height:100%;width:' + fillPct + '%;border-radius:99px;background:linear-gradient(90deg,#7c3aed,#a78bfa);transition:width 0.4s ease;';
         track.appendChild(fill);
         progressWrap.appendChild(progressLbl);
         progressWrap.appendChild(track);
         _body.appendChild(progressWrap);
 
-        // Referral link row — shows their unique referral URL
         const linkRow = document.createElement('div');
-        linkRow.style.cssText = [
-          'background:rgba(99,102,241,0.07);',
-          'border:1px solid rgba(99,102,241,0.18);',
-          'border-radius:12px;padding:12px 14px;',
-          'margin-bottom:14px;',
-        ].join('');
+        linkRow.style.cssText = 'background:rgba(99,102,241,0.07);border:1px solid rgba(99,102,241,0.18);border-radius:12px;padding:12px 14px;margin-bottom:14px;';
         const linkLabel = document.createElement('div');
         linkLabel.style.cssText = 'font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;';
         linkLabel.textContent = 'Your Referral Link';
         const linkVal = document.createElement('div');
         linkVal.style.cssText = 'font-size:12px;color:#a78bfa;word-break:break-all;line-height:1.5;cursor:pointer;';
-        const refUrl = window.location.origin + '/?ref=' + encodeURIComponent(_u.id);
+        let refUrl = window.location.origin + '/?ref=' + encodeURIComponent(_u.id);
+        try {
+          const { data: shortCode, error: shortCodeError } = await _sb.rpc('get_my_referral_code');
+          if (!shortCodeError && typeof shortCode === 'string' && /^[0-9a-f]{16}$/.test(shortCode)) {
+            refUrl = window.location.origin + '/r/' + shortCode;
+          }
+        } catch (_) {}
         linkVal.textContent = refUrl;
         linkVal.title = 'Tap to copy';
         linkVal.addEventListener('click', function () {
@@ -6763,26 +7110,24 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
         linkRow.appendChild(linkVal);
         _body.appendChild(linkRow);
 
-        // Payout button
         const payBtn = document.createElement('button');
         payBtn.type = 'button';
-        payBtn.style.cssText = [
-          'width:100%;padding:13px;border-radius:16px;border:0;',
-          'font-size:14px;font-weight:700;cursor:pointer;',
-          'transition:opacity 0.2s,transform 0.1s;',
-          canRequest
+        payBtn.style.cssText = 'width:100%;padding:13px;border-radius:16px;border:0;font-size:14px;font-weight:700;cursor:pointer;transition:opacity 0.2s,transform 0.1s;' +
+          (canRequest
             ? 'background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;box-shadow:0 6px 20px rgba(124,58,237,0.3);'
-            : 'background:var(--card-glass);color:var(--text-muted);cursor:not-allowed;border:1px solid var(--border-glass);',
-        ].join('');
+            : 'background:var(--card-glass);color:var(--text-muted);cursor:not-allowed;border:1px solid var(--border-glass);');
 
-        if (hasPending) {
+        if (pendingBatch) {
           payBtn.textContent = '⏳ Payout Request Pending';
           payBtn.disabled = true;
-        } else if (total < MILESTONE) {
-          payBtn.textContent = 'Request Payout (need ' + MILESTONE + ' referrals)';
+        } else if (eligibleCount < MILESTONE) {
+          payBtn.textContent = 'Request Payout (need ' + (MILESTONE - eligibleCount) + ' more referrals)';
+          payBtn.disabled = true;
+        } else if (nextBatchAmount !== 5000) {
+          payBtn.textContent = 'Payout requires admin review';
           payBtn.disabled = true;
         } else {
-          payBtn.textContent = '💸 Request Payout — ₦' + (earningsNgn).toLocaleString('en-NG');
+          payBtn.textContent = '💸 Request Payout — ₦5,000';
           payBtn.disabled = false;
         }
 
@@ -6790,23 +7135,53 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
           if (!canRequest) return;
           payBtn.disabled = true;
           payBtn.textContent = 'Submitting…';
+          let submitted = false;
           try {
-            // Anti-fraud: check for existing pending request server-side before inserting
-            const { data: existingPending } = await _sb
-              .from('payout_requests')
-              .select('id')
-              .eq('user_id', _u.id)
-              .eq('status', 'pending');
-            if (existingPending && existingPending.length > 0) {
-              toast('You already have a pending payout request.', 'warning');
-              payBtn.textContent = '⏳ Payout Request Pending';
-              return;
+            const clientRequestId = makeRequestId();
+            const { data, error } = await _sb.rpc('qs_request_referral_payout_v2', {
+              p_client_request_id: clientRequestId
+            });
+            if (error) throw error;
+            const batch = Array.isArray(data) ? data[0] : data;
+            if (!batch || !batch.id) throw new Error('Payout request returned no batch details');
+            submitted = true;
+
+            // Request RPC reserves this cycle's 10 referrals atomically.
+            // A separate audit write is retried on next dashboard open if needed.
+            try {
+              await ensurePayoutActivityLog(batch);
+            } catch (logError) {
+              errlog('payout request saved but activity log sync failed', logError);
+              toast('Payout requested; activity log will retry syncing.', 'warning');
             }
-            const { error: insErr } = await _sb
-              .from('payout_requests')
-              .insert({ user_id: _u.id, status: 'pending' });
-            if (insErr) throw insErr;
-            toast('Payout requested ✓ We\'ll process it shortly.', 'success');
+
+            toast('Payout requested ✓ We’ll process it shortly.', 'success');
+            // Rebuild from server state so reserved referrals no longer count.
+            // A page reload is intentionally avoided to preserve the vendor's view.
+            const [freshRefs, freshItems, freshBatches] = await Promise.all([
+              _sb.from('referrals').select('id,status,amount,created_at').eq('referrer_id', _u.id),
+              _sb.from('referral_payout_items').select('referral_id'),
+              _sb.from('referral_payout_batches').select('id,status,referral_count,amount_ngn,requested_at,paid_at').eq('user_id', _u.id).order('requested_at', { ascending: false })
+            ]);
+            if (freshRefs.error) throw freshRefs.error;
+            if (freshItems.error) throw freshItems.error;
+            if (freshBatches.error) throw freshBatches.error;
+            // Re-enter this isolated dashboard renderer with fresh authoritative state.
+            // Avoid recursive render by updating the progress and button in-place.
+            const reserved = new Set((freshItems.data || []).map(item => item.referral_id));
+            const remaining = (freshRefs.data || []).filter(r => r.status === 'earned' && !reserved.has(r.id));
+            const remainingCount = remaining.length;
+            const remainingCycleCount = Math.min(remainingCount, MILESTONE);
+            const remainingAmount = remaining.reduce((sum, row) => sum + (Number(row.amount) || AMOUNT_PER), 0);
+            const cycleValue = currentCycleStat.firstElementChild;
+            const balanceValue = availableBalanceStat.firstElementChild;
+            if (cycleValue) cycleValue.textContent = remainingCycleCount + ' / ' + MILESTONE;
+            if (balanceValue) balanceValue.textContent = '₦' + remainingAmount.toLocaleString('en-NG');
+            progressLeft.textContent = remainingCycleCount >= MILESTONE
+              ? '🎉 Milestone reached!'
+              : (MILESTONE - remainingCycleCount) + ' more eligible referral' + (MILESTONE - remainingCycleCount === 1 ? '' : 's') + ' to unlock payout';
+            progressRight.textContent = remainingCycleCount + ' / ' + MILESTONE;
+            fill.style.width = Math.min(100, Math.round((remainingCycleCount / MILESTONE) * 100)) + '%';
             payBtn.textContent = '⏳ Payout Request Pending';
             payBtn.disabled = true;
             payBtn.style.background = 'var(--card-glass)';
@@ -6815,19 +7190,57 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
             payBtn.style.border = '1px solid var(--border-glass)';
           } catch (e) {
             errlog('payout request failed', e);
-            toast('Failed to submit request: ' + (e.message || 'unknown'), 'error');
-            payBtn.disabled = false;
-            payBtn.textContent = '💸 Request Payout — ₦' + earningsNgn.toLocaleString('en-NG');
+            if (!submitted) {
+              toast('Failed to submit request: ' + (e.message || 'unknown'), 'error');
+              payBtn.disabled = false;
+              payBtn.textContent = '💸 Request Payout — ₦5,000';
+            } else {
+              // The request already succeeded; do not present it as a failed request
+              // just because refreshing the display encountered a network error.
+              toast('Payout requested; refresh to update cycle progress.', 'warning');
+            }
           }
         });
 
         _body.appendChild(payBtn);
 
-        // Sub-note
         const note = document.createElement('div');
         note.style.cssText = 'font-size:11px;color:var(--text-muted);text-align:center;margin-top:8px;line-height:1.5;';
-        note.textContent = 'Share your referral link. Every vendor who signs up and gets activated earns you ₦500.';
+        note.textContent = 'Every vendor who signs up and gets activated earns you ₦500. Referrals included in a payout request are reserved and do not count toward your next cycle.';
         _body.appendChild(note);
+
+        // Compact request history makes the activity visible even if the separate
+        // audit-log sync is temporarily unavailable.
+        if (batches.length) {
+          const historyWrap = document.createElement('div');
+          historyWrap.style.cssText = 'margin-top:16px;';
+          const historyTitle = document.createElement('div');
+          historyTitle.style.cssText = 'font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;';
+          historyTitle.textContent = 'Payout activity';
+          historyWrap.appendChild(historyTitle);
+          batches.slice(0, 5).forEach(batch => {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--border-glass);font-size:12px;';
+            const left = document.createElement('div');
+            const label = document.createElement('div');
+            label.style.cssText = 'font-weight:700;color:var(--text-primary);';
+            label.textContent = batch.status === 'paid' ? 'Payout paid' :
+              batch.status === 'cancelled' ? 'Payout cancelled' :
+              batch.status === 'details_requested' ? 'Payout details requested' : 'Payout requested';
+            const date = document.createElement('div');
+            date.style.cssText = 'color:var(--text-muted);margin-top:3px;';
+            date.textContent = batch.requested_at ? new Date(batch.requested_at).toLocaleString() : '';
+            left.appendChild(label);
+            left.appendChild(date);
+            const amount = document.createElement('div');
+            amount.style.cssText = 'font-weight:700;white-space:nowrap;color:var(--text-primary);';
+            amount.textContent = '₦' + (Number(batch.amount_ngn) || 0).toLocaleString('en-NG');
+            row.appendChild(left);
+            row.appendChild(amount);
+            historyWrap.appendChild(row);
+          });
+          _body.appendChild(historyWrap);
+        }
 
       } catch (e) {
         errlog('renderReferralDashboard', e);
@@ -6835,7 +7248,10 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
           _body.innerHTML = '';
           const errDiv = document.createElement('div');
           errDiv.style.cssText = 'font-size:12px;color:var(--text-muted);padding:8px 0;';
-          errDiv.textContent = 'Could not load referral data. Check your connection.';
+          const permissionFailure = e && (e.code === '42501' || /permission denied/i.test(String(e.message || '')));
+          errDiv.textContent = permissionFailure
+            ? 'Referral payout access is not configured correctly. Please contact support.'
+            : 'Could not load referral data. Please refresh and try again.';
           _body.appendChild(errDiv);
         }
       }
@@ -6899,29 +7315,6 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
     window.addEventListener('online',  window._qsBadgeOnline);
     window.addEventListener('offline', window._qsBadgeOffline);
 
-    const btnLogout = $('btnLogout');
-    if (btnLogout) {
-      btnLogout.addEventListener('click', async function () {
-        const confirmed = await showConfirm({
-          title: 'Sign Out',
-          message: 'Are you sure you want to sign out?',
-          okText: 'Sign Out',
-          okDanger: true
-        });
-        if (!confirmed) return;
-        try {
-          const supabase = getClient();
-          if (supabase) await supabase.auth.signOut();
-          localStorage.removeItem('qs_session_active');
-          document.body.classList.remove('mode-app');
-          toast('Signed out');
-          window.location.reload();
-        } catch (err) {
-          errlog('Logout error', err);
-          toast('Sign out failed', 'error');
-        }
-      });
-    }
     } catch(e) { errlog('renderSettingsPanel', e); const el=$('settingsPanel'); if(el){el.innerHTML='';const d=document.createElement('div');d.className='small';d.style.cssText='padding:20px;text-align:center;';d.textContent='Settings failed to load — pull to refresh.';el.appendChild(d);} }
   }
 
@@ -7100,6 +7493,7 @@ document.body.classList.remove('mode-app'); // auth resolved (logged out)
   window.__QS_APP = {
     getClient,
     getUser: () => currentUser,
+    showLoginForm,
     get currentUser() { return currentUser; },
     saveState,
     // Returns a frozen shallow copy — callers can read but cannot mutate arrays

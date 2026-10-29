@@ -71,6 +71,13 @@
     .stat-amber  .stat-val { color: var(--amber); }
     .stat-violet .stat-val { color: var(--violet); }
 
+    /* ACCOUNT FILTERS */
+    #filters { margin: 16px 20px 0; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .filter-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+    .filter-field label { color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+    .filter-field select, .filter-field input { width: 100%; min-width: 0; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--border-hi); background: var(--lift); color: var(--text); font: inherit; color-scheme: dark; }
+    #filter-summary { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
+    @media (max-width: 700px) { #filters { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-left: 12px; margin-right: 12px; } #stats { grid-template-columns: repeat(2,1fr); padding-left: 12px; padding-right: 12px; } #vendor-list { padding-left: 12px; padding-right: 12px; } }
     /* VENDOR LIST */
     #vendor-list { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
     .vendor-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
@@ -104,6 +111,91 @@
     .action-result.visible { opacity: 1; }
     .action-result.error { color: var(--red); }
 
+
+    /* REFERRAL PAYOUTS — compact operational queue */
+    #payout-section { margin: 16px 20px 0; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+    .payout-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+    .payout-title { font-size:15px; font-weight:800; letter-spacing:-.02em; }
+    .payout-subtitle { color:var(--muted); font-size:11px; margin-top:3px; max-width:620px; }
+    #payout-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-bottom:12px; }
+    .payout-stat { background:var(--lift); border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
+    .payout-stat strong { display:block; font-size:20px; line-height:1.2; font-variant-numeric:tabular-nums; }
+    .payout-stat span { display:block; color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.05em; margin-top:4px; }
+    .payout-toolbar { display:grid; grid-template-columns:minmax(180px,.7fr) minmax(220px,1.3fr); gap:8px; margin-bottom:12px; }
+    .payout-toolbar label { display:flex; flex-direction:column; gap:5px; color:var(--muted); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; min-width:0; }
+    .payout-toolbar select, .payout-toolbar input { width:100%; min-width:0; padding:9px 10px; border-radius:8px; border:1px solid var(--border-hi); background:var(--lift); color:var(--text); font:inherit; color-scheme:dark; }
+    .payout-queue-note { color:var(--muted); font-size:11px; margin:0 0 10px; }
+    #payout-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; align-items:start; }
+    .payout-card { min-width:0; border:1px solid var(--border-hi); border-radius:11px; overflow:hidden; background:rgba(255,255,255,.012); }
+    .payout-card.is-priority { border-color:var(--amber-bd); }
+    .payout-card.is-ready { border-color:var(--green-bd); }
+    .payout-main { padding:12px; display:flex; gap:12px; align-items:flex-start; }
+    .payout-vendor { flex:1; min-width:0; }
+    .payout-vendor-name { font-weight:800; font-size:13px; overflow-wrap:anywhere; }
+    .payout-vendor-meta { color:var(--muted); font-size:11px; overflow-wrap:anywhere; margin-top:2px; }
+    .payout-badges { display:flex; flex-wrap:wrap; gap:5px; margin-top:7px; }
+    .payout-progress { height:5px; background:var(--lift); border-radius:99px; overflow:hidden; margin-top:9px; }
+    .payout-progress > span { display:block; height:100%; background:var(--amber); border-radius:99px; }
+    .payout-progress.ready > span { background:var(--green); }
+    .payout-count { font-size:12px; font-weight:800; white-space:nowrap; text-align:right; font-variant-numeric:tabular-nums; }
+    .payout-count small { display:block; color:var(--muted); font-size:10px; font-weight:600; margin-top:3px; }
+    .payout-actions { border-top:1px solid var(--border); padding:9px 12px; display:flex; gap:7px; align-items:center; flex-wrap:wrap; }
+    .payout-actions .vendor-email { flex:1 1 100%; margin-top:2px; }
+    .btn-payout { background:var(--green); color:#fff; }
+    .btn-whatsapp { background:#166534; color:#fff; }
+    .btn-paid { background:var(--violet-bg); color:var(--violet); border:1px solid var(--violet-bd); }
+    .btn-muted { background:var(--lift); color:var(--muted); border:1px solid var(--border-hi); }
+    .payout-empty { grid-column:1 / -1; padding:18px 10px; color:var(--muted); font-size:12px; text-align:center; }
+    .payout-error { color:var(--red); }
+    @media (max-width:900px) { #payout-list { grid-template-columns:1fr; } }
+    @media (max-width:700px) { #payout-section { margin-left:12px; margin-right:12px; padding:12px; } #payout-summary { grid-template-columns:repeat(3,minmax(0,1fr)); } .payout-stat { padding:9px 8px; } .payout-stat strong { font-size:17px; } .payout-main { padding:10px; } .payout-toolbar { grid-template-columns:1fr; } }
+
+    /* Admin workspace refinements */
+    #stats{gap:8px;padding:12px 20px 0;border-bottom:0}
+    .stat-card{background:transparent;border:1px solid var(--border);border-radius:10px;padding:9px 12px}
+    .stat-val{font-size:20px;font-weight:850;letter-spacing:-.04em;line-height:1;margin-bottom:4px}
+    .stat-lbl{font-size:9px;font-weight:700;letter-spacing:.06em}
+    .queue-label-short{display:none}
+    #header{position:sticky;top:0;z-index:100;background:rgba(10,10,15,.96);backdrop-filter:blur(20px);padding:10px 20px;gap:12px}
+    #header-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+    #payout-open-btn{display:inline-flex;align-items:center;gap:7px;min-height:36px;padding:7px 12px;background:var(--green-bg);border:1px solid var(--green-bd);border-radius:8px;color:var(--green);font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap}
+    .attention-count{display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;padding:0 5px;border-radius:99px;background:var(--amber);color:#17120a;font-size:10px;font-weight:900}
+    .attention-count[hidden]{display:none!important}
+    #global-tools{display:flex;align-items:center;gap:8px;padding:12px 20px 0;position:relative;overflow:visible}
+    #account-search{flex:1;min-width:0;width:100%;padding:11px 13px;border-radius:10px;border:1px solid var(--border-hi);background:var(--surface);color:var(--text);font:inherit}
+    #filters-toggle{flex-shrink:0;padding:10px 12px;border-radius:10px;border:1px solid var(--border-hi);background:var(--lift);color:var(--text);font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+    #active-filter-chips{display:flex;flex-wrap:wrap;gap:6px;padding:7px 20px 0}
+    .filter-chip{border:1px solid var(--border-hi);background:var(--lift);color:var(--muted);border-radius:99px;padding:3px 8px;font-size:10px}
+    #filters[hidden]{display:none!important}
+    #filters{position:fixed;z-index:450;display:grid;grid-template-columns:minmax(0,1fr);gap:10px;width:min(360px,calc(100vw - 24px));max-height:min(70dvh,520px);overflow:auto;padding:14px;margin:0;border:1px solid var(--border-hi);border-radius:13px;background:var(--surface);box-shadow:0 18px 50px rgba(0,0,0,.48)}
+    #filters .filter-field{min-width:0}
+    #filters #filter-summary{grid-column:1/-1;padding-top:2px;font-size:11px;color:var(--muted)}
+    @media(min-width:560px){#filters{grid-template-columns:repeat(2,minmax(0,1fr))}#filters .filter-field:first-child{grid-column:1/-1}}
+    #payout-overlay{position:fixed;inset:0;z-index:500;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(3,5,8,.8);backdrop-filter:blur(10px)}
+    #payout-overlay.open{display:flex;animation:queue-in .16s ease-out}
+    #payout-section{margin:0;width:min(1180px,100%);max-height:calc(100dvh - 32px);overflow-y:auto;overscroll-behavior:contain;background:var(--bg);border-color:var(--border-hi);scrollbar-gutter:stable}
+    #payout-section>.payout-heading{position:sticky;top:-12px;z-index:3;background:var(--bg);padding:12px 0 10px;margin-top:-12px;border-bottom:1px solid var(--border)}
+    #payout-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-items:start}
+    #activation-attention{margin:0 0 14px;padding:0 0 12px;border:0;border-bottom:1px solid var(--border);background:transparent;border-radius:0}
+    #activation-attention[hidden]{display:none!important}
+    .activation-attention-heading{display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:800;margin-bottom:7px}
+    #activation-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+    .activation-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;padding:8px 0;background:transparent;border:0;border-bottom:1px solid var(--border)}
+    .vendor-card.review-target{border-color:var(--green);box-shadow:0 0 0 2px var(--green-bg);scroll-margin-top:100px}
+    .activation-row-info{min-width:0;overflow-wrap:anywhere;font-size:11px}
+    .activation-row-info small{display:block;color:var(--muted);font-size:10px}
+    .activation-review{flex-shrink:0;background:var(--lift);color:var(--text);border:1px solid var(--border-hi);border-radius:7px;padding:6px 8px;font:inherit;font-size:10px;font-weight:700;cursor:pointer}
+    @media(max-width:700px){#activation-list{grid-template-columns:1fr}}
+    #payout-close-btn{width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--border-hi);border-radius:9px;background:var(--lift);color:var(--text);font-size:20px;cursor:pointer}
+    body.queue-open{overflow:hidden}
+    .vendor-referral-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;padding:0 16px 12px}
+    .vendor-referral-metric{min-width:0;background:rgba(255,255,255,.018);border:1px solid var(--border);border-radius:8px;padding:7px 9px}
+    .vendor-referral-metric strong{display:block;font-size:14px;line-height:1.2;font-variant-numeric:tabular-nums}
+    .vendor-referral-metric span{display:block;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.04em;margin-top:3px}
+    @keyframes queue-in{from{opacity:0}to{opacity:1}}
+    @media(prefers-reduced-motion:reduce){#payout-overlay.open{animation:none}}
+    @media(max-width:700px){#header{padding:9px 12px;align-items:flex-start}#header-meta{display:none}#header-actions{gap:5px}#payout-open-btn,#refresh-btn,#signout-btn{min-height:36px;padding:7px 8px;font-size:11px}#global-tools{padding:10px 12px 0}#active-filter-chips{padding-left:12px;padding-right:12px}#filters{grid-template-columns:repeat(2,minmax(0,1fr));margin-left:12px;margin-right:12px}#stats{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;padding:10px 12px 0}.stat-card{padding:8px 5px}.stat-val{font-size:17px}.stat-lbl{font-size:8px;letter-spacing:0}#vendor-list{padding:12px}#payout-overlay{padding:0;align-items:stretch}#payout-section{width:100%;height:100dvh;max-height:100dvh;border-radius:0;padding:12px;padding-top:max(12px,env(safe-area-inset-top));padding-bottom:max(12px,env(safe-area-inset-bottom))}#payout-list{grid-template-columns:1fr}.vendor-referral-summary{padding-left:12px;padding-right:12px;gap:5px}.vendor-referral-metric{padding:7px}.vendor-referral-metric span{font-size:8px}}
+    @media(max-width:430px){#header-brand{font-size:13px}#header-actions{gap:4px}#payout-open-btn{max-width:116px;overflow:hidden;text-overflow:ellipsis;font-size:10px}.queue-label-full{display:none}.queue-label-short{display:inline}#refresh-btn,#signout-btn{font-size:0;min-width:36px}#refresh-btn:after{content:'↻';font-size:16px}#signout-btn:after{content:'⇥';font-size:16px}#stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
     /* STATES */
     #loading-state, #empty-state, #error-state { padding: 60px 20px; text-align: center; color: var(--muted); line-height: 1.7; }
     .spinner { width: 28px; height: 28px; border: 2.5px solid var(--border-hi); border-top-color: var(--green); border-radius: 50%; animation: spin 0.7s linear infinite; margin: 0 auto 12px; }
@@ -171,22 +263,54 @@
 
 <div id="app">
   <div id="header">
-    <div>
-      <div id="header-brand">Quick<span>Shop</span> Admin</div>
-      <div id="header-meta">Vendor management console</div>
-    </div>
+    <div><div id="header-brand">Quick<span>Shop</span> Admin</div><div id="header-meta">Vendor management console</div></div>
     <div id="header-actions">
-      <button id="refresh-btn" type="button">&#8635; Refresh</button>
-      <button id="signout-btn" type="button">Lock</button>
+      <button id="payout-open-btn" type="button" aria-haspopup="dialog" aria-controls="payout-section" aria-expanded="false"><span class="queue-label-full">Action queue</span><span class="queue-label-short">Action queue</span> <span id="attention-count" class="attention-count" hidden></span></button>
+      <button id="refresh-btn" type="button" aria-label="Refresh vendor and referral data">&#8635; Refresh</button>
+      <button id="signout-btn" type="button" aria-label="Sign out">Sign out</button>
     </div>
   </div>
-
+  <div id="global-tools" role="search"><input id="account-search" type="search" placeholder="Search store, owner, email, phone or ID…" autocomplete="off" aria-label="Search all vendors" /><button id="filters-toggle" type="button" aria-controls="filters" aria-expanded="false">☷ Filters</button></div>
+  <div id="active-filter-chips" aria-live="polite"></div>
   <div id="stats">
     <div class="stat-card stat-violet"><div class="stat-val" id="s-total">&#8212;</div><div class="stat-lbl">Total</div></div>
     <div class="stat-card stat-green"> <div class="stat-val" id="s-active">&#8212;</div><div class="stat-lbl">Active</div></div>
     <div class="stat-card stat-red">   <div class="stat-val" id="s-lapsed">&#8212;</div><div class="stat-lbl">Lapsed</div></div>
     <div class="stat-card stat-amber"> <div class="stat-val" id="s-expiring">&#8212;</div><div class="stat-lbl">Expiring &le;7d</div></div>
   </div>
+
+  <div id="payout-overlay" aria-hidden="true"><section id="payout-section" role="dialog" aria-modal="true" aria-labelledby="payout-dialog-title" tabindex="-1">
+    <div class="payout-heading"><div><div class="payout-title" id="payout-dialog-title">Activation &amp; payout action queue</div><div class="payout-subtitle">Payment claims awaiting review and referral payouts that need action. Use Active stores or Approaching to check referral progress.</div></div>
+      <div style="display:flex;gap:7px;align-items:center"><button id="payout-refresh-btn" class="btn btn-muted" type="button">Refresh queue</button><button id="payout-close-btn" type="button" aria-label="Close referral payout queue" title="Close queue">×</button></div>
+    </div>
+    <section id="activation-attention" aria-label="Activation waiting list" hidden><div class="activation-attention-heading"><span>Activation waiting list</span><span id="activation-count">0</span></div><div id="activation-list"></div></section>
+    <div id="payout-summary" aria-live="polite">
+      <div class="payout-stat"><strong id="ps-near">—</strong><span>Active · approaching</span></div>
+      <div class="payout-stat"><strong id="ps-ready">—</strong><span>Ready / requested</span></div>
+      <div class="payout-stat"><strong id="ps-pending">—</strong><span>Outstanding batches</span></div>
+    </div>
+    <div class="payout-toolbar" aria-label="Payout queue filters">
+      <label for="payout-view-filter">Queue view
+        <select id="payout-view-filter">
+          <option value="priority">Priority queue</option>
+          <option value="outstanding">Outstanding requests</option>
+          <option value="active">Active stores</option>
+          <option value="ready">Ready / review</option>
+          <option value="approaching">Approaching (7–9)</option>
+          <option value="history">Inactive / history</option>
+          <option value="all">All payout records</option>
+        </select>
+      </label>
+    </div>
+    <div id="payout-queue-note" class="payout-queue-note" aria-live="polite">Priority queue · unresolved payout requests and active stores nearing payout.</div>
+    <div id="payout-list"><div class="payout-empty">Sign in to load referral payout data.</div></div>
+  </section></div>
+  <section id="filters" aria-label="Filter accounts" hidden>
+    <div class="filter-field"><label for="status-filter">Account status</label><select id="status-filter"><option value="all">All accounts</option><option value="active">Active stores</option><option value="inactive">Inactive stores</option><option value="pending-activation">Pending activation</option><option value="founders">Founders</option><option value="never">Never activated / no recorded payment</option></select></div>
+    <div class="filter-field"><label for="created-from">Created from</label><input id="created-from" type="date" /></div>
+    <div class="filter-field"><label for="created-to">Created to</label><input id="created-to" type="date" /></div>
+    <div id="filter-summary" aria-live="polite">Showing all accounts</div>
+  </section>
 
   <div id="vendor-list">
     <div id="loading-state"><div class="spinner"></div>Loading vendors&hellip;</div>
@@ -330,7 +454,7 @@
         gateInput.value = '';
         document.getElementById('gate').style.display = 'none';
         document.getElementById('app').classList.add('visible');
-        renderVendors(result.data.vendors || []);
+        renderVendors(result.data.vendors || [], result.data.paymentClaimsAvailable);
       }
     }).catch(function(err) {
       gateErr.textContent = 'Error: ' + (err.message || 'unknown');
@@ -382,7 +506,8 @@
         gateInput.value = '';
         document.getElementById('gate').style.display = 'none';
         document.getElementById('app').classList.add('visible');
-        renderVendors(result.data.vendors || []);
+        renderVendors(result.data.vendors || [], result.data.paymentClaimsAvailable);
+        loadReferralPayouts();
       }
     }).catch(function(err) {
       gateErr.textContent = 'Error: ' + (err.message || 'Check connection and try again.');
@@ -396,16 +521,27 @@
   gateInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') tryGateClean(); });
 
   // ── LOCK ───────────────────────────────────────────────────────────────
-  document.getElementById('signout-btn').addEventListener('click', function() {
+  function lockAdmin() {
     _adminToken = null;
-    _vendors    = [];
+    _vendors = [];
+    _payoutData = { referrals: [], batches: [], items: [], activities: [] };
     document.getElementById('app').classList.remove('visible');
-    document.getElementById('vendor-list').innerHTML =
-      '<div id="loading-state"><div class="spinner"></div>Loading vendors\u2026</div>';
+    document.getElementById('vendor-list').innerHTML = '<div id="loading-state">Locked. Sign in to load accounts.</div>';
     document.getElementById('gate').style.display = 'flex';
+    document.getElementById('gate').setAttribute('aria-hidden', 'false');
     gateInput.value = '';
     gateErr.textContent = '';
+    gateAtt.textContent = '';
+    gateBtn.disabled = false;
+    gateBtn.textContent = 'Enter';
     gateInput.focus();
+  }
+  document.getElementById('signout-btn').addEventListener('click', lockAdmin);
+
+  ['status-filter', 'created-from', 'created-to', 'account-search'].forEach(function(id) {
+    var el = document.getElementById(id);
+    el.addEventListener(id === 'account-search' ? 'input' : 'change', applyFilters);
+    if (id === 'account-search') el.addEventListener('input', renderReferralPayouts);
   });
 
   // ── TOAST ──────────────────────────────────────────────────────────────
@@ -440,6 +576,9 @@
 
   // ── STATE ──────────────────────────────────────────────────────────────
   var _vendors = [];
+  var _paymentClaimsAvailable = false;
+  var _vendorsLoaded = false, _payoutDataAvailable = false, _payoutDataError = false;
+  var _referralSummaryByVendor = Object.create(null), _queueReturnFocus = null, _queueHistoryState = false;
 
   // ── HELPERS ────────────────────────────────────────────────────────────
   function daysFromNow(isoStr) {
@@ -512,10 +651,25 @@
       b.textContent = text;
       return b;
     }
-    if (v.is_founder)             badgesEl.appendChild(mkBadge('\u2B50 Founder', 'badge-founder'));
-    if (v.is_active)              badgesEl.appendChild(mkBadge('\u25CF Active',  'badge-active'));
-    else if (v.subscription_expires) badgesEl.appendChild(mkBadge('\u25CF Lapsed',  'badge-lapsed'));
-    else                          badgesEl.appendChild(mkBadge('\u25CB Never paid','badge-pending'));
+    if (v.is_founder) badgesEl.appendChild(mkBadge('\u2B50 Founder', 'badge-founder'));
+    if (v.is_active) {
+      badgesEl.appendChild(mkBadge('\u25CF Active', 'badge-active'));
+    } else if (!_paymentClaimsAvailable) {
+      badgesEl.appendChild(mkBadge('Payment status unavailable', 'badge-pending'));
+    } else if (v.payment_claim) {
+      var claimStatus = String(v.payment_claim.status || '').toLowerCase();
+      var claimLabel = {
+        pending: 'Claim pending',
+        approved: 'Claim approved',
+        rejected: 'Claim rejected',
+        cancelled: 'Claim cancelled'
+      }[claimStatus] || 'Payment claim recorded';
+      badgesEl.appendChild(mkBadge(claimLabel, 'badge-pending'));
+    } else if (v.subscription_expires) {
+      badgesEl.appendChild(mkBadge('\u25CF Lapsed', 'badge-lapsed'));
+    } else {
+      badgesEl.appendChild(mkBadge('Awaiting payment confirmation', 'badge-pending'));
+    }
 
     infoEl.appendChild(nameEl);
     infoEl.appendChild(emailEl);
@@ -538,6 +692,10 @@
       metaEl.appendChild(s);
       hasMeta = true;
     }
+    if (v.created_at) {
+      var created = new Date(v.created_at);
+      if (!isNaN(created.getTime())) addMeta('Created ' + created.toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }), '');
+    }
     if (v.location)     addMeta('\uD83D\uDCCD ' + v.location, '');
     if (v.store_sector) addMeta('\uD83C\uDFEA ' + v.store_sector, '');
     if (v.is_founder) {
@@ -547,6 +705,17 @@
       if (exp && exp.text) addMeta('\uD83D\uDCC5 ' + exp.text, exp.cls);
     }
     if (hasMeta) card.appendChild(metaEl);
+    var referralSummary = _referralSummaryByVendor[v.id];
+    if (referralSummary) {
+      var referralMetrics=document.createElement('div');referralMetrics.className='vendor-referral-summary';
+      [['earnedCount','Earned referrals'],['eligibleCount','Eligible now'],['paidCount','Paid referrals']].forEach(function(metric){
+        var cell=document.createElement('div');cell.className='vendor-referral-metric';
+        var value=document.createElement('strong');value.textContent=String(referralSummary[metric[0]]||0);
+        var label=document.createElement('span');label.textContent=metric[1];
+        cell.appendChild(value);cell.appendChild(label);referralMetrics.appendChild(cell);
+      });
+      card.appendChild(referralMetrics);
+    }
 
     // Actions
     var actionsEl = document.createElement('div');
@@ -604,10 +773,17 @@
 
       apiCall(apiAction, extra).then(function(data) {
         Object.assign(vendor, data.patch || {});
-        if (resultEl) { resultEl.textContent = '\u2713 Saved'; resultEl.className = 'action-result visible'; setTimeout(function() { resultEl.classList.remove('visible'); }, 2500); }
         toast(storeName + ' updated \u2713', 'success');
-        card.parentNode.replaceChild(renderCard(vendor), card);
+        // Re-render from the complete in-memory list so the selected filters
+        // immediately reflect the updated account state without dropping records.
+        applyFilters();
         updateStats();
+        var updatedResultEl = document.getElementById('res-' + vendor.id);
+        if (updatedResultEl) {
+          updatedResultEl.textContent = '\u2713 Saved';
+          updatedResultEl.className = 'action-result visible';
+          setTimeout(function() { updatedResultEl.classList.remove('visible'); }, 2500);
+        }
       }).catch(function(err) {
         if (resultEl) { resultEl.textContent = '\u2717 ' + (err.message || 'Failed'); resultEl.className = 'action-result visible error'; setTimeout(function() { resultEl.classList.remove('visible'); }, 4000); }
         toast('Failed: ' + (err.message || 'unknown'), 'error');
@@ -617,16 +793,360 @@
   }
 
   // ── RENDER VENDOR LIST ─────────────────────────────────────────────────
-  function renderVendors(vendors) {
-    _vendors = vendors;
-    var listEl = document.getElementById('vendor-list');
-    listEl.innerHTML = '';
-    if (!vendors || vendors.length === 0) {
-      listEl.innerHTML = '<div id="empty-state">No vendors found.</div>';
-    } else {
-      vendors.forEach(function(v) { listEl.appendChild(renderCard(v)); });
+  function renderVendors(vendors, paymentClaimsAvailable) {
+    _vendors = Array.isArray(vendors) ? vendors : [];
+    _vendorsLoaded = true;
+    _paymentClaimsAvailable = paymentClaimsAvailable !== false;
+    var neverOption = document.querySelector('#status-filter option[value="never"]');
+    if (neverOption) neverOption.disabled = !_paymentClaimsAvailable;
+    var activationOption = document.querySelector('#status-filter option[value="pending-activation"]');
+    if (activationOption) activationOption.disabled = false;
+    if (!_paymentClaimsAvailable && document.getElementById('status-filter').value === 'never') {
+      document.getElementById('status-filter').value = 'all';
     }
     updateStats();
+    applyFilters();
+    renderActivationAttention();
+  }
+
+  function applyFilters() {
+    var status = document.getElementById('status-filter').value;
+    var from = document.getElementById('created-from').value;
+    var to = document.getElementById('created-to').value;
+    var search = (document.getElementById('account-search').value || '').trim().toLowerCase();
+    var shown = _vendors.filter(function(v) {
+      if (status === 'active' && !v.is_active) return false;
+      if (status === 'inactive' && v.is_active) return false;
+      if (status === 'pending-activation' && (v.is_active || v.is_founder || !!v.subscription_expires)) return false;
+      if (status === 'founders' && !v.is_founder) return false;
+      // A missing claim is only meaningful when the claims query succeeded.
+      if (status === 'never' && (!_paymentClaimsAvailable || v.is_active || v.is_founder || v.subscription_expires || v.has_payment_claim !== false)) return false;
+      if (from || to) {
+        if (!v.created_at) return false;
+        var created = new Date(v.created_at);
+        if (isNaN(created.getTime())) return false;
+        // Match the local calendar date shown on the account card, not UTC's date.
+        var createdDay = created.getFullYear() + '-' +
+          String(created.getMonth() + 1).padStart(2, '0') + '-' +
+          String(created.getDate()).padStart(2, '0');
+        if (from && createdDay < from) return false;
+        if (to && createdDay > to) return false;
+      }
+      if (search) {
+        var haystack = [v.business_name, v.name, v.email, v.phone_number, v.id].join(' ').toLowerCase();
+        if (haystack.indexOf(search) === -1) return false;
+      }
+      return true;
+    });
+    var listEl = document.getElementById('vendor-list');
+    listEl.innerHTML = '';
+    if (!shown.length) {
+      listEl.innerHTML = '<div id="empty-state">No accounts match these filters.</div>';
+    } else {
+      shown.forEach(function(v) { listEl.appendChild(renderCard(v)); });
+    }
+    document.getElementById('filter-summary').textContent =
+      'Showing ' + shown.length + ' of ' + _vendors.length + ' accounts' +
+      (!_paymentClaimsAvailable ? ' · Payment-claim data unavailable; no-recorded-payment filter disabled' : '');
+    renderActiveFilterChips(); updateAttentionBadge();
+  }
+
+
+  // ── REFERRAL PAYOUT PREPARATION ────────────────────────────────────────
+  var _payoutData = { referrals: [], batches: [], items: [], activities: [] };
+  var _payoutLoading = false;
+
+  function payoutMoney(value) {
+    return '₦' + Number(value || 0).toLocaleString('en-NG');
+  }
+
+  function payoutDate(value) {
+    if (!value) return '—';
+    var d = new Date(value);
+    return isNaN(d.getTime()) ? '—' : d.toLocaleString([], { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+  }
+
+  function normalizeWhatsAppPhone(phone) {
+    var digits = String(phone || '').replace(/\D/g, '');
+    if (digits.indexOf('00') === 0) digits = digits.slice(2);
+    if (digits.indexOf('0') === 0 && digits.length === 11) digits = '234' + digits.slice(1);
+    else if (digits.length === 10) digits = '234' + digits;
+    return digits;
+  }
+
+  function payoutVendorRows() {
+    var referrals = _payoutData.referrals || [];
+    var batches = _payoutData.batches || [];
+    var items = _payoutData.items || [];
+    var reserved = Object.create(null);
+    items.forEach(function(item) { reserved[item.referral_id] = true; });
+    var byVendor = Object.create(null);
+    referrals.forEach(function(r) {
+      if (!byVendor[r.referrer_id]) byVendor[r.referrer_id] = { eligibleCount:0, eligibleAmount:0, earnedCount:0, paidCount:0 };
+      var row = byVendor[r.referrer_id];
+      if (r.status === 'paid') row.paidCount++;
+      if (r.status === 'earned') {
+        row.earnedCount++;
+        if (!reserved[r.id]) {
+          row.eligibleCount++;
+          row.eligibleAmount += Number(r.amount || 0);
+        }
+      }
+    });
+    var batchByVendor = Object.create(null);
+    batches.forEach(function(b) {
+      if (!batchByVendor[b.user_id]) batchByVendor[b.user_id] = [];
+      batchByVendor[b.user_id].push(b);
+    });
+    var latestDetailsByVendor = Object.create(null);
+    (_payoutData.activities || []).slice().sort(function(a,b) {
+      return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+    }).forEach(function(activity) {
+      if (activity.action === 'Payout details requested' && !latestDetailsByVendor[activity.user_id]) {
+        latestDetailsByVendor[activity.user_id] = activity;
+      }
+    });
+    return _vendors.map(function(v) {
+      var counts = byVendor[v.id] || { eligibleCount:0, eligibleAmount:0, earnedCount:0, paidCount:0 };
+      var vendorBatches = (batchByVendor[v.id] || []).slice().sort(function(a,b) {
+        return new Date(b.requested_at || 0) - new Date(a.requested_at || 0);
+      });
+      var activeBatch = vendorBatches.find(function(b) { return b.status === 'pending' || b.status === 'details_requested'; }) || null;
+      var lastBatch = vendorBatches[0] || null;
+      return Object.assign({}, v, counts, {
+        activeBatch: activeBatch,
+        lastBatch: lastBatch,
+        latestDetailsRequest: latestDetailsByVendor[v.id] || null,
+        cycleCount: Math.min(counts.eligibleCount, 10),
+        ready: counts.eligibleCount >= 10 && counts.eligibleAmount === 5000 && !activeBatch
+      });
+    });
+  }
+
+  function appendPayoutBadge(parent, label, cls) {
+    var el = document.createElement('span');
+    el.className = 'badge ' + cls;
+    el.textContent = label;
+    parent.appendChild(el);
+  }
+
+  function renderReferralPayouts() {
+    var rows = payoutVendorRows();
+    _referralSummaryByVendor=Object.create(null);rows.forEach(function(v){_referralSummaryByVendor[v.id]=v;});
+    renderActivationAttention();
+    var near = rows.filter(function(v) { return !v.activeBatch && v.eligibleCount >= 7 && v.eligibleCount <= 9; }).length;
+    var ready = rows.filter(function(v) { return v.ready || v.activeBatch; }).length;
+    var pending = (_payoutData.batches || []).filter(function(b) { return b.status === 'pending' || b.status === 'details_requested'; }).length;
+    document.getElementById('ps-near').textContent = near;
+    document.getElementById('ps-ready').textContent = ready;
+    document.getElementById('ps-pending').textContent = pending;
+
+    var search = (document.getElementById('account-search').value || '').trim().toLowerCase();
+    var view = document.getElementById('payout-view-filter').value || 'priority';
+    var matching = rows.filter(function(v) {
+      return [v.business_name, v.name, v.email, v.phone_number, v.id].join(' ').toLowerCase().indexOf(search) !== -1;
+    });
+    rows = matching.filter(function(v) {
+      var outstanding = Boolean(v.activeBatch);
+      var isActive = v.is_active === true;
+      var hasProgress = v.eligibleCount > 0 || v.paidCount > 0 || Boolean(v.lastBatch);
+      if (view === 'outstanding') return outstanding;
+      if (view === 'active') return isActive;
+      if (view === 'ready') return isActive && (v.ready || v.eligibleCount >= 10);
+      if (view === 'approaching') return isActive && !outstanding && v.eligibleCount >= 7 && v.eligibleCount <= 9;
+      if (view === 'history') return !outstanding && (!isActive || Boolean(v.lastBatch) || v.paidCount > 0);
+      if (view === 'all') return true;
+      return outstanding || (isActive && (v.ready || v.eligibleCount >= 10));
+    }).sort(function(a,b) {
+      function rank(v) {
+        // Never hide an existing payout obligation behind store-status sorting.
+        if (v.activeBatch) return 0;
+        if (v.is_active === true && v.eligibleCount >= 10 && v.eligibleAmount !== 5000) return 1;
+        if (v.is_active === true && v.ready) return 2;
+        if (v.is_active === true && v.eligibleCount >= 7) return 3;
+        if (v.is_active === true && v.eligibleCount > 0) return 4;
+        if (v.is_active === true) return 5;
+        if (v.lastBatch || v.paidCount > 0 || v.earnedCount > 0) return 6;
+        return 7;
+      }
+      return rank(a)-rank(b) ||
+        (b.activeBatch ? new Date(b.activeBatch.requested_at || 0).getTime() : 0) - (a.activeBatch ? new Date(a.activeBatch.requested_at || 0).getTime() : 0) ||
+        b.eligibleCount-a.eligibleCount ||
+        String(a.business_name || a.name || '').localeCompare(String(b.business_name || b.name || ''), undefined, {sensitivity:'base'});
+    });
+    var note = document.getElementById('payout-queue-note');
+    var viewLabels = {priority:'Priority queue', outstanding:'Outstanding requests', active:'Active stores', ready:'Ready / review', approaching:'Approaching (7–9)', history:'Inactive / history', all:'All payout records'};
+    note.textContent = viewLabels[view] + ' · ' + rows.length + ' of ' + matching.length + ' matching vendors. Outstanding requests remain visible until resolved.';
+
+    var list = document.getElementById('payout-list');
+    list.innerHTML = '';
+    if (!_vendors.length) {
+      list.innerHTML = '<div class="payout-empty">No vendor accounts loaded.</div>';
+      return;
+    }
+    if (!rows.length) {
+      list.innerHTML = '<div class="payout-empty">' + (view === 'priority' ? 'No referral payouts need action right now. Use Active stores or Approaching to check progress.' : 'No payout records match this search yet.') + '</div>';
+      return;
+    }
+
+    rows.forEach(function(v) {
+      var card = document.createElement('article');
+      card.className = 'payout-card' + (v.activeBatch || (v.is_active === true && (v.ready || v.eligibleCount >= 7)) ? ' is-priority' : '') + (v.ready ? ' is-ready' : '');
+      var main = document.createElement('div');
+      main.className = 'payout-main';
+      var info = document.createElement('div');
+      info.className = 'payout-vendor';
+      var name = document.createElement('div');
+      name.className = 'payout-vendor-name';
+      name.textContent = v.business_name || v.name || 'Unnamed vendor';
+      var meta = document.createElement('div');
+      meta.className = 'payout-vendor-meta';
+      meta.textContent = (v.email || v.id) + (v.phone_number ? ' · ' + v.phone_number : '');
+      var badges = document.createElement('div');
+      badges.className = 'payout-badges';
+      if (v.is_active === true) appendPayoutBadge(badges, 'Active store', 'badge-active');
+      else appendPayoutBadge(badges, 'Inactive store', 'badge-lapsed');
+      if (v.activeBatch) {
+        appendPayoutBadge(badges, v.activeBatch.status === 'details_requested' ? 'Account details requested' : 'Payout requested', 'badge-pending');
+        appendPayoutBadge(badges, payoutMoney(v.activeBatch.amount_ngn) + ' · ' + (v.activeBatch.referral_count || 0) + ' referrals', 'badge-founder');
+      } else if (v.ready) {
+        appendPayoutBadge(badges, 'Payout ready · ₦5,000', 'badge-active');
+      } else if (v.eligibleCount >= 10) {
+        appendPayoutBadge(badges, 'Payout amount needs review', 'badge-pending');
+      } else if (v.eligibleCount >= 7) {
+        appendPayoutBadge(badges, 'Approaching payout', 'badge-pending');
+      }
+      if (!v.activeBatch && v.latestDetailsRequest) appendPayoutBadge(badges, 'Account details requested', 'badge-pending');
+      if (v.lastBatch && v.lastBatch.status === 'paid') appendPayoutBadge(badges, 'Last payout paid ' + payoutDate(v.lastBatch.paid_at), 'badge-active');
+      if (v.lastBatch && v.lastBatch.status === 'cancelled') appendPayoutBadge(badges, 'Previous payout cancelled', 'badge-lapsed');
+
+      var count = document.createElement('div');
+      count.className = 'payout-count';
+      count.textContent = v.cycleCount + '/10';
+      var small = document.createElement('small');
+      small.textContent = v.eligibleCount >= 10 ? (v.eligibleAmount === 5000 ? '₦5,000 available' : payoutMoney(v.eligibleAmount) + ' · review needed') : (10 - v.cycleCount) + ' more';
+      count.appendChild(small);
+      info.appendChild(name);
+      info.appendChild(meta);
+      info.appendChild(badges);
+      var progress = document.createElement('div');
+      progress.className = 'payout-progress' + (v.ready ? ' ready' : '');
+      var bar = document.createElement('span');
+      bar.style.width = Math.min(100, (v.cycleCount / 10) * 100) + '%';
+      progress.appendChild(bar);
+      info.appendChild(progress);
+      main.appendChild(info);
+      main.appendChild(count);
+      card.appendChild(main);
+
+      var actions = document.createElement('div');
+      actions.className = 'payout-actions';
+      if (v.activeBatch && v.activeBatch.status !== 'paid' && v.activeBatch.status !== 'cancelled') {
+        var wa = document.createElement('button');
+        wa.type = 'button';
+        wa.className = 'btn btn-whatsapp';
+        wa.textContent = v.activeBatch.status === 'details_requested' ? 'Open WhatsApp again' : 'Request account details · WhatsApp';
+        wa.disabled = !normalizeWhatsAppPhone(v.phone_number);
+        wa.addEventListener('click', function() {
+          var phone = normalizeWhatsAppPhone(v.phone_number);
+          if (!phone) { toast('No usable WhatsApp number saved for this vendor.', 'error'); return; }
+          var message = 'Hello ' + (v.name || v.business_name || 'there') + ', your QuickShop referral payout of ' + payoutMoney(v.activeBatch.amount_ngn) + ' is being prepared. Please reply with your bank name, account name, and account number so we can process your payout manually. Thank you.';
+          var waUrl = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(message);
+          // Open synchronously from the click to avoid mobile popup blockers.
+          var waWindow = window.open(waUrl, '_blank', 'noopener,noreferrer');
+          if (waWindow) { try { waWindow.opener = null; } catch (_) {} }
+          apiCall('request_payout_details', { batchId: v.activeBatch.id }).then(function() {
+            toast('Account-details request logged for ' + (v.business_name || v.name || 'vendor'), 'success');
+            loadReferralPayouts();
+          }).catch(function(err) {
+            toast('WhatsApp opened, but tracking update failed: ' + (err.message || 'unknown'), 'error');
+            loadReferralPayouts();
+          });
+        });
+        actions.appendChild(wa);
+        var paid = document.createElement('button');
+        paid.type = 'button';
+        paid.className = 'btn btn-paid';
+        paid.textContent = 'Mark payout paid';
+        paid.addEventListener('click', function() {
+          showConfirm('Confirm manual payout', 'Only confirm after you have actually sent ' + payoutMoney(v.activeBatch.amount_ngn) + ' to this vendor. This will mark the batch and its referrals as paid.', false).then(function(ok) {
+            if (!ok) return;
+            paid.disabled = true;
+            apiCall('mark_payout_paid', { batchId: v.activeBatch.id }).then(function() {
+              toast('Payout marked paid. Next referral cycle is clear.', 'success');
+              loadReferralPayouts();
+            }).catch(function(err) {
+              paid.disabled = false;
+              toast('Could not record payment: ' + (err.message || 'unknown'), 'error');
+            });
+          });
+        });
+        actions.appendChild(paid);
+        var requestedAt = document.createElement('span');
+        requestedAt.className = 'vendor-email';
+        requestedAt.textContent = 'Requested ' + payoutDate(v.activeBatch.requested_at) + (v.activeBatch.details_requested_at ? ' · Details requested ' + payoutDate(v.activeBatch.details_requested_at) : '');
+        actions.appendChild(requestedAt);
+      } else {
+        if (v.eligibleCount >= 7) {
+          var prepWa = document.createElement('button');
+          prepWa.type = 'button';
+          prepWa.className = 'btn btn-whatsapp';
+          prepWa.textContent = 'Request account details · WhatsApp';
+          prepWa.disabled = !normalizeWhatsAppPhone(v.phone_number);
+          prepWa.addEventListener('click', function() {
+            var phone = normalizeWhatsAppPhone(v.phone_number);
+            if (!phone) { toast('No usable WhatsApp number saved for this vendor.', 'error'); return; }
+            var message = v.ready
+              ? 'Hello ' + (v.name || v.business_name || 'there') + ', you have reached the QuickShop referral payout threshold of 10 eligible referrals and your ₦5,000 manual payout is being prepared. Please reply with your bank name, account name, and account number. Thank you.'
+              : v.eligibleCount >= 10
+                ? 'Hello ' + (v.name || v.business_name || 'there') + ', you have reached 10 eligible QuickShop referrals. We are reviewing the referral reward total before confirming your manual payout. Please reply with your bank name, account name, and account number so we can prepare if approved. Thank you.'
+                : 'Hello ' + (v.name || v.business_name || 'there') + ', you are approaching the QuickShop referral payout threshold (' + v.eligibleCount + '/10 eligible referrals). To help us prepare your manual payout, please reply with your bank name, account name, and account number. Thank you.';
+            var waUrl = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(message);
+            var waWindow = window.open(waUrl, '_blank', 'noopener,noreferrer');
+            if (waWindow) { try { waWindow.opener = null; } catch (_) {} }
+            apiCall('request_vendor_payout_details', {
+              vendorId: v.id,
+              eligibleCount: v.eligibleCount,
+              eligibleAmount: v.eligibleAmount
+            }).then(function() {
+              toast('Account-details request logged for ' + (v.business_name || v.name || 'vendor'), 'success');
+              loadReferralPayouts();
+            }).catch(function(err) {
+              toast('WhatsApp opened, but tracking update failed: ' + (err.message || 'unknown'), 'error');
+              loadReferralPayouts();
+            });
+          });
+          actions.appendChild(prepWa);
+        }
+        var cycleNote = document.createElement('span');
+        cycleNote.className = 'vendor-email';
+        cycleNote.textContent = v.eligibleCount + ' eligible referrals · ' + v.paidCount + ' already paid historically' +
+          (v.latestDetailsRequest ? ' · Details requested ' + payoutDate(v.latestDetailsRequest.created_at) : '');
+        actions.appendChild(cycleNote);
+      }
+      card.appendChild(actions);
+      list.appendChild(card);
+    });
+  }
+
+  function loadReferralPayouts() {
+    if (!_adminToken || _payoutLoading) return;
+    _payoutLoading = true;
+    var list = document.getElementById('payout-list');
+    list.innerHTML = '<div class="payout-empty"><div class="spinner"></div>Loading referral payout data…</div>';
+    apiCall('get_referral_payouts').then(function(data) {
+      _payoutData = {
+        referrals: Array.isArray(data.referrals) ? data.referrals : [],
+        batches: Array.isArray(data.batches) ? data.batches : [],
+        items: Array.isArray(data.items) ? data.items : [],
+        activities: Array.isArray(data.activities) ? data.activities : []
+      };
+      _payoutDataAvailable=true;_payoutDataError=false;renderReferralPayouts();applyFilters();
+    }).catch(function(err) {
+      _payoutDataAvailable=false;_payoutDataError=true;updateAttentionBadge();
+      list.innerHTML = '<div class="payout-empty payout-error">Failed to load payout data: ' + String(err.message || 'unknown').replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>';
+      toast('Payout data unavailable: ' + (err.message || ''), 'error');
+    }).finally(function() { _payoutLoading = false; });
   }
 
   // ── LOAD VENDORS ───────────────────────────────────────────────────────
@@ -634,8 +1154,9 @@
     var listEl = document.getElementById('vendor-list');
     listEl.innerHTML = '<div id="loading-state"><div class="spinner"></div>Loading vendors\u2026</div>';
     apiCall('get_vendors').then(function(data) {
-      renderVendors(data.vendors || []);
+      renderVendors(data.vendors || [], data.paymentClaimsAvailable);
     }).catch(function(err) {
+      _vendorsLoaded=false;_paymentClaimsAvailable=false;updateAttentionBadge();
       listEl.innerHTML = '<div id="error-state">Failed to load vendors.<br><small>' +
         String(err.message || 'Unknown error').replace(/&/g,'&amp;').replace(/</g,'&lt;') +
         '</small></div>';
@@ -643,7 +1164,134 @@
     });
   }
 
-  document.getElementById('refresh-btn').addEventListener('click', loadVendors);
+  document.getElementById('refresh-btn').addEventListener('click',function(){loadVendors();loadReferralPayouts();});
+  document.getElementById('payout-refresh-btn').addEventListener('click',loadReferralPayouts);
+  document.getElementById('payout-view-filter').addEventListener('change',renderReferralPayouts);
+  document.getElementById('account-search').addEventListener('input',function(){applyFilters();renderReferralPayouts();});
+  function closeFilterPopover(){
+    var f=document.getElementById('filters'),button=document.getElementById('filters-toggle');
+    f.hidden=true;button.setAttribute('aria-expanded','false');button.textContent='☷ Filters';
+  }
+  function positionFilterPopover(){
+    var f=document.getElementById('filters'),button=document.getElementById('filters-toggle');
+    var rect=button.getBoundingClientRect();
+    f.style.right=Math.max(12,window.innerWidth-rect.right)+'px';
+    var maxTop=Math.max(12,window.innerHeight-f.offsetHeight-12);
+    f.style.top=Math.max(12,Math.min(rect.bottom+8,maxTop))+'px';
+  }
+  ['status-filter','created-from','created-to'].forEach(function(id){
+    document.getElementById(id).addEventListener('change',function(){applyFilters();closeFilterPopover();});
+  });
+  document.getElementById('filters-toggle').addEventListener('click',function(){
+    var f=document.getElementById('filters'),open=this.getAttribute('aria-expanded')==='true';
+    if(open){closeFilterPopover();return;}
+    f.hidden=false;this.setAttribute('aria-expanded','true');this.textContent='× Close filters';
+    positionFilterPopover();document.getElementById('status-filter').focus();
+  });
+  document.addEventListener('click',function(event){
+    var f=document.getElementById('filters'),button=document.getElementById('filters-toggle');
+    if(!f.hidden&&!f.contains(event.target)&&!button.contains(event.target))closeFilterPopover();
+  });
+  document.addEventListener('keydown',function(event){if(event.key==='Escape'&&!document.getElementById('filters').hidden){closeFilterPopover();document.getElementById('filters-toggle').focus();}});
+  window.addEventListener('resize',function(){if(!document.getElementById('filters').hidden)positionFilterPopover();});
+  window.addEventListener('scroll',function(){if(!document.getElementById('filters').hidden)closeFilterPopover();},{passive:true});
+  function renderActiveFilterChips(){
+    var host=document.getElementById('active-filter-chips');host.innerHTML='';var status=document.getElementById('status-filter');
+    if(status.value!=='all')addFilterChip(host,status.options[status.selectedIndex].text,function(){status.value='all';applyFilters();});
+    [['created-from','From '],['created-to','To ']].forEach(function(p){var el=document.getElementById(p[0]);if(el.value)addFilterChip(host,p[1]+el.value,function(){el.value='';applyFilters();});});
+  }
+  function addFilterChip(host,label,clear){var b=document.createElement('button');b.type='button';b.className='filter-chip';b.textContent=label+' ×';b.addEventListener('click',clear);host.appendChild(b);}
+  function renderActivationAttention(){
+    var section=document.getElementById('activation-attention'),list=document.getElementById('activation-list'),count=document.getElementById('activation-count');
+    list.innerHTML='';
+    var search=(document.getElementById('account-search').value||'').trim().toLowerCase();
+    var pending=_vendors.filter(function(v){
+      var claimStatus=String((v.payment_claim||{}).status||'').toLowerCase();
+      return (claimStatus==='pending'||claimStatus==='rejected')&&!v.is_active&&!v.is_founder&&!v.subscription_expires&&
+        [v.business_name,v.name,v.email,v.phone_number,v.id].join(' ').toLowerCase().indexOf(search)!==-1;
+    });
+    if(!_paymentClaimsAvailable){
+      count.textContent='—';
+      var unavailable=document.createElement('div');unavailable.className='payout-empty payout-error';
+      unavailable.textContent='Payment-claim status is unavailable. No vendor is listed for activation review until claim status can be verified.';
+      list.appendChild(unavailable);
+      section.hidden=false;
+      return;
+    }
+    count.textContent=String(pending.length);
+    section.hidden=pending.length===0;
+    pending.forEach(function(v){
+      var row=document.createElement('div');row.className='activation-row';
+      var info=document.createElement('div');info.className='activation-row-info';
+      var name=document.createElement('strong');name.textContent=v.business_name||v.name||'Unnamed vendor';
+      var meta=document.createElement('small');meta.textContent=v.email||v.id;
+      var claim=document.createElement('small');
+      var claimStatus=String((v.payment_claim||{}).status||'').toLowerCase();
+      claim.textContent=claimStatus==='rejected'?'Claim rejected · Follow-up needed':'Payment claimed · Awaiting verification';
+      info.appendChild(name);info.appendChild(meta);info.appendChild(claim);
+      var review=document.createElement('button');review.type='button';review.className='activation-review';review.textContent='Review vendor';
+      review.addEventListener('click',function(){
+        document.getElementById('status-filter').value='pending-activation';
+        document.getElementById('account-search').value=v.email||v.id;
+        document.getElementById('created-from').value='';
+        document.getElementById('created-to').value='';
+        closeFilterPopover();
+        applyFilters();
+        closePayoutQueue();
+        window.requestAnimationFrame(function(){
+          var cards=Array.from(document.querySelectorAll('#vendor-list .vendor-card'));
+          var card=cards.find(function(candidate){return candidate.dataset.id===v.id;});
+          if(!card){toast('Could not locate this vendor in the account list. Refresh and try again.','error');return;}
+          card.classList.add('review-target');
+          card.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'center'});
+          var activate=card.querySelector('[data-action="activate"]');
+          if(activate){try{activate.focus({preventScroll:true});}catch(_){activate.focus();}}
+          window.setTimeout(function(){card.classList.remove('review-target');},3000);
+        });
+      });
+      row.appendChild(info);row.appendChild(review);list.appendChild(row);
+    });
+  }
+
+  function updateAttentionBadge(){
+    var badge=document.getElementById('attention-count'),button=document.getElementById('payout-open-btn');
+    if(!_vendorsLoaded||!_paymentClaimsAvailable||!_payoutDataAvailable||_payoutDataError){badge.textContent='!';badge.hidden=false;button.setAttribute('aria-label','Open referral queue; attention count unavailable, refresh to retry');return;}
+    var activation=_vendors.filter(function(v){
+      var claimStatus=String((v.payment_claim||{}).status||'').toLowerCase();
+      return (claimStatus==='pending'||claimStatus==='rejected')&&!v.is_active&&!v.is_founder&&!v.subscription_expires;
+    }).length;
+    var payouts=(_payoutData.batches||[]).filter(function(b){return b.status==='pending'||b.status==='details_requested';}).length,total=activation+payouts;
+    badge.textContent=total>99?'99+':String(total);badge.hidden=total===0;button.setAttribute('aria-label','Open action queue'+(total?'; '+total+' items need attention':'; no activation claims or payout requests need action'));
+  }
+  function openPayoutQueue(){
+    _queueReturnFocus=document.activeElement;
+    if(window.history&&window.history.pushState){window.history.pushState({qsReferralQueue:true},'');_queueHistoryState=true;}
+    var o=document.getElementById('payout-overlay');o.classList.add('open');o.setAttribute('aria-hidden','false');document.body.classList.add('queue-open');
+    document.getElementById('payout-open-btn').setAttribute('aria-expanded','true');document.getElementById('payout-section').focus();if(!_payoutDataAvailable)loadReferralPayouts();
+  }
+  function closePayoutQueue(fromHistory){
+    var o=document.getElementById('payout-overlay');if(!o.classList.contains('open'))return;
+    o.classList.remove('open');o.setAttribute('aria-hidden','true');document.body.classList.remove('queue-open');
+    document.getElementById('payout-open-btn').setAttribute('aria-expanded','false');
+    if(_queueReturnFocus&&_queueReturnFocus.focus)_queueReturnFocus.focus();
+    if(_queueHistoryState){_queueHistoryState=false;if(!fromHistory&&window.history)window.history.back();}
+  }
+  window.addEventListener('popstate',function(){if(_queueHistoryState)closePayoutQueue(true);});
+  document.getElementById('payout-open-btn').addEventListener('click',openPayoutQueue);
+  document.getElementById('payout-close-btn').addEventListener('click',closePayoutQueue);
+  document.getElementById('payout-overlay').addEventListener('click',function(e){if(e.target===this)closePayoutQueue();});
+  document.addEventListener('keydown',function(e){
+    var overlay=document.getElementById('payout-overlay');
+    if(!overlay.classList.contains('open'))return;
+    if(e.key==='Escape'){closePayoutQueue();return;}
+    if(e.key==='Tab'){
+      var focusable=Array.from(document.getElementById('payout-section').querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),a[href],[tabindex="0"]'));
+      if(!focusable.length){e.preventDefault();document.getElementById('payout-section').focus();return;}
+      var first=focusable[0],last=focusable[focusable.length-1];
+      if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
+      else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+    }
+  });
 
 })();
 </script>

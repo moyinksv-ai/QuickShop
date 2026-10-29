@@ -5,7 +5,7 @@
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self'
-               'sha256-K93y85qV6y4/tmn9/sajBVH3LQIIUYWWtrlStpypOkk='
+               'sha256-gskEB8COGGYA9VBzyIBZTOwZnc5Z8DyUVJmTl1JRcis='
                https://cdn.jsdelivr.net;
     connect-src 'self'
                 https://*.supabase.co
@@ -590,6 +590,7 @@
     .qs-footer p { font-size: 12px; color: var(--dim); line-height: 1.9; }
     .qs-footer a { color: var(--green); text-decoration: none; font-weight: 600; }
   </style>
+  <script src="referral-capture.js" defer></script>
 </head>
 <body>
 <div class="qs-shell">
@@ -801,8 +802,15 @@
       : window.location.pathname;
     var currentUrl = window.location.pathname + window.location.search;
     if (url !== currentUrl) {
-      if (replace) history.replaceState(null, '', url);
-      else         history.pushState(null, '', url);
+      var currentState = history.state && typeof history.state === 'object'
+        ? Object.assign({}, history.state) : {};
+      var currentDepth = currentState.qsMarketPage && Number.isFinite(Number(currentState.qsMarketDepth))
+        ? Number(currentState.qsMarketDepth) : 0;
+      currentState.qsMarketPage = true;
+      currentState.qsMarketDepth = replace ? currentDepth : currentDepth + 1;
+      currentState.qsMarketUrl = url;
+      if (replace) history.replaceState(currentState, '', url);
+      else         history.pushState(currentState, '', url);
     }
     updateSEO(params);
   }
@@ -1510,7 +1518,18 @@
 
     var params = getParams();
     params.set('product', item.slug); params.delete('q'); params.delete('cat');
+    var urlBeforeProduct = window.location.pathname + window.location.search;
     navigate(params, false);
+    var urlAfterProduct = window.location.pathname + window.location.search;
+    // Mark only product entries created from an in-page listing. A direct
+    // product URL has no preceding marketplace-list entry to pop back to.
+    if (urlBeforeProduct !== urlAfterProduct) {
+      var productEntryState = history.state && typeof history.state === 'object'
+        ? Object.assign({}, history.state) : {};
+      productEntryState.qsMarketPage = true;
+      productEntryState.qsMarketProductEntry = true;
+      history.replaceState(productEntryState, '', window.location.href);
+    }
 
     // Save scroll position for restoration on goBack()
     _scrollY = window.scrollY;
@@ -1821,14 +1840,28 @@
 
   // ── BACK from product detail ──────────────────────────────────────────────
   function goBack() {
+    // Invalidate in-flight product/vendor reads before changing visible state.
+    // Their seq checks then prevent stale detail responses from repainting after Back.
+    _navSeq += 1;
     _currentProduct = null;
     var old = document.getElementById('qs-product-ld'); if (old) old.remove();
+
+    // Product details opened from a listing already have a real history entry.
+    // Pop that entry instead of pushing a duplicate listing URL (which made the
+    // phone/browser Back button reopen the detail page).
+    if (history.state && history.state.qsMarketProductEntry &&
+        Number(history.state.qsMarketDepth) > 0) {
+      history.back();
+      return;
+    }
+
+    // Direct product links have no in-page listing entry. Restore the best
+    // available list context by replacing this entry, then reload that route.
     var params = getParams(); params.delete('product');
     if (_mode === 'search' && _lastQuery) params.set('q', _lastQuery);
     else if (_mode === 'category' && _catName) params.set('cat', _catName);
-    navigate(params, false);
-    showState('main');
-    // Restore scroll — rAF ensures the main panel is visible before scrolling
+    navigate(params, true);
+    routeFromURL();
     requestAnimationFrame(function () { window.scrollTo(0, _scrollY); });
   }
 
@@ -1930,7 +1963,30 @@
   }
 
   // ── ROUTER ────────────────────────────────────────────────────────────────
-  window.addEventListener('popstate', function () { routeFromURL(); });
+  // This document owns marketplace history. Keep its marker separate from the
+  // landing/auth and vendor-catalog history state used on index.html.
+  try {
+    var initialMarketState = history.state && typeof history.state === 'object'
+      ? Object.assign({}, history.state) : {};
+    if (!initialMarketState.qsMarketPage) {
+      initialMarketState.qsMarketPage = true;
+      initialMarketState.qsMarketDepth = 0;
+      initialMarketState.qsMarketUrl = window.location.pathname + window.location.search;
+      history.replaceState(initialMarketState, '', window.location.href);
+    }
+  } catch (_) {}
+
+  window.addEventListener('popstate', function () {
+    // Invalidate async work for the route being left before rendering the route
+    // represented by the newly active history entry.
+    _navSeq += 1;
+    if (!getParams().has('product')) {
+      _currentProduct = null;
+      var old = document.getElementById('qs-product-ld');
+      if (old) old.remove();
+    }
+    routeFromURL();
+  });
 
   function routeFromURL() {
     var params  = getParams();

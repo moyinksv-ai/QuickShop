@@ -56,15 +56,14 @@
   if (!STORE_ID && !TOKEN) return; // not a catalog URL — do nothing
 
   /* ── 0b. REFERRAL CAPTURE ──────────────────────────────────────────────── */
-  // When a buyer lands on this catalog via the branding link (?ref=<UUID>),
-  // save the referrer's user_id to sessionStorage immediately — before any
-  // async work. sessionStorage persists across same-tab navigation (sign up
-  // form redirect) but dies with the tab, which is the correct scope.
-  // UUID validated here so garbage params never reach Supabase.
+  // Keep referral intent through catalog navigation, refreshes and PWA restarts.
+  // Only a well-formed UUID or short code replaces a previously pending click.
   (function () {
     try {
       var _refRaw = _p.get('ref') || '';
-      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_refRaw)) {
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(_refRaw) ||
+          /^[0-9a-f]{16}$/i.test(_refRaw)) {
+        localStorage.setItem('qs_pending_referral', _refRaw);
         sessionStorage.setItem('qs_referrer_id', _refRaw);
       }
     } catch (_) {}
@@ -420,6 +419,21 @@
       '#cat-search:focus{border-color:rgba(124,58,237,0.5);',
         'background:rgba(124,58,237,0.06);}',
 
+      /* --- marketplace-origin cart summary --- */
+      '#cat-market-cart{position:sticky;top:56px;z-index:110;display:flex;',
+        'align-items:center;justify-content:space-between;gap:10px;',
+        'padding:10px 12px;background:rgba(21,21,29,0.98);',
+        'border-bottom:1px solid rgba(255,255,255,0.08);',
+        'box-shadow:0 5px 18px rgba(0,0,0,0.16);}',
+      '#cat-market-cart-copy{min-width:0;display:flex;flex-direction:column;gap:3px;}',
+      '#cat-market-cart-label{font-size:12px;font-weight:800;color:#f0f0f6;}',
+      '#cat-market-cart-summary{font-size:11px;color:rgba(240,240,246,0.58);}',
+      '#cat-market-cart-btn{flex-shrink:0;border:0;border-radius:10px;',
+        'padding:10px 12px;background:#25d366;color:#062b16;',
+        'font-size:12px;font-weight:850;cursor:pointer;white-space:nowrap;}',
+      '#cat-market-cart-btn:disabled{opacity:.45;cursor:not-allowed;}',
+      '@media(max-width:360px){#cat-market-cart{align-items:flex-start;}#cat-market-cart-btn{padding:9px 8px;font-size:11px;}}',
+
       /* --- category chips --- */
       '#cat-chips{display:flex;gap:6px;padding:8px 12px 10px;overflow-x:auto;',
         'scrollbar-width:none;-webkit-overflow-scrolling:touch;}',
@@ -622,6 +636,11 @@
         '-webkit-tap-highlight-color:transparent;}',
       '#cat-checkout-btn:active{transform:scale(.97);}',
       '#cat-checkout-btn:disabled{opacity:.5;cursor:not-allowed;}',
+      '#cat-continue-shopping{width:100%;padding:12px;margin-bottom:9px;',
+        'border:1px solid rgba(255,255,255,0.14);border-radius:12px;',
+        'background:rgba(255,255,255,0.045);color:rgba(240,240,246,0.88);',
+        'font-size:13px;font-weight:750;cursor:pointer;}',
+      '#cat-continue-shopping:active{background:rgba(255,255,255,0.09);}',
 
       /* --- lightbox --- */
       '#cat-lightbox{position:fixed;inset:0;z-index:500;',
@@ -725,7 +744,7 @@
         'display:flex;flex-direction:column;overflow:hidden;',
         'overscroll-behavior:none;}',
       '#cat-detail.open{transform:translateY(0);}',
-      '#cat-detail-hdr{display:flex;align-items:center;gap:10px;',
+      '#cat-detail-hdr{display:flex;align-items:center;justify-content:space-between;gap:12px;',
         'padding:12px 16px;flex-shrink:0;',
         'border-bottom:1px solid rgba(255,255,255,0.07);}',
       '#cat-detail-back{background:rgba(255,255,255,0.07);border:none;',
@@ -733,9 +752,15 @@
         'cursor:pointer;padding:7px 14px;display:flex;align-items:center;gap:6px;',
         '-webkit-tap-highlight-color:transparent;}',
       '#cat-detail-back:active{background:rgba(255,255,255,0.14);}',
-      '#cat-detail-context{margin-left:auto;max-width:48%;font-size:10px;',
-        'font-weight:650;color:rgba(240,240,246,0.42);text-align:right;',
-        'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
+      '#cat-detail-context{flex:1;min-width:0;max-width:none;font-size:10px;',
+        'font-weight:650;color:rgba(240,240,246,0.48);text-align:center;',
+        'white-space:normal;line-height:1.25;}',
+      '.cat-detail-head-action{flex-shrink:0;border:1px solid rgba(255,255,255,0.12);',
+        'border-radius:9px;padding:8px 9px;background:rgba(255,255,255,0.06);',
+        'color:#f0f0f6;font-size:11px;font-weight:750;cursor:pointer;',
+        '-webkit-tap-highlight-color:transparent;}',
+      '.cat-detail-head-action:active{opacity:.75;}',
+      '@media(max-width:420px){#cat-detail-hdr{gap:8px;padding:10px 8px;}#cat-detail-back{padding:8px 9px;font-size:11px;}#cat-detail-context{font-size:9px;} .cat-detail-head-action{padding:8px 7px;font-size:10px;}}',
       '#cat-detail-scroll{flex:1;overflow-y:auto;',
         '-webkit-overflow-scrolling:touch;',
         'overscroll-behavior:contain;',
@@ -791,12 +816,11 @@
       '.cat-dqbtn:disabled{opacity:.28;cursor:not-allowed;}',
       '#cat-detail-qty-val{font-size:16px;font-weight:800;color:#fff;',
         'min-width:28px;text-align:center;}',
-      '#cat-detail-add-btn{width:100%;padding:15px;border-radius:14px;border:none;',
-        'background:rgba(124,58,237,0.2);color:#a78bfa;',
+      '#cat-detail-add-btn{width:100%;padding:15px;border-radius:14px;border:1px solid #25d366;',
+        'background:#25d366;color:#062b16;',
         'font-size:15px;font-weight:800;cursor:pointer;',
         'transition:all .15s;letter-spacing:-.2px;',
         '-webkit-tap-highlight-color:transparent;}',
-      '#cat-detail-add-btn.in-cart{background:rgba(16,185,129,0.15);color:#34d399;}',
       '#cat-detail-add-btn:active{opacity:.85;}',
       '#cat-detail-add-btn:disabled{opacity:.4;cursor:not-allowed;}',
     ].join('');
@@ -904,6 +928,33 @@
     compact.appendChild(sstatSm);
     hdr.appendChild(compact);
     root.appendChild(hdr);
+
+    // Marketplace entry keeps checkout visible at the top while browsing this
+    // vendor. The cart itself remains store-scoped by scopeCartToStore().
+    if (MARKET_ORIGIN) {
+      var marketCart = document.createElement('div');
+      marketCart.id = 'cat-market-cart';
+      marketCart.setAttribute('aria-label', 'Marketplace order cart');
+      var marketCopy = document.createElement('div');
+      marketCopy.id = 'cat-market-cart-copy';
+      var marketLabel = document.createElement('div');
+      marketLabel.id = 'cat-market-cart-label';
+      marketLabel.textContent = 'Your order from this store';
+      var marketSummary = document.createElement('div');
+      marketSummary.id = 'cat-market-cart-summary';
+      marketSummary.textContent = 'Cart is for this store only · 0 items';
+      marketCopy.appendChild(marketLabel);
+      marketCopy.appendChild(marketSummary);
+      var marketCartBtn = document.createElement('button');
+      marketCartBtn.id = 'cat-market-cart-btn';
+      marketCartBtn.type = 'button';
+      marketCartBtn.textContent = 'Review & checkout';
+      marketCartBtn.disabled = true;
+      marketCartBtn.addEventListener('click', openCartDrawer);
+      marketCart.appendChild(marketCopy);
+      marketCart.appendChild(marketCartBtn);
+      root.appendChild(marketCart);
+    }
 
     // Search
     var sw = document.createElement('div');
@@ -1077,7 +1128,15 @@
     waSvg.appendChild(waPath);
     chkbtn.appendChild(waSvg);
     chkbtn.appendChild(document.createTextNode(' Order via WhatsApp'));
+
+    var continueShoppingBtn = document.createElement('button');
+    continueShoppingBtn.id = 'cat-continue-shopping';
+    continueShoppingBtn.type = 'button';
+    continueShoppingBtn.textContent = 'Continue shopping in this store';
+    continueShoppingBtn.addEventListener('click', function () { closeCartDrawer(); });
+
     dfoot.appendChild(dtotalrow);
+    dfoot.appendChild(continueShoppingBtn);
     dfoot.appendChild(chkbtn);
     drawer.appendChild(dh);
     drawer.appendChild(ditems);
@@ -1314,6 +1373,7 @@
   var _detailQty     = 1;    // quantity selector state
   var _detailSwipe   = null; // active swipe gesture state on hero
   var _detailReturnMode = 'store'; // store | market | cart
+  var _marketDetailAction = ''; // keep-shopping | checkout | '' (native Back returns to market)
 
   function buildDetailOverlay() {
     if (document.getElementById('cat-detail')) return;
@@ -1337,6 +1397,23 @@
     context.id = 'cat-detail-context';
     context.hidden = true;
 
+    var keepShoppingBtn = document.createElement('button');
+    keepShoppingBtn.id = 'cat-detail-keep-shopping';
+    keepShoppingBtn.className = 'cat-detail-head-action';
+    keepShoppingBtn.type = 'button';
+    keepShoppingBtn.textContent = 'Keep shopping';
+    keepShoppingBtn.hidden = true;
+    keepShoppingBtn.addEventListener('click', function () {
+      if (_detailReturnMode !== 'market') return;
+      _marketDetailAction = 'keep-shopping';
+      if (history.state && history.state.detailOpen) {
+        history.back();
+      } else {
+        _marketDetailAction = '';
+        closeDetailOverlay();
+      }
+    });
+
     back.addEventListener('click', function () {
       if (_detailReturnMode === 'market') {
         if (history.state && history.state.detailOpen) {
@@ -1359,6 +1436,7 @@
 
     hdr.appendChild(back);
     hdr.appendChild(context);
+    hdr.appendChild(keepShoppingBtn);
     overlay.appendChild(hdr);
 
     // Scrollable body
@@ -1436,33 +1514,37 @@
 
     overlay.appendChild(buy);
 
-    // Wire qty buttons
+    // Wire qty buttons. Marketplace handoff pre-seeds the cart, so the detail
+    // selector must update the same cart state immediately (not wait for a second
+    // "Update Qty" tap or for the buyer to open the cart drawer).
     minusBtn.addEventListener('click', function () {
       if (!_detailProduct) return;
       _detailQty = Math.max(1, _detailQty - 1);
       updateDetailQtyUI();
+      if (cart.has(_detailProduct.id)) cartSetQty(_detailProduct.id, _detailQty);
     });
     plusBtn.addEventListener('click', function () {
       if (!_detailProduct) return;
       var maxStock = (typeof _detailProduct.qty === 'number') ? _detailProduct.qty : 999;
       _detailQty = Math.min(_detailQty + 1, maxStock);
       updateDetailQtyUI();
+      if (cart.has(_detailProduct.id)) cartSetQty(_detailProduct.id, _detailQty);
     });
 
-    // Wire add-to-cart button
+    // Checkout commits the selected product and quantity to this store's cart.
     addBtn.addEventListener('click', function () {
       if (!_detailProduct) return;
-      var inCart = cart.has(_detailProduct.id);
-      if (inCart) {
-        // Already in cart — update qty to selected qty
-        cartSetQty(_detailProduct.id, _detailQty);
-      } else {
-        cartAdd(_detailProduct);
-        // Set correct qty if > 1
-        if (_detailQty > 1) cartSetQty(_detailProduct.id, _detailQty);
-      }
+      if (!cart.has(_detailProduct.id)) cartAdd(_detailProduct);
+      cartSetQty(_detailProduct.id, _detailQty);
       updateDetailAddBtnUI();
-      refreshCartUI(); // sync grid buttons
+      refreshCartUI();
+      if (_detailReturnMode === 'market' && history.state && history.state.detailOpen) {
+        _marketDetailAction = 'checkout';
+        history.back();
+      } else {
+        closeDetailOverlay();
+        setTimeout(openCartDrawer, 0);
+      }
     });
 
     // Swipe on hero (same pointer-event pattern as grid cards)
@@ -1541,13 +1623,25 @@
       var detail = document.getElementById('cat-detail');
       if (detail && detail.classList.contains('open')) {
         var returnMode = _detailReturnMode;
-        closeDetailOverlay();
+        var marketAction = _marketDetailAction;
+        _marketDetailAction = '';
 
+        if (marketAction === 'keep-shopping') {
+          closeDetailOverlay();
+          return;
+        }
+        if (marketAction === 'checkout') {
+          closeDetailOverlay();
+          setTimeout(openCartDrawer, 0);
+          return;
+        }
         if (returnMode === 'market') {
+          // Do not reveal the underlying vendor grid during the return navigation.
           window.location.replace(MARKET_RETURN_URL || '/search.html');
           return;
         }
 
+        closeDetailOverlay();
         if (returnMode === 'cart') setTimeout(openCartDrawer, 0);
       }
     });
@@ -1578,6 +1672,7 @@
       ? _detailProduct.qty : 999;
     if (minusBtn) minusBtn.disabled = (_detailQty <= 1);
     if (plusBtn)  plusBtn.disabled  = (_detailQty >= maxStock);
+    updateDetailAddBtnUI();
   }
 
   function updateDetailAddBtnUI() {
@@ -1585,8 +1680,11 @@
     var addBtn = document.getElementById('cat-detail-add-btn');
     if (!addBtn) return;
     var inCart = cart.has(_detailProduct.id);
+    var selectedSubtotal = (Number(_detailProduct.price) || 0) * _detailQty;
+    var checkoutTotal = cartTotal() + (inCart ? 0 : selectedSubtotal);
     addBtn.classList.toggle('in-cart', inCart);
-    addBtn.textContent = inCart ? '✓ In Cart — Update Qty' : '+ Add to Cart';
+    addBtn.textContent = 'Checkout' + (checkoutTotal > 0 ? ' · ' + fmt(checkoutTotal) : '');
+    addBtn.setAttribute('aria-label', 'Checkout this store cart, total ' + fmt(checkoutTotal));
     var inStock = typeof _detailProduct.qty !== 'number' || _detailProduct.qty > 0;
     addBtn.disabled = !inStock;
   }
@@ -1615,9 +1713,13 @@
 
     if (contextEl) {
       contextEl.hidden = _detailReturnMode !== 'market';
-      contextEl.textContent = _detailReturnMode === 'market'
-        ? 'Cart & checkout · this store only'
-        : '';
+      contextEl.textContent = _detailReturnMode === 'market' ? 'More from this store' : '';
+    }
+    var keepShoppingBtn = document.getElementById('cat-detail-keep-shopping');
+    if (keepShoppingBtn) {
+      keepShoppingBtn.hidden = _detailReturnMode !== 'market';
+      keepShoppingBtn.title = 'Browse more products from this same store';
+      keepShoppingBtn.setAttribute('aria-label', 'Keep shopping in this same store');
     }
 
     var hero = document.getElementById('cat-detail-hero');
@@ -1726,8 +1828,21 @@
     var overlay = document.getElementById('cat-detail');
     var alreadyOpen = overlay.classList.contains('open');
     if (!alreadyOpen) lockCatalogScroll();
-    overlay.classList.add('open');
-    overlay.setAttribute('aria-hidden', 'false');
+    if (_detailReturnMode === 'market' && !alreadyOpen) {
+      // The normal 320ms slide reveals the vendor grid beneath it on first paint.
+      // For a marketplace handoff, cover the catalog synchronously, then restore
+      // the regular transition so later in-store detail opens remain animated.
+      overlay.style.transition = 'none';
+      overlay.classList.add('open');
+      overlay.setAttribute('aria-hidden', 'false');
+      void overlay.offsetHeight; // commit the fully-open state before restoring motion
+      window.requestAnimationFrame(function () {
+        if (overlay.isConnected) overlay.style.transition = '';
+      });
+    } else {
+      overlay.classList.add('open');
+      overlay.setAttribute('aria-hidden', 'false');
+    }
     if (alreadyOpen) {
       history.replaceState({ detailOpen: true }, '');
     } else {
@@ -2062,6 +2177,17 @@
     if (badge) badge.textContent = count;
     if (prev)  prev.textContent  = fmt(total);
 
+    var marketSummary = document.getElementById('cat-market-cart-summary');
+    var marketBtn = document.getElementById('cat-market-cart-btn');
+    if (marketSummary) {
+      marketSummary.textContent = 'Cart is for this store only · ' +
+        count + ' item' + (count === 1 ? '' : 's') + ' · ' + fmt(total);
+    }
+    if (marketBtn) {
+      marketBtn.disabled = count === 0;
+      marketBtn.textContent = count ? 'Review & checkout · ' + fmt(total) : 'Cart is empty';
+    }
+
     // Update add-to-cart buttons on grid
     var grid = document.getElementById('cat-grid');
     if (grid) {
@@ -2082,8 +2208,13 @@
       renderCartItems();
     }
 
-    // Sync detail overlay add button if open
+    // Sync detail overlay purchase controls if open
     if (_detailProduct) updateDetailAddBtnUI();
+    var detailCheckout = document.getElementById('cat-detail-checkout');
+    if (detailCheckout && MARKET_ORIGIN) {
+      detailCheckout.disabled = count === 0;
+      detailCheckout.textContent = count ? 'Checkout · ' + fmt(total) : 'Checkout';
+    }
   }
 
   function buildCartRow(p, qty) {
@@ -2632,6 +2763,7 @@
     // Inject styles and build DOM shell immediately — no flash
     injectCSS();
     document.body.classList.add('qs-cat');
+    if (MARKET_ORIGIN) document.body.classList.add('qs-market-origin');
     buildShell();
 
     // Wait for Supabase — up to 20s to handle slow Nigerian 4G connections
@@ -2925,17 +3057,19 @@
     attachEvents(storeName);
 
     // ── Deep link: auto-open product detail if ?pid= is present ──
-    // Allows search.html to route directly to a specific product in this
-    // vendor’s catalog without the buyer having to find it manually.
+    // Marketplace handoff adds the selected product to this vendor's
+    // store-scoped cart before showing details, so the buyer can review it,
+    // add more products from this same store, or check out once.
     (function () {
       var _pidParam = (_p.get('pid') || '').replace(/[^a-zA-Z0-9\-]/g, '').slice(0, 64);
       if (!_pidParam) return;
       var _target = allProducts.find(function (p) { return p.id === _pidParam; });
       if (_target) {
-        // Short delay so DOM and events are fully settled before overlay opens
-        setTimeout(function () {
-          openDetailOverlay(_target, MARKET_ORIGIN ? 'market' : 'store');
-        }, 120);
+        if (MARKET_ORIGIN && (typeof _target.qty !== 'number' || _target.qty > 0)) {
+          cartAdd(_target); // idempotent: does not duplicate an existing cart line
+        }
+        // Open synchronously in this task; avoid a visible flash of the vendor grid.
+        openDetailOverlay(_target, MARKET_ORIGIN ? 'market' : 'store');
       }
     })();
 

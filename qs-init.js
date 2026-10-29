@@ -32,6 +32,12 @@
 (function () {
   'use strict';
 
+  // Decide the document mode before registering any screen-history handlers.
+  // index.html contains the landing DOM even on /?store=... catalog routes, but
+  // those routes belong to catalog.js and must not inherit landing history state.
+  var params = new URLSearchParams(window.location.search);
+  var isCatalog = params.has('store') || params.has('token');
+
   /* ── 1. Service-worker registration ───────────────────────────────────── */
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
@@ -53,44 +59,123 @@
 
   /* ── 2. Landing page CTA wiring + scroll-reveal ───────────────────────── */
   // Guard: only run if the landing section is present (not catalog mode)
-  if (document.getElementById('qs-landing')) {
+  if (!isCatalog && document.getElementById('qs-landing')) {
 
-    // Expose globally so appss.js auth flow can call it — non-writable so
-    // no later script can overwrite the reference.
+    // One canonical state transition owns landing/auth visibility. Keeping this
+    // centralized prevents competing click handlers from restoring different UI states.
+    // Screen history is separate from the vendor app's tab history. It lets
+    // browser Back/Forward (including Android system Back and iOS Safari's
+    // edge-swipe) restore a real screen instead of leaving landing and auth hidden.
+    function mergeScreenState(screen) {
+      var current = window.history.state;
+      var next = current && typeof current === 'object' ? Object.assign({}, current) : {};
+      next.qsScreen = screen;
+      return next;
+    }
+
+    function showLandingNow() {
+      var body = document.body;
+      var auth = document.getElementById('loginScreen');
+      var landing = document.getElementById('qs-landing');
+      var app = document.querySelector('.app');
+      var bottomNav = document.querySelector('.bottom-nav');
+      body.classList.remove('qs-show-auth', 'qs-auth-pending', 'mode-app', 'qs-cat-early');
+      if (auth) { auth.removeAttribute('style'); auth.style.display = 'none'; }
+      if (app) { app.removeAttribute('style'); app.style.display = 'none'; }
+      if (bottomNav) { bottomNav.removeAttribute('style'); bottomNav.style.display = 'none'; }
+      if (landing) {
+        landing.classList.remove('qs-hidden', 'qs-navigating');
+        landing.removeAttribute('style');
+      }
+      // Keep the active entry labelled as landing without discarding other
+      // state fields owned by the application.
+      try {
+        if (window.history.state && window.history.state.qsScreen !== 'landing') {
+          window.history.replaceState(mergeScreenState('landing'), '', window.location.href);
+        }
+      } catch (_) {}
+      var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+    }
+
+    // Expose globally so auth flow can return to landing using the same transition.
     try {
       Object.defineProperty(window, '__qs_showLanding', {
-        value: function () {
-          var auth    = document.getElementById('loginScreen');
-          var landing = document.getElementById('qs-landing');
-          document.body.classList.remove('qs-show-auth');
-          if (auth) { auth.removeAttribute('style'); auth.style.display = 'none'; }
-          if (landing) { landing.classList.remove('qs-hidden'); landing.removeAttribute('style'); }
-          window.scrollTo(0, 0);
-        },
+        value: showLandingNow,
         writable: false,
         configurable: false,
         enumerable: false
       });
     } catch (_) {
-      // Fallback for environments where defineProperty is restricted
-      window.__qs_showLanding = function () {
-        var auth    = document.getElementById('loginScreen');
-        var landing = document.getElementById('qs-landing');
-        document.body.classList.remove('qs-show-auth');
-        if (auth) { auth.removeAttribute('style'); auth.style.display = 'none'; }
-        if (landing) { landing.classList.remove('qs-hidden'); landing.removeAttribute('style'); }
-        window.scrollTo(0, 0);
-      };
+      window.__qs_showLanding = showLandingNow;
     }
 
-    function showAuth() {
+    function showAuth(fromHistory, forceLogin) {
+      var body = document.body;
       var landing = document.getElementById('qs-landing');
-      var auth    = document.getElementById('loginScreen');
+      var auth = document.getElementById('loginScreen');
+      var app = document.querySelector('.app');
+      var bottomNav = document.querySelector('.bottom-nav');
+      // A pending verification/reset step owns the auth surface. Do not clear its
+      // persistence marker just because browser Back/Forward restores this entry.
+      var hasPendingAuthFlow = body.classList.contains('qs-auth-pending');
+      body.classList.remove('mode-app', 'qs-cat-early');
+      if (!hasPendingAuthFlow) body.classList.remove('qs-auth-pending');
+      body.classList.add('qs-show-auth');
       if (landing) landing.classList.add('qs-hidden');
-      if (auth)    { auth.removeAttribute('style'); auth.style.display = 'flex'; }
-      document.body.classList.add('qs-show-auth');
+      if (auth) { auth.removeAttribute('style'); auth.style.display = 'flex'; }
+      if (app) { app.removeAttribute('style'); app.style.display = 'none'; }
+      if (bottomNav) { bottomNav.removeAttribute('style'); bottomNav.style.display = 'none'; }
+
+      // Only a deliberate landing-page Sign In CTA resets the visible form to login.
+      // Sign Up uses its own explicit switch; popstate restoration leaves interrupted
+      // verification/reset screens untouched.
+      if (forceLogin && !hasPendingAuthFlow) {
+        if (window.__QS_APP && typeof window.__QS_APP.showLoginForm === 'function') {
+          window.__QS_APP.showLoginForm();
+        } else {
+          ['signupForm', 'resetForm', 'resetVerifyForm', 'verificationNotice', 'authLoading'].forEach(function (id) {
+            var form = document.getElementById(id);
+            if (form) form.style.display = 'none';
+          });
+          var loginForm = document.getElementById('loginForm');
+          if (loginForm) loginForm.style.display = 'flex';
+        }
+      }
+
+      // Add one same-document history entry for auth. Do not add another entry
+      // when restoring auth through Forward or when the CTA switches to signup.
+      try {
+        if (!fromHistory && (!window.history.state || window.history.state.qsScreen !== 'auth')) {
+          window.history.pushState(mergeScreenState('auth'), '', window.location.href);
+        }
+      } catch (_) {}
       window.scrollTo(0, 0);
     }
+
+    // Establish a stable landing entry before the user opens authentication.
+    // Preserve unrelated state fields and never rewrite the URL/query string.
+    try {
+      if (!window.history.state || !window.history.state.qsScreen) {
+        window.history.replaceState(mergeScreenState('landing'), '', window.location.href);
+      }
+    } catch (_) {}
+
+    window.addEventListener('popstate', function (event) {
+      var screen = event.state && event.state.qsScreen;
+      var authIsVisible = document.body.classList.contains('qs-show-auth');
+      if (screen === 'auth') {
+        showAuth(true);
+        event.stopImmediatePropagation();
+        return;
+      }
+      if (screen === 'landing' || authIsVisible) {
+        showLandingNow();
+        // appss.js also handles popstate for the vendor tab stack. Keep auth/
+        // landing transitions out of that handler so it cannot override them.
+        event.stopImmediatePropagation();
+      }
+    });
 
     function showSignup() {
       showAuth();
@@ -123,16 +208,26 @@
     });
     signinBtnIds.forEach(function (id) {
       var el = document.getElementById(id);
-      if (el) el.addEventListener('click', showAuth);
+      // Do not pass the click Event as showAuth's fromHistory flag. A direct
+      // listener would make that argument truthy and silently skip pushState.
+      if (el) el.addEventListener('click', function () { showAuth(false, true); });
     });
 
     // Back-to-landing: event delegation so it works even if the button re-renders
     document.addEventListener('click', function (e) {
-      if (e.target && e.target.id === 'btnBackToLanding') {
-        e.preventDefault();
-        e.stopPropagation();
-        window.__qs_showLanding();
+      var target = e.target && typeof e.target.closest === 'function'
+        ? e.target.closest('#btnBackToLanding')
+        : null;
+      if (!target) return;
+      e.preventDefault();
+      e.stopPropagation();
+      // The auth entry was created by this script, so use Back to keep the
+      // browser history truthful; popstate performs the canonical transition.
+      if (window.history.state && window.history.state.qsScreen === 'auth') {
+        window.history.back();
+        return;
       }
+      if (typeof window.__qs_showLanding === 'function') window.__qs_showLanding();
     });
 
     // Scroll-reveal via IntersectionObserver
@@ -187,9 +282,6 @@
     if (ordered) s.async = false;
     (document.body || document.head || document.documentElement).appendChild(s);
   }
-
-  var params    = new URLSearchParams(window.location.search);
-  var isCatalog = params.has('store') || params.has('token');
 
   if (isCatalog) {
     // Customer storefront — catalog.js is fully standalone, no load-order
