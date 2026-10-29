@@ -450,6 +450,7 @@ test('activation payment claim is persisted through the authenticated Supabase R
   assert.match(appSource, /Payment claim submitted · Awaiting admin verification/);
   assert.match(appSource, /This only notifies QuickShop; it does not activate your store automatically/);
   assert.match(adminApiSource, /payment_claims\?select=user_id,status,claim_kind,amount_ngn,claimed_at/);
+  assert.match(adminApiSource, /claim_kind=eq\.activation/, 'activation review must not count unrelated payment-claim types');
 });
 
 test('referral short links resolve through /r/:code and attribution metadata is preserved', () => {
