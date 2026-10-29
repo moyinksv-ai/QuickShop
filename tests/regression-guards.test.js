@@ -464,14 +464,23 @@ test('referral short links resolve through /r/:code and attribution metadata is 
   assert.match(adminApiSource, /referral_source: 'signup_metadata', referral_attributed_at: new Date\(\)\.toISOString\(\)/);
 });
 
-test('admin activation queue includes waiting accounts without claims and distinguishes claim state', () => {
+test('admin action queue includes only actionable payment claims and reviews the exact vendor', () => {
   assert.match(adminHtml, /status === 'pending-activation' && \(v\.is_active \|\| v\.is_founder \|\| !!v\.subscription_expires\)/);
-  assert.match(adminHtml, /'Awaiting payment claim'/);
+  assert.match(adminHtml, /claimStatus==='pending'\|\|claimStatus==='rejected'/);
   assert.match(adminHtml, /'Payment claimed · Awaiting verification'/);
-  assert.match(adminHtml, /var activation=_vendors\.filter\(function\(v\)\{return !v\.is_active&&!v\.is_founder&&!v\.subscription_expires;\}\)\.length/);
+  assert.match(adminHtml, /'Claim rejected · Follow-up needed'/);
+  assert.doesNotMatch(adminHtml, /'Awaiting payment claim'/);
+  assert.match(adminHtml, /var activation=_vendors\.filter\(function\(v\)\{[\s\S]*?claimStatus==='pending'\|\|claimStatus==='rejected'[\s\S]*?\}\)\.length/);
+  assert.match(adminHtml, /document\.getElementById\('account-search'\)\.value=v\.email\|\|v\.id/);
+  assert.match(adminHtml, /cards\.find\(function\(candidate\)\{return candidate\.dataset\.id===v\.id;\}\)/);
+  assert.match(adminHtml, /card\.scrollIntoView\(/);
+  assert.match(adminHtml, /activate\.focus\(\{preventScroll:true\}\)/);
   assert.match(adminHtml, /positionFilterPopover/);
   assert.match(adminHtml, /position:fixed;z-index:450;display:grid/);
   assert.match(adminHtml, /document\.addEventListener\('keydown',function\(event\)\{if\(event\.key==='Escape'/);
   assert.match(adminHtml, /function closeFilterPopover\(\)/);
-  assert.match(adminHtml, /closeFilterPopover\(\);applyFilters\(\);closePayoutQueue\(\)/);
+  assert.match(adminHtml, /#payout-section\{[^}]*overflow-y:auto/);
+  assert.doesNotMatch(adminHtml, /#payout-list\{overflow:auto/);
+  assert.match(adminHtml, /return outstanding \|\| \(isActive && \(v\.ready \|\| v\.eligibleCount >= 10\)\)/);
+  assert.match(adminHtml, /Open action queue/);
 });
