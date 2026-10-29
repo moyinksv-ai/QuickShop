@@ -2,16 +2,42 @@
 
 ## Release decision
 
-**Hold merge to `main` until the release-blocking checks below are completed.** The feature branch is 114 commits ahead of `main` and changes authentication/session routing, signup, referral attribution, admin UI/API, payout flows, database grants, and Vercel routing. A passing source-pattern suite and a READY preview are not enough evidence to safely merge this entire accumulated diff into production.
+**Hold merge to `main` until the release-blocking checks below are completed.** The feature branch was 115 commits ahead of `main` at the start of the 2026-10-29 follow-up (before the navigation fix and its regression guard) and changes authentication/session routing, signup, referral attribution, admin UI/API, payout flows, database grants, and Vercel routing. A passing source-pattern suite and a READY preview are not enough evidence to safely merge this entire accumulated diff into production.
 
 ## Baseline and rollback safety
 
 - Production baseline branch: `main`
 - Baseline SHA observed during this review: `fd20d2f5352b96b4282680a032decb116ecc0e23`
 - Feature branch: `feat/integrated-referrals-otp`
-- Feature branch comparison: 114 commits ahead, 0 behind at review time.
+- Feature branch comparison at the start of the 2026-10-29 follow-up: 115 commits ahead, 0 behind. The follow-up adds a targeted landing/auth history fix and regression guard; re-fetch exact branch heads before any release decision.
 - No merge, push to `main`, or production deployment was performed during this check.
 - Before any eventual merge, create a durable backup branch pointing to the then-current `main` SHA (for example `backup/main-before-quickshop-release-2026-10-28`) and record the merge commit SHA. A rollback should revert the merge commit or redeploy the backup SHA; do not reset or force-push `main`.
+
+## Follow-up: landing/auth Back navigation — 2026-10-29
+
+### User-observed regression
+
+The user reported that pressing Back from the authentication screen toward the landing page could leave a blank screen. This is a release-blocking navigation failure. The requirement applies to Android system Back, iPhone Safari Back/edge-swipe, desktop browser Back/Forward, and the in-auth Home control.
+
+### Source-level root cause
+
+The existing canonical `showAuth()` and `showLandingNow()` functions controlled CSS classes and display styles, but did not maintain a matching browser history entry for the landing/auth screen transition. Meanwhile, `appss.js` has its own `popstate` listener for vendor-app tab navigation. Without a distinct screen-state marker and event ownership, browser history could leave the landing/auth screen state out of sync or allow the vendor-tab handler to process the same event.
+
+### Fix committed on feature branch
+
+- `qs-init.js`: add a `qsScreen` history-state marker while preserving unrelated state properties.
+- Opening auth pushes one same-document `auth` entry; restoring auth through Forward does not push a duplicate.
+- Back from auth restores landing through the canonical transition. The auth-only Home button uses Back when the expected auth history entry exists.
+- Auth/landing `popstate` events stop propagation to the vendor-app tab-history listener so the two history systems do not fight each other.
+- Landing state updates preserve the current URL and query string.
+- `tests/regression-guards.test.js`: add source-level guards for Back/Forward screen restoration, duplicate-entry prevention, and separation from vendor tab navigation.
+
+### Verification status and limits
+
+- Source changes and regression assertions have been committed to `feat/integrated-referrals-otp`; re-fetch the latest branch SHA before release.
+- This is a source-level correction, not proof of real-device behavior. Android, iPhone Safari, desktop Back/Forward, refresh while auth is visible, and verification/password-recovery entry paths still require browser/device smoke testing.
+- Run `node --test tests/regression-guards.test.js` and verify the GitHub Actions run for the exact latest feature commit before considering this fix validated.
+- Do not merge to `main` or deploy production on the strength of static guards alone.
 
 ## Checks confirmed from repository/CI metadata
 
