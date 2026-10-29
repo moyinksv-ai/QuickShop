@@ -109,8 +109,12 @@ test('marketplace product handoff seeds a store-scoped cart and exposes review, 
   assert.doesNotMatch(handoff, /setTimeout\(/,
     'deep-linked product details must open before the catalog grid can paint');
   assert.ok(catalogSource.includes("id = 'cat-market-cart-btn'"));
-  assert.ok(catalogSource.includes("id = 'cat-detail-checkout'"));
-  assert.ok(catalogSource.includes('checkoutTopBtn.hidden = !MARKET_ORIGIN;'));
+  assert.ok(catalogSource.includes("addBtn.id = 'cat-detail-add-btn'"));
+  assert.ok(catalogSource.includes("addBtn.textContent = 'Checkout'"));
+  assert.ok(catalogSource.includes("addBtn.addEventListener('click', function ()"));
+  assert.doesNotMatch(catalogSource, /checkoutTopBtn/,
+    'checkout belongs in the product-detail purchase area, not beside the Back button');
+  assert.ok(catalogSource.includes("keepShoppingBtn.title = 'Browse more products from this same store'"));
   assert.ok(catalogSource.includes("id = 'cat-detail-keep-shopping'"));
   assert.ok(catalogSource.includes("id = 'cat-continue-shopping'"));
   assert.ok(catalogSource.includes('Cart is for this store only'));
@@ -434,4 +438,39 @@ test('marketplace deep-link detail opens without revealing the vendor catalog du
   const handoff = catalogSource.slice(handoffStart, handoffEnd);
   assert.ok(handoff.indexOf('openDetailOverlay(_target') >= 0);
   assert.doesNotMatch(handoff, /setTimeout\(/);
+});
+
+
+test('activation payment claim is persisted through the authenticated Supabase RPC', () => {
+  assert.match(appSource, /qs_get_my_activation_status_v2/);
+  assert.match(appSource, /qs_get_my_payment_claims_v2/);
+  assert.match(appSource, /qs_submit_payment_claim_v2/);
+  assert.match(appSource, /p_claim_kind: 'activation'/);
+  assert.match(appSource, /p_client_request_id: makeClaimRequestId\(\)/);
+  assert.match(appSource, /Payment claim submitted · Awaiting admin verification/);
+  assert.match(appSource, /This only notifies QuickShop; it does not activate your store automatically/);
+  assert.match(adminApiSource, /payment_claims\?select=user_id,status,claim_kind,amount_ngn,claimed_at/);
+});
+
+test('referral short links resolve through /r/:code and attribution metadata is preserved', () => {
+  const vercel = fs.readFileSync(path.join(root, 'vercel.json'), 'utf8');
+  const migration = fs.readFileSync(path.join(root, 'supabase/migrations/20261029180000_activation_claim_and_referral_attribution.sql'), 'utf8');
+  assert.match(vercel, /"source": "\/r\/:code\(\[0-9a-fA-F\]\{16\}\)"/);
+  assert.match(vercel, /"destination": "\/\?ref=:code"/);
+  assert.match(appSource, /var _pathMatch = window\.location\.pathname\.match\(\/\^\\\/r\\\/\(\[0-9a-f\]\{16\}\)\\\/?\$\/i\)/);
+  assert.match(migration, /referral_source = 'referral_link'/);
+  assert.match(migration, /referral_attributed_at = now\(\)/);
+  assert.match(adminApiSource, /referral_source: 'signup_metadata', referral_attributed_at: new Date\(\)\.toISOString\(\)/);
+});
+
+test('admin activation queue includes waiting accounts without claims and distinguishes claim state', () => {
+  assert.match(adminHtml, /status === 'pending-activation' && \(v\.is_active \|\| v\.is_founder \|\| !!v\.subscription_expires\)/);
+  assert.match(adminHtml, /'Awaiting payment claim'/);
+  assert.match(adminHtml, /'Payment claimed · Awaiting verification'/);
+  assert.match(adminHtml, /var activation=_vendors\.filter\(function\(v\)\{return !v\.is_active&&!v\.is_founder&&!v\.subscription_expires;\}\)\.length/);
+  assert.match(adminHtml, /positionFilterPopover/);
+  assert.match(adminHtml, /position:fixed;z-index:450;display:grid/);
+  assert.match(adminHtml, /document\.addEventListener\('keydown',function\(event\)\{if\(event\.key==='Escape'/);
+  assert.match(adminHtml, /function closeFilterPopover\(\)/);
+  assert.match(adminHtml, /closeFilterPopover\(\);applyFilters\(\);closePayoutQueue\(\)/);
 });
