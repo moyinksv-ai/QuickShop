@@ -415,10 +415,11 @@ test('marketplace product-detail quantity controls synchronize the already-seede
   const plusAt = catalogSource.indexOf("plusBtn.addEventListener('click'", minusAt);
   const addAt = catalogSource.indexOf("// Wire add-to-cart button", plusAt);
   const detailQtyHandlers = catalogSource.slice(minusAt, addAt);
-  assert.match(detailQtyHandlers, /cart\.has\(_detailProduct\.id\)\) cartSetQty\(_detailProduct\.id, _detailQty\)/,
-    'decreasing quantity must update the store-scoped cart immediately when the selected item is already in it');
-  assert.match(detailQtyHandlers, /cart\.has\(_detailProduct\.id\)\) cartSetQty\(_detailProduct\.id, _detailQty\)/,
-    'increasing quantity must update the same cart state immediately');
+  assert.equal(
+    countMatches(detailQtyHandlers, /cart\.has\(_detailProduct\.id\)\) cartSetQty\(_detailProduct\.id, _detailQty\)/g),
+    2,
+    'both decrease and increase controls must update the store-scoped cart immediately when the selected item is already in it'
+  );
   assert.match(catalogSource, /_detailQty = cart\.has\(product\.id\) \? \(cart\.get\(product\.id\)\.qty \|\| 1\) : 1/,
     'opening detail must hydrate the selector from the cart quantity');
 });
