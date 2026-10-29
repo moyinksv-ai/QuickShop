@@ -752,15 +752,15 @@
         'cursor:pointer;padding:7px 14px;display:flex;align-items:center;gap:6px;',
         '-webkit-tap-highlight-color:transparent;}',
       '#cat-detail-back:active{background:rgba(255,255,255,0.14);}',
-      '#cat-detail-context{margin-left:auto;max-width:30%;font-size:10px;',
-        'font-weight:650;color:rgba(240,240,246,0.42);text-align:right;',
-        'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
+      '#cat-detail-context{flex:1;min-width:0;max-width:none;font-size:10px;',
+        'font-weight:650;color:rgba(240,240,246,0.48);text-align:center;',
+        'white-space:normal;line-height:1.25;}',
       '.cat-detail-head-action{flex-shrink:0;border:1px solid rgba(255,255,255,0.12);',
         'border-radius:9px;padding:8px 9px;background:rgba(255,255,255,0.06);',
         'color:#f0f0f6;font-size:11px;font-weight:750;cursor:pointer;',
         '-webkit-tap-highlight-color:transparent;}',
       '.cat-detail-head-action:active{opacity:.75;}',
-      '@media(max-width:420px){#cat-detail-hdr{gap:6px;padding:10px 8px;}#cat-detail-back{padding:8px 9px;font-size:11px;}#cat-detail-context{display:none;} .cat-detail-head-action{padding:8px 7px;font-size:10px;}}',
+      '@media(max-width:420px){#cat-detail-hdr{gap:8px;padding:10px 8px;}#cat-detail-back{padding:8px 9px;font-size:11px;}#cat-detail-context{font-size:9px;} .cat-detail-head-action{padding:8px 7px;font-size:10px;}}',
       '#cat-detail-scroll{flex:1;overflow-y:auto;',
         '-webkit-overflow-scrolling:touch;',
         'overscroll-behavior:contain;',
@@ -1712,8 +1712,8 @@
     }
 
     if (contextEl) {
-      contextEl.hidden = true;
-      contextEl.textContent = '';
+      contextEl.hidden = _detailReturnMode !== 'market';
+      contextEl.textContent = _detailReturnMode === 'market' ? 'More from this store' : '';
     }
     var keepShoppingBtn = document.getElementById('cat-detail-keep-shopping');
     if (keepShoppingBtn) {
