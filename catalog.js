@@ -2212,8 +2212,13 @@
       renderCartItems();
     }
 
-    // Sync detail overlay add button if open
+    // Sync detail overlay purchase controls if open
     if (_detailProduct) updateDetailAddBtnUI();
+    var detailCheckout = document.getElementById('cat-detail-checkout');
+    if (detailCheckout && MARKET_ORIGIN) {
+      detailCheckout.disabled = count === 0;
+      detailCheckout.textContent = count ? 'Checkout · ' + fmt(total) : 'Checkout';
+    }
   }
 
   function buildCartRow(p, qty) {
