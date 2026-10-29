@@ -161,13 +161,16 @@
     #payout-open-btn{display:inline-flex;align-items:center;gap:7px;min-height:36px;padding:7px 12px;background:var(--green-bg);border:1px solid var(--green-bd);border-radius:8px;color:var(--green);font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap}
     .attention-count{display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;padding:0 5px;border-radius:99px;background:var(--amber);color:#17120a;font-size:10px;font-weight:900}
     .attention-count[hidden]{display:none!important}
-    #global-tools{display:flex;align-items:center;gap:8px;padding:12px 20px 0}
+    #global-tools{display:flex;align-items:center;gap:8px;padding:12px 20px 0;position:relative;overflow:visible}
     #account-search{flex:1;min-width:0;width:100%;padding:11px 13px;border-radius:10px;border:1px solid var(--border-hi);background:var(--surface);color:var(--text);font:inherit}
     #filters-toggle{flex-shrink:0;padding:10px 12px;border-radius:10px;border:1px solid var(--border-hi);background:var(--lift);color:var(--text);font:inherit;font-size:12px;font-weight:700;cursor:pointer}
     #active-filter-chips{display:flex;flex-wrap:wrap;gap:6px;padding:7px 20px 0}
     .filter-chip{border:1px solid var(--border-hi);background:var(--lift);color:var(--muted);border-radius:99px;padding:3px 8px;font-size:10px}
     #filters[hidden]{display:none!important}
-    #filters{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:10px}
+    #filters{position:fixed;z-index:450;display:grid;grid-template-columns:minmax(0,1fr);gap:10px;width:min(360px,calc(100vw - 24px));max-height:min(70dvh,520px);overflow:auto;padding:14px;margin:0;border:1px solid var(--border-hi);border-radius:13px;background:var(--surface);box-shadow:0 18px 50px rgba(0,0,0,.48)}
+    #filters .filter-field{min-width:0}
+    #filters #filter-summary{grid-column:1/-1;padding-top:2px;font-size:11px;color:var(--muted)}
+    @media(min-width:560px){#filters{grid-template-columns:repeat(2,minmax(0,1fr))}#filters .filter-field:first-child{grid-column:1/-1}}
     #payout-overlay{position:fixed;inset:0;z-index:500;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(3,5,8,.8);backdrop-filter:blur(10px)}
     #payout-overlay.open{display:flex;animation:queue-in .16s ease-out}
     #payout-section{margin:0;width:min(1180px,100%);height:calc(100dvh - 32px);max-height:calc(100dvh - 32px);display:flex;flex-direction:column;overflow:hidden;background:var(--bg);border-color:var(--border-hi)}
@@ -795,8 +798,8 @@
     var neverOption = document.querySelector('#status-filter option[value="never"]');
     if (neverOption) neverOption.disabled = !_paymentClaimsAvailable;
     var activationOption = document.querySelector('#status-filter option[value="pending-activation"]');
-    if (activationOption) activationOption.disabled = !_paymentClaimsAvailable;
-    if (!_paymentClaimsAvailable && ['never','pending-activation'].indexOf(document.getElementById('status-filter').value) !== -1) {
+    if (activationOption) activationOption.disabled = false;
+    if (!_paymentClaimsAvailable && document.getElementById('status-filter').value === 'never') {
       document.getElementById('status-filter').value = 'all';
     }
     updateStats();
@@ -812,7 +815,7 @@
     var shown = _vendors.filter(function(v) {
       if (status === 'active' && !v.is_active) return false;
       if (status === 'inactive' && v.is_active) return false;
-      if (status === 'pending-activation' && !(v.payment_claim && String(v.payment_claim.status || '').toLowerCase() === 'pending' && !v.is_active)) return false;
+      if (status === 'pending-activation' && (v.is_active || v.is_founder || !!v.subscription_expires)) return false;
       if (status === 'founders' && !v.is_founder) return false;
       // A missing claim is only meaningful when the claims query succeeded.
       if (status === 'never' && (!_paymentClaimsAvailable || v.is_active || v.is_founder || v.subscription_expires || v.has_payment_claim !== false)) return false;
@@ -1163,10 +1166,33 @@
   document.getElementById('payout-refresh-btn').addEventListener('click',loadReferralPayouts);
   document.getElementById('payout-view-filter').addEventListener('change',renderReferralPayouts);
   document.getElementById('account-search').addEventListener('input',function(){applyFilters();renderReferralPayouts();});
-  ['status-filter','created-from','created-to'].forEach(function(id){document.getElementById(id).addEventListener('change',applyFilters);});
-  document.getElementById('filters-toggle').addEventListener('click',function(){
-    var f=document.getElementById('filters'),open=this.getAttribute('aria-expanded')==='true';f.hidden=open;this.setAttribute('aria-expanded',String(!open));this.textContent=open?'☷ Filters':'× Hide filters';if(!open)document.getElementById('status-filter').focus();
+  function closeFilterPopover(){
+    var f=document.getElementById('filters'),button=document.getElementById('filters-toggle');
+    f.hidden=true;button.setAttribute('aria-expanded','false');button.textContent='☷ Filters';
+  }
+  function positionFilterPopover(){
+    var f=document.getElementById('filters'),button=document.getElementById('filters-toggle');
+    var rect=button.getBoundingClientRect();
+    f.style.right=Math.max(12,window.innerWidth-rect.right)+'px';
+    var maxTop=Math.max(12,window.innerHeight-f.offsetHeight-12);
+    f.style.top=Math.max(12,Math.min(rect.bottom+8,maxTop))+'px';
+  }
+  ['status-filter','created-from','created-to'].forEach(function(id){
+    document.getElementById(id).addEventListener('change',function(){applyFilters();closeFilterPopover();});
   });
+  document.getElementById('filters-toggle').addEventListener('click',function(){
+    var f=document.getElementById('filters'),open=this.getAttribute('aria-expanded')==='true';
+    if(open){closeFilterPopover();return;}
+    f.hidden=false;this.setAttribute('aria-expanded','true');this.textContent='× Close filters';
+    positionFilterPopover();document.getElementById('status-filter').focus();
+  });
+  document.addEventListener('click',function(event){
+    var f=document.getElementById('filters'),button=document.getElementById('filters-toggle');
+    if(!f.hidden&&!f.contains(event.target)&&!button.contains(event.target))closeFilterPopover();
+  });
+  document.addEventListener('keydown',function(event){if(event.key==='Escape'&&!document.getElementById('filters').hidden){closeFilterPopover();document.getElementById('filters-toggle').focus();}});
+  window.addEventListener('resize',function(){if(!document.getElementById('filters').hidden)positionFilterPopover();});
+  window.addEventListener('scroll',function(){if(!document.getElementById('filters').hidden)closeFilterPopover();},{passive:true});
   function renderActiveFilterChips(){
     var host=document.getElementById('active-filter-chips');host.innerHTML='';var status=document.getElementById('status-filter');
     if(status.value!=='all')addFilterChip(host,status.options[status.selectedIndex].text,function(){status.value='all';applyFilters();});
@@ -1176,30 +1202,35 @@
   function renderActivationAttention(){
     var section=document.getElementById('activation-attention'),list=document.getElementById('activation-list'),count=document.getElementById('activation-count');
     list.innerHTML='';
-    if(!_paymentClaimsAvailable){
-      section.hidden=false;count.textContent='!';
-      var unavailable=document.createElement('div');unavailable.className='payout-empty payout-error';unavailable.textContent='Activation claim data is unavailable. Refresh to retry; this is not a zero-pending result.';
-      list.appendChild(unavailable);return;
-    }
     var search=(document.getElementById('account-search').value||'').trim().toLowerCase();
     var pending=_vendors.filter(function(v){
-      return !v.is_active&&String((v.payment_claim||{}).status||'').toLowerCase()==='pending'&&
+      return !v.is_active&&!v.is_founder&&!v.subscription_expires&&
         [v.business_name,v.name,v.email,v.phone_number,v.id].join(' ').toLowerCase().indexOf(search)!==-1;
     });
-    count.textContent=String(pending.length);section.hidden=pending.length===0;
+    count.textContent=String(pending.length);
+    if(!_paymentClaimsAvailable){
+      var unavailable=document.createElement('div');unavailable.className='payout-empty payout-error';
+      unavailable.textContent='Payment-claim status is unavailable. Waiting accounts are still listed, but verify payment separately before activation.';
+      list.appendChild(unavailable);
+    }
+    section.hidden=pending.length===0&&_paymentClaimsAvailable;
     pending.forEach(function(v){
       var row=document.createElement('div');row.className='activation-row';
       var info=document.createElement('div');info.className='activation-row-info';
       var name=document.createElement('strong');name.textContent=v.business_name||v.name||'Unnamed vendor';
       var meta=document.createElement('small');meta.textContent=v.email||v.id;
-      info.appendChild(name);info.appendChild(meta);
+      var claim=document.createElement('small');
+      var claimStatus=String((v.payment_claim||{}).status||'').toLowerCase();
+      claim.textContent=!_paymentClaimsAvailable?'Claim status unavailable':
+        claimStatus==='pending'?'Payment claimed · Awaiting verification':
+        claimStatus==='rejected'?'Claim rejected · Follow-up needed':
+        claimStatus==='cancelled'?'Previous claim cancelled · Awaiting payment':
+        'Awaiting payment claim';
+      info.appendChild(name);info.appendChild(meta);info.appendChild(claim);
       var review=document.createElement('button');review.type='button';review.className='activation-review';review.textContent='Review vendor';
       review.addEventListener('click',function(){
         document.getElementById('status-filter').value='pending-activation';
-        document.getElementById('filters').hidden=false;
-        document.getElementById('filters-toggle').setAttribute('aria-expanded','true');
-        document.getElementById('filters-toggle').textContent='× Hide filters';
-        applyFilters();closePayoutQueue();
+        closeFilterPopover();applyFilters();closePayoutQueue();
         var listEl=document.getElementById('vendor-list');
         listEl.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});
       });
@@ -1210,7 +1241,7 @@
   function updateAttentionBadge(){
     var badge=document.getElementById('attention-count'),button=document.getElementById('payout-open-btn');
     if(!_vendorsLoaded||!_paymentClaimsAvailable||!_payoutDataAvailable||_payoutDataError){badge.textContent='!';badge.hidden=false;button.setAttribute('aria-label','Open referral queue; attention count unavailable, refresh to retry');return;}
-    var activation=_vendors.filter(function(v){return !v.is_active&&String((v.payment_claim||{}).status||'').toLowerCase()==='pending';}).length;
+    var activation=_vendors.filter(function(v){return !v.is_active&&!v.is_founder&&!v.subscription_expires;}).length;
     var payouts=(_payoutData.batches||[]).filter(function(b){return b.status==='pending'||b.status==='details_requested';}).length,total=activation+payouts;
     badge.textContent=total>99?'99+':String(total);badge.hidden=total===0;button.setAttribute('aria-label','Open referral queue'+(total?'; '+total+' items need attention':'; no pending activation or payout requests'));
   }
