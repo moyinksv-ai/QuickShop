@@ -1535,17 +1535,21 @@
 
     overlay.appendChild(buy);
 
-    // Wire qty buttons
+    // Wire qty buttons. Marketplace handoff pre-seeds the cart, so the detail
+    // selector must update the same cart state immediately (not wait for a second
+    // "Update Qty" tap or for the buyer to open the cart drawer).
     minusBtn.addEventListener('click', function () {
       if (!_detailProduct) return;
       _detailQty = Math.max(1, _detailQty - 1);
       updateDetailQtyUI();
+      if (cart.has(_detailProduct.id)) cartSetQty(_detailProduct.id, _detailQty);
     });
     plusBtn.addEventListener('click', function () {
       if (!_detailProduct) return;
       var maxStock = (typeof _detailProduct.qty === 'number') ? _detailProduct.qty : 999;
       _detailQty = Math.min(_detailQty + 1, maxStock);
       updateDetailQtyUI();
+      if (cart.has(_detailProduct.id)) cartSetQty(_detailProduct.id, _detailQty);
     });
 
     // Wire add-to-cart button
@@ -1845,8 +1849,21 @@
     var overlay = document.getElementById('cat-detail');
     var alreadyOpen = overlay.classList.contains('open');
     if (!alreadyOpen) lockCatalogScroll();
-    overlay.classList.add('open');
-    overlay.setAttribute('aria-hidden', 'false');
+    if (_detailReturnMode === 'market' && !alreadyOpen) {
+      // The normal 320ms slide reveals the vendor grid beneath it on first paint.
+      // For a marketplace handoff, cover the catalog synchronously, then restore
+      // the regular transition so later in-store detail opens remain animated.
+      overlay.style.transition = 'none';
+      overlay.classList.add('open');
+      overlay.setAttribute('aria-hidden', 'false');
+      void overlay.offsetHeight; // commit the fully-open state before restoring motion
+      window.requestAnimationFrame(function () {
+        if (overlay.isConnected) overlay.style.transition = '';
+      });
+    } else {
+      overlay.classList.add('open');
+      overlay.setAttribute('aria-hidden', 'false');
+    }
     if (alreadyOpen) {
       history.replaceState({ detailOpen: true }, '');
     } else {
