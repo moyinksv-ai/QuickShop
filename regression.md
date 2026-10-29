@@ -21,16 +21,16 @@ The user reported that pressing Back from the authentication screen toward the l
 
 ### Source-level root cause
 
-The existing canonical `showAuth()` and `showLandingNow()` functions controlled CSS classes and display styles, but did not maintain a matching browser history entry for the landing/auth screen transition. Meanwhile, `appss.js` has its own `popstate` listener for vendor-app tab navigation. Without a distinct screen-state marker and event ownership, browser history could leave the landing/auth screen state out of sync or allow the vendor-tab handler to process the same event.
+The original Sign In wiring registered `showAuth` directly as a click listener. Because browser event listeners pass the click Event as the first argument, the new `showAuth(fromHistory)` implementation interpreted that Event as a truthy history-restoration flag and skipped `history.pushState`. This left the auth screen visible without an auth history entry, so Back could leave the document instead of restoring landing. Separately, `appss.js` has its own `popstate` listener for vendor-app tab navigation, which must not override landing/auth screen transitions.
 
 ### Fix committed on feature branch
 
 - `qs-init.js`: add a `qsScreen` history-state marker while preserving unrelated state properties.
-- Opening auth pushes one same-document `auth` entry; restoring auth through Forward does not push a duplicate.
+- Sign In passes an explicit `false` to `showAuth` rather than its click Event, so opening auth reliably pushes one same-document `auth` entry; restoring auth through Forward does not push a duplicate.
 - Back from auth restores landing through the canonical transition. The auth-only Home button uses Back when the expected auth history entry exists.
 - Auth/landing `popstate` events stop propagation to the vendor-app tab-history listener so the two history systems do not fight each other.
 - Landing state updates preserve the current URL and query string.
-- `tests/regression-guards.test.js`: add source-level guards for Back/Forward screen restoration, duplicate-entry prevention, and separation from vendor tab navigation.
+- `tests/regression-guards.test.js`: add source-level guards for Back/Forward screen restoration, explicit click-flag handling, duplicate-entry prevention, and separation from vendor tab navigation.
 
 ### Verification status and limits
 
