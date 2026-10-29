@@ -297,6 +297,10 @@ test('landing/auth history restores screens on browser Back and Forward without 
   assert.match(qsInitSource, /next\.qsScreen = screen/);
   assert.match(qsInitSource, /window\.history\.pushState\(mergeScreenState\('auth'\)/,
     'opening auth must create a same-document history entry');
+  assert.match(qsInitSource, /el\.addEventListener\('click', function \(\) \{ showAuth\(false\); \}\)/,
+    'Sign In click must not pass its Event object as the fromHistory flag');
+  assert.doesNotMatch(qsInitSource, /el\.addEventListener\('click', showAuth\)/,
+    'a direct showAuth listener would accidentally treat the click Event as a history restoration');
   assert.match(qsInitSource, /window\.addEventListener\('popstate', function \(event\)/,
     'system/browser Back and Forward must restore landing/auth screens');
   assert.match(qsInitSource, /if \(screen === 'auth'\) \{\s*showAuth\(true\)/,
