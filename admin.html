@@ -173,13 +173,15 @@
     @media(min-width:560px){#filters{grid-template-columns:repeat(2,minmax(0,1fr))}#filters .filter-field:first-child{grid-column:1/-1}}
     #payout-overlay{position:fixed;inset:0;z-index:500;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(3,5,8,.8);backdrop-filter:blur(10px)}
     #payout-overlay.open{display:flex;animation:queue-in .16s ease-out}
-    #payout-section{margin:0;width:min(1180px,100%);height:calc(100dvh - 32px);max-height:calc(100dvh - 32px);display:flex;flex-direction:column;overflow:hidden;background:var(--bg);border-color:var(--border-hi)}
-    #payout-list{overflow:auto;min-height:0;flex:1;overscroll-behavior:contain}
-    #activation-attention{flex-shrink:0;max-height:28vh;overflow:auto;margin:0 0 12px;padding:10px 12px;border:1px solid var(--amber-bd);background:var(--amber-bg);border-radius:10px}
+    #payout-section{margin:0;width:min(1180px,100%);max-height:calc(100dvh - 32px);overflow-y:auto;overscroll-behavior:contain;background:var(--bg);border-color:var(--border-hi);scrollbar-gutter:stable}
+    #payout-section>.payout-heading{position:sticky;top:-12px;z-index:3;background:var(--bg);padding:12px 0 10px;margin-top:-12px;border-bottom:1px solid var(--border)}
+    #payout-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-items:start}
+    #activation-attention{margin:0 0 14px;padding:0 0 12px;border:0;border-bottom:1px solid var(--border);background:transparent;border-radius:0}
     #activation-attention[hidden]{display:none!important}
     .activation-attention-heading{display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:800;margin-bottom:7px}
     #activation-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
-    .activation-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px}
+    .activation-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;padding:8px 0;background:transparent;border:0;border-bottom:1px solid var(--border)}
+    .vendor-card.review-target{border-color:var(--green);box-shadow:0 0 0 2px var(--green-bg);scroll-margin-top:100px}
     .activation-row-info{min-width:0;overflow-wrap:anywhere;font-size:11px}
     .activation-row-info small{display:block;color:var(--muted);font-size:10px}
     .activation-review{flex-shrink:0;background:var(--lift);color:var(--text);border:1px solid var(--border-hi);border-radius:7px;padding:6px 8px;font:inherit;font-size:10px;font-weight:700;cursor:pointer}
@@ -263,7 +265,7 @@
   <div id="header">
     <div><div id="header-brand">Quick<span>Shop</span> Admin</div><div id="header-meta">Vendor management console</div></div>
     <div id="header-actions">
-      <button id="payout-open-btn" type="button" aria-haspopup="dialog" aria-controls="payout-section" aria-expanded="false"><span class="queue-label-full">Referral payout queue</span><span class="queue-label-short">Payout queue</span> <span id="attention-count" class="attention-count" hidden></span></button>
+      <button id="payout-open-btn" type="button" aria-haspopup="dialog" aria-controls="payout-section" aria-expanded="false"><span class="queue-label-full">Action queue</span><span class="queue-label-short">Action queue</span> <span id="attention-count" class="attention-count" hidden></span></button>
       <button id="refresh-btn" type="button" aria-label="Refresh vendor and referral data">&#8635; Refresh</button>
       <button id="signout-btn" type="button" aria-label="Sign out">Sign out</button>
     </div>
@@ -278,7 +280,7 @@
   </div>
 
   <div id="payout-overlay" aria-hidden="true"><section id="payout-section" role="dialog" aria-modal="true" aria-labelledby="payout-dialog-title" tabindex="-1">
-    <div class="payout-heading"><div><div class="payout-title" id="payout-dialog-title">Referral payout queue</div><div class="payout-subtitle">Outstanding payout requests first, then active stores approaching the ₦5,000 threshold. Existing obligations remain visible until resolved.</div></div>
+    <div class="payout-heading"><div><div class="payout-title" id="payout-dialog-title">Activation &amp; payout action queue</div><div class="payout-subtitle">Payment claims awaiting review and referral payouts that need action. Use Active stores or Approaching to check referral progress.</div></div>
       <div style="display:flex;gap:7px;align-items:center"><button id="payout-refresh-btn" class="btn btn-muted" type="button">Refresh queue</button><button id="payout-close-btn" type="button" aria-label="Close referral payout queue" title="Close queue">×</button></div>
     </div>
     <section id="activation-attention" aria-label="Activation waiting list" hidden><div class="activation-attention-heading"><span>Activation waiting list</span><span id="activation-count">0</span></div><div id="activation-list"></div></section>
@@ -954,7 +956,7 @@
       if (view === 'approaching') return isActive && !outstanding && v.eligibleCount >= 7 && v.eligibleCount <= 9;
       if (view === 'history') return !outstanding && (!isActive || Boolean(v.lastBatch) || v.paidCount > 0);
       if (view === 'all') return true;
-      return outstanding || (isActive && (v.ready || v.eligibleCount >= 7));
+      return outstanding || (isActive && (v.ready || v.eligibleCount >= 10));
     }).sort(function(a,b) {
       function rank(v) {
         // Never hide an existing payout obligation behind store-status sorting.
@@ -983,7 +985,7 @@
       return;
     }
     if (!rows.length) {
-      list.innerHTML = '<div class="payout-empty">No earned referrals or payout history match this search yet.</div>';
+      list.innerHTML = '<div class="payout-empty">' + (view === 'priority' ? 'No referral payouts need action right now. Use Active stores or Approaching to check progress.' : 'No payout records match this search yet.') + '</div>';
       return;
     }
 
@@ -1204,16 +1206,20 @@
     list.innerHTML='';
     var search=(document.getElementById('account-search').value||'').trim().toLowerCase();
     var pending=_vendors.filter(function(v){
-      return !v.is_active&&!v.is_founder&&!v.subscription_expires&&
+      var claimStatus=String((v.payment_claim||{}).status||'').toLowerCase();
+      return (claimStatus==='pending'||claimStatus==='rejected')&&!v.is_active&&!v.is_founder&&!v.subscription_expires&&
         [v.business_name,v.name,v.email,v.phone_number,v.id].join(' ').toLowerCase().indexOf(search)!==-1;
     });
-    count.textContent=String(pending.length);
     if(!_paymentClaimsAvailable){
+      count.textContent='—';
       var unavailable=document.createElement('div');unavailable.className='payout-empty payout-error';
-      unavailable.textContent='Payment-claim status is unavailable. Waiting accounts are still listed, but verify payment separately before activation.';
+      unavailable.textContent='Payment-claim status is unavailable. No vendor is listed for activation review until claim status can be verified.';
       list.appendChild(unavailable);
+      section.hidden=false;
+      return;
     }
-    section.hidden=pending.length===0&&_paymentClaimsAvailable;
+    count.textContent=String(pending.length);
+    section.hidden=pending.length===0;
     pending.forEach(function(v){
       var row=document.createElement('div');row.className='activation-row';
       var info=document.createElement('div');info.className='activation-row-info';
@@ -1230,9 +1236,22 @@
       var review=document.createElement('button');review.type='button';review.className='activation-review';review.textContent='Review vendor';
       review.addEventListener('click',function(){
         document.getElementById('status-filter').value='pending-activation';
-        closeFilterPopover();applyFilters();closePayoutQueue();
-        var listEl=document.getElementById('vendor-list');
-        listEl.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});
+        document.getElementById('account-search').value=v.email||v.id;
+        document.getElementById('created-from').value='';
+        document.getElementById('created-to').value='';
+        closeFilterPopover();
+        applyFilters();
+        closePayoutQueue();
+        window.requestAnimationFrame(function(){
+          var cards=Array.from(document.querySelectorAll('#vendor-list .vendor-card'));
+          var card=cards.find(function(candidate){return candidate.dataset.id===v.id;});
+          if(!card){toast('Could not locate this vendor in the account list. Refresh and try again.','error');return;}
+          card.classList.add('review-target');
+          card.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'center'});
+          var activate=card.querySelector('[data-action="activate"]');
+          if(activate){try{activate.focus({preventScroll:true});}catch(_){activate.focus();}}
+          window.setTimeout(function(){card.classList.remove('review-target');},3000);
+        });
       });
       row.appendChild(info);row.appendChild(review);list.appendChild(row);
     });
@@ -1241,9 +1260,12 @@
   function updateAttentionBadge(){
     var badge=document.getElementById('attention-count'),button=document.getElementById('payout-open-btn');
     if(!_vendorsLoaded||!_paymentClaimsAvailable||!_payoutDataAvailable||_payoutDataError){badge.textContent='!';badge.hidden=false;button.setAttribute('aria-label','Open referral queue; attention count unavailable, refresh to retry');return;}
-    var activation=_vendors.filter(function(v){return !v.is_active&&!v.is_founder&&!v.subscription_expires;}).length;
+    var activation=_vendors.filter(function(v){
+      var claimStatus=String((v.payment_claim||{}).status||'').toLowerCase();
+      return (claimStatus==='pending'||claimStatus==='rejected')&&!v.is_active&&!v.is_founder&&!v.subscription_expires;
+    }).length;
     var payouts=(_payoutData.batches||[]).filter(function(b){return b.status==='pending'||b.status==='details_requested';}).length,total=activation+payouts;
-    badge.textContent=total>99?'99+':String(total);badge.hidden=total===0;button.setAttribute('aria-label','Open referral queue'+(total?'; '+total+' items need attention':'; no pending activation or payout requests'));
+    badge.textContent=total>99?'99+':String(total);badge.hidden=total===0;button.setAttribute('aria-label','Open action queue'+(total?'; '+total+' items need attention':'; no activation claims or payout requests need action'));
   }
   function openPayoutQueue(){
     _queueReturnFocus=document.activeElement;
