@@ -6844,7 +6844,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         _body.replaceChildren();
         const note = document.createElement('div');
         note.style.cssText = 'font-size:13px;line-height:1.55;color:' +
-          (kind === 'success' ? 'var(--accent-emerald)' : kind === 'error' ? 'var(--accent-red)' : 'var(--text-muted)') + ';';
+          (kind === 'success' ? 'var(--accent-emerald)' : kind === 'error' ? 'var(--danger)' : 'var(--text-muted)') + ';';
         note.textContent = message;
         _body.appendChild(note);
       }
