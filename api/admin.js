@@ -396,7 +396,7 @@ module.exports = async function handler(req, res) {
           if (referrerId && referrerId.toLowerCase() !== vendorId.toLowerCase()) {
             const updateRes = await sbFetch('/rest/v1/profiles?id=eq.' + encodeURIComponent(vendorId) + '&referred_by=is.null', {
               method: 'PATCH',
-              body: JSON.stringify({ referred_by: referrerId }),
+              body: JSON.stringify({ referred_by: referrerId, referral_source: 'signup_metadata', referral_attributed_at: new Date().toISOString() }),
             });
             if (!updateRes.ok) {
               const errText = await updateRes.text().catch(() => '');
