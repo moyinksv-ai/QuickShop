@@ -6339,6 +6339,14 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
           <div id="activityLogArea"></div>
         </div>
 
+        <!-- ── Activation & Payment ─────────────────────────────────── -->
+        <div>
+          <div class="qs-s-section-title">Activation &amp; Payment</div>
+          <div class="qs-s-section" id="qs-activation-payment-section">
+            <div id="qs-activation-payment-body" style="padding:16px;color:var(--text-muted);font-size:13px;">Checking activation status…</div>
+          </div>
+        </div>
+
         <!-- ── Referral Programme ──────────────────────────────────── -->
         <div>
           <div class="qs-s-section-title">Referral Programme</div>
@@ -6807,6 +6815,117 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
 
     // Render categories into the store drawer slot
     renderCategoryEditor();
+
+    // ── Activation payment claim — server-verified, never self-activates ───
+    (async function renderActivationPaymentStatus() {
+      const _u = getUser();
+      const _sb = getClient();
+      const _body = settingsPanel.querySelector('#qs-activation-payment-body');
+      if (!_u || !_sb || !_body) return;
+
+      function makeClaimRequestId() {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+          return window.crypto.randomUUID();
+        }
+        const bytes = new Uint8Array(16);
+        if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+          window.crypto.getRandomValues(bytes);
+        } else {
+          for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+        }
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+        return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' +
+          hex.slice(16, 20) + '-' + hex.slice(20);
+      }
+
+      function showStatus(message, kind) {
+        _body.replaceChildren();
+        const note = document.createElement('div');
+        note.style.cssText = 'font-size:13px;line-height:1.55;color:' +
+          (kind === 'success' ? 'var(--accent-emerald)' : kind === 'error' ? 'var(--accent-red)' : 'var(--text-muted)') + ';';
+        note.textContent = message;
+        _body.appendChild(note);
+      }
+
+      function addClaimButton(label, disabled) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'save-btn';
+        button.style.cssText = 'width:100%;margin-top:12px;padding:12px;border-radius:12px;font-weight:750;';
+        button.textContent = label;
+        button.disabled = !!disabled;
+        _body.appendChild(button);
+        return button;
+      }
+
+      try {
+        const [profileResult, claimsResult] = await Promise.all([
+          _sb.rpc('qs_get_my_activation_status_v2'),
+          _sb.rpc('qs_get_my_payment_claims_v2')
+        ]);
+        if (profileResult.error) throw profileResult.error;
+        if (claimsResult.error) throw claimsResult.error;
+        const profileRows = Array.isArray(profileResult.data) ? profileResult.data : [];
+        const profile = profileRows[0] || {};
+        const claims = Array.isArray(claimsResult.data) ? claimsResult.data : [];
+        claims.sort(function (a, b) { return new Date(b.claimed_at || 0) - new Date(a.claimed_at || 0); });
+        const latest = claims[0] || null;
+
+        if (profile.is_active || profile.is_founder) {
+          showStatus('Your store is active. No activation payment claim is needed.', 'success');
+          return;
+        }
+
+        if (latest && String(latest.status || '').toLowerCase() === 'pending') {
+          showStatus('Payment claim submitted · Awaiting admin verification. Your store will activate only after the transfer is confirmed.', 'success');
+          const submitted = document.createElement('div');
+          submitted.style.cssText = 'font-size:11px;color:var(--text-muted);margin-top:6px;';
+          submitted.textContent = latest.claimed_at
+            ? 'Submitted ' + new Date(latest.claimed_at).toLocaleString()
+            : 'Your claim is in the review queue.';
+          _body.appendChild(submitted);
+          return;
+        }
+
+        if (latest && String(latest.status || '').toLowerCase() === 'rejected') {
+          showStatus('Your previous payment claim was not approved. If you have completed the transfer, you can submit a new claim for review.', 'error');
+        } else {
+          showStatus('After transferring the ₦1,500 activation fee, submit a claim here. This only notifies QuickShop; it does not activate your store automatically.');
+        }
+
+        const claimButton = addClaimButton('I’ve transferred ₦1,500', false);
+        claimButton.addEventListener('click', async function () {
+          if (claimButton.disabled) return;
+          claimButton.disabled = true;
+          claimButton.textContent = 'Submitting claim…';
+          try {
+            const { data, error } = await _sb.rpc('qs_submit_payment_claim_v2', {
+              p_claim_kind: 'activation',
+              p_client_request_id: makeClaimRequestId()
+            });
+            if (error) throw error;
+            const row = Array.isArray(data) ? data[0] : data;
+            if (!row || !row.id || String(row.status || '').toLowerCase() !== 'pending') {
+              throw new Error('QuickShop did not confirm that the payment claim was saved.');
+            }
+            showStatus('Payment claim submitted · Awaiting admin verification. Your store will activate only after the transfer is confirmed.', 'success');
+            const submitted = document.createElement('div');
+            submitted.style.cssText = 'font-size:11px;color:var(--text-muted);margin-top:6px;';
+            submitted.textContent = 'Submitted ' + new Date(row.claimed_at || Date.now()).toLocaleString();
+            _body.appendChild(submitted);
+          } catch (err) {
+            showStatus('Could not submit the payment claim: ' + String(err && err.message || 'Please try again.'), 'error');
+            const retry = addClaimButton('Try again', false);
+            retry.addEventListener('click', function () { renderActivationPaymentStatus(); });
+          }
+        });
+      } catch (err) {
+        showStatus('Activation status is temporarily unavailable. Refresh Settings and try again. ' +
+          String(err && err.message || ''), 'error');
+      }
+    })();
 
     // ── Referral dashboard — async, non-blocking ──────────────────────────
     // Uses the payout-batch ledger as the source of truth. Reserved referrals
