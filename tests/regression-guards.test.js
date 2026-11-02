@@ -19,6 +19,22 @@ function countMatches(source, regex) {
   return Array.from(source.matchAll(regex)).length;
 }
 
+test('sell and restock modal labels and mode-specific rows are set on every open', () => {
+  const openStart = appSource.indexOf('  function openModalFor(mode, productId) {');
+  const openEnd = appSource.indexOf('  // FIX 3: _modalConfirmLock', openStart);
+  assert.ok(openStart >= 0 && openEnd > openStart, 'openModalFor must remain a single identifiable modal-state owner');
+  const openModalSource = appSource.slice(openStart, openEnd);
+
+  assert.match(openModalSource, /const isSell = mode === 'sell';/);
+  assert.match(openModalSource, /titleEl\.textContent = isSell \? 'Sell item' : 'Restock';/);
+  assert.match(openModalSource, /confirm\.textContent = isSell \? 'Confirm sale' : 'Confirm restock';/);
+  assert.match(openModalSource, /totalEl\.style\.display = isSell \? '' : 'none';/);
+  assert.match(openModalSource, /if \(isSell\) totalEl\.textContent = 'Total \\u2014 '/);
+  assert.match(openModalSource, /const modalErrorEl = \$\('modalError'\);\s*if \(modalErrorEl\) modalErrorEl\.textContent = '';/);
+  assert.match(openModalSource, /if \(confirm\) confirm\.disabled = isSell;/,
+    'sell must remain disabled until a payment method is selected; restock remains enabled');
+});
+
 test('vendor sign-out supports the Settings button being rendered after startup', () => {
   assert.match(
     appSource,

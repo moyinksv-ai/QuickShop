@@ -1922,7 +1922,10 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     const payLabel = $('modalPayLabel');
     const confirm  = $('modalConfirm');
 
-    if (titleEl) titleEl.textContent = mode === 'sell' ? 'Sell Items' : 'Add Stock';
+    const isSell = mode === 'sell';
+
+    if (titleEl) titleEl.textContent = isSell ? 'Sell item' : 'Restock';
+    if (confirm) confirm.textContent = isSell ? 'Confirm sale' : 'Confirm restock';
 
     if (itemEl) itemEl.textContent = p.name;
 
@@ -1941,10 +1944,12 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     if (qtyEl) qtyEl.value = 1;
 
     if (totalEl) {
-      totalEl.textContent = 'Total \u2014 ' + fmt(window.n(p.price) * 1);
+      totalEl.style.display = isSell ? '' : 'none';
+      if (isSell) totalEl.textContent = 'Total \u2014 ' + fmt(window.n(p.price) * 1);
     }
 
-    const isSell = mode === 'sell';
+    const modalErrorEl = $('modalError');
+    if (modalErrorEl) modalErrorEl.textContent = '';
     if (payRow)   payRow.style.display   = isSell ? 'flex'  : 'none';
     if (payLabel) payLabel.style.display = isSell ? 'block' : 'none';
 
