@@ -4265,7 +4265,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         soon.slice(0, 3).forEach(function(a) {
           _insRow(rc, a.product.name,
             a.daysLeft + ' day' + (a.daysLeft === 1 ? '' : 's') + ' left · ' + a.product.qty + ' in stock',
-            'Order ' + a.suggest, '#f59e0b',
+            'Restock ' + a.suggest, '#f59e0b',
             { action: 'restock', productId: a.product.id, qty: String(a.suggest) });
         });
       }

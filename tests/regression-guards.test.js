@@ -19,6 +19,14 @@ function countMatches(source, regex) {
   return Array.from(source.matchAll(regex)).length;
 }
 
+test('restock actions use one consistent verb', () => {
+  assert.match(appSource, /'Restock ' \+ a\.suggest, '#ef4444'/);
+  assert.match(appSource, /'Restock ' \+ a\.suggest, '#f59e0b'/);
+  assert.doesNotMatch(appSource, /'Order ' \+ a\.suggest/);
+  assert.doesNotMatch(indexHtml, /Whatsapp catalogue sharing/);
+});
+
+
 test('sell and restock modal labels and mode-specific rows are set on every open', () => {
   const openStart = appSource.indexOf('  function openModalFor(mode, productId) {');
   const openEnd = appSource.indexOf('  // FIX 3: _modalConfirmLock', openStart);
