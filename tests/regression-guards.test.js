@@ -593,7 +593,7 @@ test('Add Product draft recovery is vendor-scoped, local-only, and never queues 
   assert.match(source, /localStorage\.setItem\(key, JSON\.stringify\(\{ version: 1, savedAt: Date\.now\(\), fields \}\)\)/);
   assert.match(source, /function restoreAddProductDraft/);
   assert.match(source, /removeAddProductDraft\(\);[\s\S]*?clearAddForm\(\)/);
-  assert.match(source, /if \(!getEditingProductId\(\)\) saveAddProductDraft\(\)/);
+  assert.match(source, /const draftSaved = !getEditingProductId\(\) && saveAddProductDraft\(\);/);
   assert.match(source, /scheduleAddProductDraftSave\(\)/);
   assert.match(styleSource, /\.add-product-draft-prompt/);
 });
