@@ -7329,17 +7329,26 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
   function initAppUI() {
     try {
       renderChips(); renderProducts(); renderInventory(); renderDashboard(); renderNotes();
-      if (!document.querySelector('.panel.active')) {
-        // Restore the last active view from sessionStorage so a refresh
-        // lands the vendor on the same panel they were on.
-        // Fall back to 'home' if nothing is stored or the stored value is invalid.
+      {
+        // Restore the last active view from sessionStorage even when the HTML
+        // shell already marks Home as active. The static Home class is only the
+        // safe first-paint fallback; it must not override a vendor's persisted
+        // panel on refresh.
         const _TAB_VALID = ['home', 'inventory', 'reports', 'notes', 'settings'];
         let restoredView = 'home';
         try {
           const saved = sessionStorage.getItem('qs_active_view');
           if (saved && _TAB_VALID.includes(saved)) restoredView = saved;
         } catch(_) {}
-        setActiveView(restoredView, false);
+
+        const activePanel = document.querySelector('.panel.active');
+        const activeView = activePanel ? String(activePanel.id || '').replace(/Panel$/, '') : '';
+        if (activeView !== restoredView) {
+          setActiveView(restoredView, false);
+        } else {
+          _prevViewName = restoredView;
+        }
+
         // Seed the history stack with the restored view so the back button
         // has at least one entry to pop before trying to exit.
         try { history.replaceState({ qsView: restoredView }, ''); } catch(_) {}
@@ -7434,8 +7443,8 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       return;
     }
 
-    const addFormOpen = document.getElementById('addProductForm') &&
-                        document.getElementById('addProductForm').style.display !== 'none';
+    const addFormOpen = document.getElementById('addProductWorkspace') &&
+                        document.getElementById('addProductWorkspace').style.display !== 'none';
     if (addFormOpen) {
       hideAddForm();
       try { history.pushState({ qsView: _prevViewName || 'home' }, ''); } catch(_) {}
