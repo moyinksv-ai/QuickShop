@@ -566,6 +566,24 @@ test('Add/Edit Product uses a dedicated full-screen workspace and preserves the 
 });
 
 
+test('Add Product Back saves the draft, confirms discard, and app shell intercepts workspace Back', () => {
+  const source = fs.readFileSync(path.join(root, 'inventory.js'), 'utf8');
+  const appSourceCurrent = fs.readFileSync(path.join(root, 'appss.js'), 'utf8');
+  assert.match(source, /const draftSaved = !getEditingProductId\(\) && saveAddProductDraft\(\);/);
+  assert.match(source, /Your progress was saved\. You can continue this draft later\./);
+  assert.match(source, /const confirmed = await app\(\)\.showConfirm\(\{/);
+  assert.match(source, /removeAddProductDraft\(\);[\s\S]*?clearAddForm\(\);/);
+  assert.match(appSourceCurrent, /document\.getElementById\('addProductWorkspace'\)/);
+  assert.doesNotMatch(appSourceCurrent, /document\.getElementById\('addProductForm'\)/);
+});
+
+test('Add Product refresh restores the persisted vendor panel instead of trusting the static Home panel', () => {
+  const appSourceCurrent = fs.readFileSync(path.join(root, 'appss.js'), 'utf8');
+  assert.match(appSourceCurrent, /const activePanel = document\.querySelector\('\.panel\.active'\);/);
+  assert.match(appSourceCurrent, /if \(activeView !== restoredView\) \{\s*setActiveView\(restoredView, false\);/);
+  assert.match(appSourceCurrent, /sessionStorage\.getItem\('qs_active_view'\)/);
+});
+
 test('Add Product draft recovery is vendor-scoped, local-only, and never queues an unsaved product', () => {
   assert.match(indexHtml, /id="addProductDraftPrompt"/);
   assert.match(indexHtml, /id="resumeAddProductDraftBtn"/);
