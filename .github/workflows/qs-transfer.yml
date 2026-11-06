@@ -1,0 +1,34 @@
+name: Publish QuickShop local branch changes
+
+on:
+  push:
+    branches:
+      - design/quickshop-ui-refinement
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply verified local patch
+        shell: bash
+        run: |
+          set -e
+          git apply --check .transfer/qs.patch
+          git apply --index .transfer/qs.patch
+          rm -f .transfer/qs.patch .github/workflows/qs-transfer.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --cached --quiet; then
+            echo "No changes to publish."
+            exit 0
+          fi
+          git commit -m "WP10: publish local branch changes"
+          git push origin HEAD:${GITHUB_REF_NAME}

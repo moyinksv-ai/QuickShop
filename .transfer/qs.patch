@@ -1,0 +1,18 @@
+diff --git a/appss.js b/appss.js
+index 713d4b8..34b3040 100644
+--- a/appss.js
++++ b/appss.js
+@@ -178 +178 @@ function initApp() {
+-    success: { icon: 'âœ“', accent: '#10b981', bg: '#052e16', border: 'rgba(16,185,129,0.4)',  text: '#6ee7b7' },
++    success: { icon: 'âœ“', accent: 'var(--brand-text)', bg: 'var(--bg-glass)', border: 'var(--border-glass)', text: 'var(--text-primary)' },
+@@ -181 +181 @@ function initApp() {
+-    info:    { icon: 'â„¹', accent: '#818cf8', bg: '#0d0d1f', border: 'rgba(99,102,241,0.4)', text: '#c7d2fe' },
++    info:    { icon: 'â„¹', accent: 'var(--brand-text)', bg: 'var(--bg-glass)', border: 'var(--border-glass)', text: 'var(--brand-text)' },
+@@ -363 +363 @@ function initApp() {
+-    spinner.style.cssText = `width:30px;height:30px;border:3px solid rgba(16,185,129,0.2);border-top-color:var(--accent-emerald);border-radius:50%;`;
++    spinner.style.cssText = `width:30px;height:30px;border:3px solid var(--border-glass);border-top-color:var(--brand-text);border-radius:50%;`;
+@@ -651 +651 @@ function handleTouchEnd() {
+-      okBtn.style.background = okDanger ? 'var(--danger)' : 'var(--accent-emerald)';
++      okBtn.style.background = okDanger ? 'var(--danger)' : 'var(--brand)';
+@@ -2421 +2421 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
+-      return '<span style="font-size:10px;font-weight:700;color:' + (up ? 'var(--accent-emerald)' : 'var(--danger)') + ';margin-left:4px;">' + (up ? 'â–²' : 'â–¼') + Math.abs(pct) + '%</¶»§q«^
