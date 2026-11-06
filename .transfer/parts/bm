@@ -1,0 +1,26 @@
+er, #catalogList .btn-sell:hover { background: var(--money-fill-hover); transform: translateY(-1px); }
+diff --git a/tests/regression-guards.test.js b/tests/regression-guards.test.js
+index 084de3e..d7aa22e 100644
+--- a/tests/regression-guards.test.js
++++ b/tests/regression-guards.test.js
+@@ -16,0 +17 @@ const marketHtml = fs.readFileSync(path.join(root, 'search.html'), 'utf8');
++const styleSource = fs.readFileSync(path.join(root, 'styless.css'), 'utf8');
+@@ -511,0 +513,69 @@ test('admin action queue includes only actionable payment claims and reviews the
++
++
++test('semantic brand and money tokens exist in both dark and light themes', () => {
++  const lightStart = styleSource.indexOf('[data-theme="light"]');
++  assert.ok(lightStart > 0, 'light theme token block must exist');
++  const darkBlock = styleSource.slice(styleSource.indexOf(':root,'), lightStart);
++  const lightEnd = styleSource.indexOf('\n}', lightStart);
++  assert.ok(lightEnd > lightStart, 'light theme token block must close');
++  const lightBlock = styleSource.slice(lightStart, lightEnd);
++  for (const token of ['brand', 'brand-hover', 'brand-text', 'brand-text-strong', 'money-fill', 'money-fill-hover', 'money-text']) {
++    const pattern = new RegExp('--' + token + '\\s*:');
++    assert.match(darkBlock, pattern, 'dark theme is missing --' + token);
++    assert.match(lightBlock, pattern, 'light theme is missing --' + token);
++  }
++});
++
++test('cyan is not used as a button or component background', () => {
++  const c

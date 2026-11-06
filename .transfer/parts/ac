@@ -1,0 +1,15 @@
+olor = score >= 80 ? '#10b981' : score >= 55 ? '#f59e0b' : '#ef4444';
+-      const scoreBg    = score >= 80 ? 'rgba(16,185,129,0.12)' : score >= 55 ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.12)';
+-      const scoreBorder= score >= 80 ? 'rgba(16,185,129,0.3)'  : score >= 55 ? 'rgba(245,158,11,0.3)'  : 'rgba(239,68,68,0.3)';
++      const scoreColor = score >= 80 ? 'var(--brand-text)' : score >= 55 ? '#f59e0b' : '#ef4444';
++      const scoreBg    = score >= 80 ? 'var(--card-glass)' : score >= 55 ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.12)';
++      const scoreBorder= score >= 80 ? 'var(--border-glass)' : score >= 55 ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.3)';
+@@ -4344 +4344 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
+-      const cl = _insCard('rgba(16,185,129,0.2)', 'rgba(16,185,129,0.05)');
++      const cl = _insCard('var(--accent-primary)', 'var(--card-glass)');
+@@ -4367 +4367 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
+-        ? 'background:linear-gradient(135deg,#7c3aed,#4f46e5);box-shadow:0 6px 20px rgba(124,58,237,0.3);'
++        ? 'background:linear-gradient(135deg,var(--brand),var(--brand-hover));box-shadow:var(--shadow-indigo);'
+@@ -4704 +4704 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
+-        'background:linear-gradient(135deg,var(--accent-primary),var(--accent-primary-hover));',
++        'background:linear-gradient(135deg,var(--brand),var(--brand-hover

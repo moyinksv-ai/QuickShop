@@ -1,0 +1,24 @@
+   <h2 id="addProductWorkspaceTitle">Add product</h2>
++        <p>Enter the product details for your store</p>
++      </div>
++    </div>
++    <div id="addProductDraftPrompt" class="add-product-draft-prompt" style="display:none;" role="status">
++      <div class="add-product-draft-copy">
++        <strong>Unfinished product draft found</strong>
++        <span>Your saved details are still on this device.</span>
++      </div>
++      <div class="add-product-draft-actions">
++        <button id="resumeAddProductDraftBtn" type="button" class="save-btn">Resume draft</button>
++        <button id="discardAddProductDraftBtn" type="button" class="btn-undo">Discard</button>
++      </div>
++    </div>
++    <div id="addProductDraftSaved" class="add-product-draft-saved" style="display:none;" aria-live="polite">Draft saved on this device</div>
++    <div id="addProductWorkspaceContent" class="add-product-workspace-content"></div>
++  </div>
++
+@@ -1278 +1304 @@
+-      <button id="exportAuditLogBtn" class="save-btn" style="background: var(--accent-cyan);">📥 CSV</button>
++      <button id="exportAuditLogBtn" class="save-btn" style="background: var(--brand);">📥 CSV</button>
+@@ -1310 +1336 @@
+-        <div id="barcodeScanLine" style="position:absolute;top:0;left:0;right:0;height:4px;background:rgba(18,183,106,0.8);box-shadow: 0 0 10px rgba(18,183,106,1);animation:scanLine 2s linear infinite;"></div>
++        <div id="barcodeScanLine" style="position:absolute;top:0;left:0;right:0;height:4px;backg

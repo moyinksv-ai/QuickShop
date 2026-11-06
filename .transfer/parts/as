@@ -1,0 +1,37 @@
+e || '').slice(0, 500) : ''; };
++    const imageUrl = id => {
++      const el = $(id); const src = el && el.src ? el.src : '';
++      return /^https?:\/\//i.test(src) && src !== window.location.href ? src : '';
++    };
++    return {
++      invName: value('invName'), invBarcode: value('invBarcode'),
++      invPrice: value('invPrice'), invCost: value('invCost'), invQty: value('invQty'),
++      invCategory: value('invCategory'), invDesc: value('invDesc'),
++      image: imageUrl('invImgPreviewImg'), image2: imageUrl('invImgPreviewImg2')
++    };
++  }
++
++  function saveAddProductDraft() {
++    if (getEditingProductId()) return;
++    const key = addProductDraftKey();
++    if (!key) return;
++    const fields = collectAddProductDraft();
++    const hasContent = Object.entries(fields).some(([k, v]) => k === 'invCategory' ? false : !!v);
++    if (!hasContent) return;
++    try {
++      localStorage.setItem(key, JSON.stringify({ version: 1, savedAt: Date.now(), fields }));
++      const saved = $('addProductDraftSaved');
++      if (saved) {
++        saved.style.display = 'block';
++        if (_draftSavedTimer) clearTimeout(_draftSavedTimer);
++        _draftSavedTimer = setTimeout(() => { saved.style.display = 'none'; }, 2200);
++      }
++    } catch (e) {
++      errlog('Add Product draft save failed', e);
++      toast('Could not save this draft on your device.', 'error');
++    }
++  }
++
++  function scheduleAddProductDraftSave() {
++    if (getEditingProductId()) return;
++    if (_addProductDra

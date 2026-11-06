@@ -15,4 +15,4 @@ index 713d4b8..34b3040 100644
 -      okBtn.style.background = okDanger ? 'var(--danger)' : 'var(--accent-emerald)';
 +      okBtn.style.background = okDanger ? 'var(--danger)' : 'var(--brand)';
 @@ -2421 +2421 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
--      return '<span style="font-size:10px;font-weight:700;color:' + (up ? 'var(--accent-emerald)' : 'var(--danger)') + ';margin-left:4px;">' + (up ? 'â–²' : 'â–¼') + Math.abs(pct) + '%</¶»§q«^
+-      return '<span style="font-size:10px;font-weight:700;color:' + (up ? 'var(--accent-emerald)' : 'var(--danger)') + ';margin-left:4px;">' + (up ? 'â–²' : 'â–¼') + Math.abs(pct) + '%</

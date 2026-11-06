@@ -1,0 +1,26 @@
+-text-muted)') + ';';
+@@ -7061 +7058 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
+-        const availableBalanceStat = statCard('Available balance', '₦' + earningsNgn.toLocaleString('en-NG'), '#10b981');
++        const availableBalanceStat = statCard('Available balance', '₦' + earningsNgn.toLocaleString('en-NG'), 'var(--money-text)');
+@@ -7122 +7119 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
+-            ? 'background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;box-shadow:0 6px 20px rgba(124,58,237,0.3);'
++            ? 'background:var(--money-fill);color:#fff;box-shadow:var(--shadow-emerald);'
+diff --git a/document.md b/document.md
+index ca3a955..63780a3 100644
+--- a/document.md
++++ b/document.md
+@@ -160,0 +161,34 @@ The duplicate-submit guard was set before synchronous field validation. Any inva
++
++
++## Design System Guardrails
++
++These rules govern new and edited UI during the brand/UI refinement. Keep the landing c-token system and app accent-token system separate; align their role values and document the mapping rather than merging the systems.
++
++### Current token mapping
++
++| Landing token | App token | Shared role | Aligned value |
++|---|---|---|---|
++| --c-bg | --bg-obsidian | Main dark surface | #09090b |
++| --c-surface | --bg-glass | Raised surface | #111115 |
++| --c-lift | --card-glass | Card surface | #1c1c22 |
++| --c-accent | --accent-primary | Decorative border/focus only | #6366f1 |

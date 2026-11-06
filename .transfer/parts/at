@@ -1,0 +1,32 @@
+ftTimer) clearTimeout(_addProductDraftTimer);
++    _addProductDraftTimer = setTimeout(saveAddProductDraft, 250);
++  }
++
++  function removeAddProductDraft() {
++    const key = addProductDraftKey();
++    if (key) { try { localStorage.removeItem(key); } catch (e) { errlog('Add Product draft remove failed', e); } }
++    const prompt = $('addProductDraftPrompt');
++    const saved = $('addProductDraftSaved');
++    if (prompt) prompt.style.display = 'none';
++    if (saved) saved.style.display = 'none';
++  }
++
++  function restoreAddProductDraft(draft) {
++    if (!draft || !draft.fields || getEditingProductId()) return;
++    const fields = draft.fields;
++    ['invName','invBarcode','invPrice','invCost','invQty','invCategory','invDesc'].forEach(id => {
++      const el = $(id); if (el && typeof fields[id] === 'string') el.value = fields[id].slice(0, 500);
++    });
++    if (fields.image && /^https?:\/\//i.test(fields.image)) showImageInSlot(fields.image, 'img1');
++    if (fields.image2 && /^https?:\/\//i.test(fields.image2)) showImageInSlot(fields.image2, 'img2');
++    const prompt = $('addProductDraftPrompt');
++    if (prompt) prompt.style.display = 'none';
++    scheduleAddProductDraftSave();
++    toast('Draft restored. Continue where you left off.', 'success');
++  }
++
++  function initAddProductDraftControls() {
++    const form = $('addForm');
++    if (form && !form.dataset.draftBound) {
++      form.dataset.draftBound = '1';
++      form.addEventListener('input', scheduleAddProductDraftS

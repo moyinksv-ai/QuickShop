@@ -1,0 +1,29 @@
+h resolved (unverified)
+-        background: rgba(99,102,241,0.12);
+-        color: var(--accent-primary);
++        background: var(--brand-glow);
++        color: var(--brand-text);
+@@ -5738 +5735 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
+-        color: var(--accent-primary);
++        color: var(--brand-text);
+@@ -5801,2 +5798,2 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
+-        border-color: var(--accent-primary);
+-        box-shadow: 0 0 0 3px rgba(99,102,241,0.14);
++        border-color: var(--brand-text);
++        box-shadow: 0 0 0 3px var(--brand-glow);
+@@ -5812,2 +5809,2 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
+-        background: rgba(16,185,129,0.12);
+-        border: 1px solid rgba(16,185,129,0.3);
++        background: var(--brand);
++        border: 1px solid var(--accent-primary);
+@@ -5818 +5815 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
+-        color: #10b981;
++        color: #fff;
+@@ -5824 +5821 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
+-        background: rgba(16,185,129,0.22);
++        background: var(--brand-hover);
+@@ -5913 +5910 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
+-        background: var(--accent-primary);
++        background: var(--brand);
+@@ -5940 +5937 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
+-        ba

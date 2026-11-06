@@ -1,0 +1,14 @@
+e"] { color: var(--text-secondary); padding: 7px; }
+-input[type="file"]::file-selector-button { background: var(--accent-primary); color: #fff; border: none; padding: 6px 11px; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; margin-right: 9px; transition: var(--transition); font-size: 13px; }
+-input[type="file"]::file-selector-button:hover { background: var(--accent-primary-hover); }
++input[type="file"]::file-selector-button { background: var(--brand); color: #fff; border: none; padding: 6px 11px; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; margin-right: 9px; transition: var(--transition); font-size: 13px; }
++input[type="file"]::file-selector-button:hover { background: var(--brand-hover); }
+@@ -1302,6 +1340,6 @@ input[type="file"]::file-selector-button:hover { background: var(--accent-primar
+-#primaryScanBtn          { background: var(--accent-cyan) !important; }
+-#primaryScanBtn:hover    { background: #0891b2 !important; transform: translateY(-1px); }
+-#exportReport, #exportCurrentReport, #exportAuditLogBtn { background: var(--accent-cyan); }
+-#exportReport:hover, #exportCurrentReport:hover, #exportAuditLogBtn:hover { background: #0891b2; transform: translateY(-1px); }
+-#smartModalRestockBtn    { background: var(--accent-cyan) !important; }
+-#smartModalRestockBtn:hover { background: #0891b2 !important; transform: translateY(-1px); }
++#primaryScanBtn          { background: var(--brand) !important; }
++#primaryScanBtn:hover    { backg

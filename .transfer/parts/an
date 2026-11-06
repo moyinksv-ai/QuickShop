@@ -1,0 +1,33 @@
+-muted:   rgba(236,236,241,0.68);
++      --c-dim:     rgba(236,236,241,0.55);
++      --c-accent:  #6366f1; /* decorative border/accent only */
++      --c-green:   #4f46e5; /* legacy landing brand-fill role */
++      --c-green-d: #818cf8; /* legacy landing brand-text role */
+@@ -259,2 +259,2 @@
+-      background: rgba(74,222,128,0.08);
+-      border: 1px solid rgba(74,222,128,0.20);
++      background: var(--c-lift);
++      border: 1px solid var(--c-border);
+@@ -401 +401 @@
+-      text-transform: uppercase; color: var(--c-accent);
++      text-transform: uppercase; color: var(--c-green-d);
+@@ -427 +427 @@
+-      color: var(--c-accent); padding-top: 3px;
++      color: var(--c-green-d); padding-top: 3px;
+@@ -504 +504 @@
+-      flex-shrink: 0; margin-top: 2px; font-size: 9px; color: #000;
++      flex-shrink: 0; margin-top: 2px; font-size: 9px; color: #fff;
+@@ -518 +518 @@
+-      border-color: rgba(99,102,241,0.35);
++      border-color: var(--c-accent);
+@@ -531 +531 @@
+-    #qs-landing .ql-pill-pro { background: rgba(99,102,241,0.15); color: #a5b4fc; }
++    #qs-landing .ql-pill-pro { background: var(--c-lift); color: var(--c-green-d); }
+@@ -553 +553 @@
+-    #qs-landing .ql-pf-emerald { color: var(--c-green); flex-shrink: 0; font-size: 11px; }
++    #qs-landing .ql-pf-emerald { color: var(--c-green-d); flex-shrink: 0; font-size: 11px; }
+@@ -567 +567 @@
+-      background: var(--c-accent); color: #fff;
++      background: var(--c-green); color: #fff;
+@@ -1088,2 +1088,2 @@
+-      <button 

@@ -1,0 +1,29 @@
+ombined = styleSource + '\n' + indexHtml + '\n' + appSource;
++  for (const line of combined.split('\n')) {
++    if (/background(?:-color)?\s*:/i.test(line)) {
++      assert.doesNotMatch(line, /var\(\s*--accent-cyan\s*\)/, 'cyan background remains: ' + line.trim());
++    }
++  }
++});
++
++
++test('generic success and online states use brand while money balance uses money tokens', () => {
++  assert.match(appSource, /success: \{ icon: '✓', accent: 'var\(--brand-text\)'/);
++  assert.match(appSource, /\.qs-sp-badge\.online \{[\s\S]*?color: var\(--brand-text\)/);
++  assert.match(appSource, /\.qs-save-btn \{[\s\S]*?background: var\(--brand\)/);
++  assert.match(appSource, /Available balance[\s\S]*?var\(--money-text\)/);
++});
++
++test('muted text opacity meets the documented dark and light contrast floors', () => {
++  assert.match(styleSource, /--text-muted:\s*rgba\(244,244,245,0\.56\)/);
++  assert.match(styleSource, /--text-muted:\s*rgba\(9,9,11,0\.60\)/);
++  assert.match(styleSource, /--text-secondary:\s*rgba\(244,244,245,0\.72\)/);
++  assert.match(styleSource, /--text-secondary:\s*rgba\(9,9,11,0\.72\)/);
++});
++
++
++test('Add/Edit Product uses a dedicated full-screen workspace and preserves the shared form', () => {
++  assert.match(indexHtml, /id="addFormMount"/);
++  assert.match(indexHtml, /id="addProductWorkspace" class="full-screen-modal add-product-workspace"/);
++  assert.match(indexHtml, /id="addProductWorkspaceContent"/);
++  assert.match(indexHtml, /id="closeAddProductWorkspaceBtn

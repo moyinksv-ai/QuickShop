@@ -1,0 +1,14 @@
+4 @@ select option { background: var(--bg-glass); color: var(--text-primary); }
+-.save-btn:hover { background: var(--accent-primary-hover); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(99,102,241,0.42); }
++.save-btn:hover { background: var(--brand-hover); transform: translateY(-1px); box-shadow: var(--shadow-indigo); }
+@@ -638 +654 @@ body.keyboard-open .modal { top: 8vh !important; }
+-.modal input:focus { border-color: var(--accent-primary); box-shadow: 0 0 0 3px rgba(99,102,241,0.14); }
++.modal input:focus { border-color: var(--accent-primary); box-shadow: 0 0 0 3px var(--brand-glow); }
+@@ -650,2 +666,2 @@ body.keyboard-open .modal { top: 8vh !important; }
+-#barcodeResult { padding: 10px; background: rgba(16,185,129,0.1); border-radius: var(--radius-sm); margin-bottom: 10px; display: none; border: 1px solid rgba(16,185,129,0.25); }
+-#barcodeResult div:first-child { font-weight: 700; color: var(--accent-emerald); margin-bottom: 3px; }
++#barcodeResult { padding: 10px; background: var(--card-glass); border-radius: var(--radius-sm); margin-bottom: 10px; display: none; border: 1px solid var(--border-glass); }
++#barcodeResult div:first-child { font-weight: 700; color: var(--brand-text); margin-bottom: 3px; }
+@@ -740 +756 @@ canvas { max-width: 100%; height: auto; }
+-.report-range-btn.active { background: var(--accent-primary); color: #fff; border-color: var(--accent-primary); box-shadow: var(--shadow-indigo); }
++.report-range-btn.active { background: var(--brand); col

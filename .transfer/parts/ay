@@ -1,0 +1,36 @@
+2 +72,11 @@
+-  --text-secondary: rgba(9,9,11,0.65);
+-  --text-muted:     rgba(9,9,11,0.42);
++  --text-secondary: rgba(9,9,11,0.72);
++  --text-muted:     rgba(9,9,11,0.60);
++  --brand:                 #4f46e5;
++  --brand-hover:           #4338ca;
++  --brand-text:            #4f46e5;
++  --brand-text-strong:     #3730a3;
++  --brand-glow:             rgba(99,102,241,0.18);
++  --money-fill:            #047857;
++  --money-fill-hover:      #065f46;
++  --money-text:            #047857;
++  --money-tint:            rgba(4,120,87,0.10);
+@@ -65 +84 @@
+-  --muted:          rgba(9,9,11,0.42);
++  --muted:          rgba(9,9,11,0.60);
+@@ -68,0 +88 @@
++  /* Legacy accents: primary is decorative; emerald aliases money; cyan is chart-only. */
+@@ -70,3 +90,3 @@
+-  --accent-primary-hover: #4f46e5;
+-  --accent-emerald:       #059669;
+-  --accent-emerald-hover: #047857;
++  --accent-primary-hover: var(--brand-hover);
++  --accent-emerald:       var(--money-fill);
++  --accent-emerald-hover: var(--money-fill-hover);
+@@ -80,3 +100,3 @@
+-  --shadow-emerald: 0 4px 14px rgba(5,150,105,0.2);
+-  --shadow-emerald-lg: 0 8px 24px rgba(5,150,105,0.28);
+-  --shadow-indigo:  0 4px 14px rgba(99,102,241,0.28);
++  --shadow-emerald: 0 1px 2px rgba(0,0,0,0.08);
++  --shadow-emerald-lg: 0 2px 6px rgba(0,0,0,0.12);
++  --shadow-indigo:  0 1px 2px rgba(0,0,0,0.08);
+@@ -117,3 +137 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { opacity: 0
+-  background-image:
+-    radial-gradient(ellipse 70% 50% at 10

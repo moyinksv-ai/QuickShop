@@ -17,13 +17,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply verified local patch
+      - name: Reassemble and apply verified local patch
         shell: bash
         run: |
           set -e
+          cat .transfer/parts/* > .transfer/qs.patch
           git apply --check .transfer/qs.patch
           git apply --index .transfer/qs.patch
-          rm -f .transfer/qs.patch .github/workflows/qs-transfer.yml
+          rm -rf .transfer
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if git diff --cached --quiet; then

@@ -1,0 +1,16 @@
+                                style="accent-color:var(--brand);width:16px;height:16px;" />
+@@ -6230 +6227 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
+-                                 style="accent-color:var(--accent-primary);width:16px;height:16px;" />
++                                 style="accent-color:var(--brand);width:16px;height:16px;" />
+@@ -6305 +6302 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
+-                style="color:var(--accent-primary);border-color:rgba(99,102,241,0.3);">
++                style="color:var(--brand-text);border-color:var(--accent-primary);">
+@@ -6322 +6319 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
+-                style="color:#10b981;border-color:rgba(16,185,129,0.3);">☁️ Sync</button>
++                style="color:var(--brand-text);border-color:var(--accent-primary);">☁️ Sync</button>
+@@ -6765 +6762 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
+-      flink.style.cssText = 'color:var(--accent-primary);font-weight:600;';
++      flink.style.cssText = 'color:var(--brand-text);font-weight:600;';
+@@ -6852 +6849 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
+-          (kind === 'success' ? 'var(--accent-emerald)' : kind === 'error' ? 'var(--danger)' : 'var(--text-muted)') + ';';
++          (kind === 'success' ? 'var(--money-text)' : kind === 'error' ? 'var(--danger)' : 'var(-

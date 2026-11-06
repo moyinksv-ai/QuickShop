@@ -1,0 +1,13 @@
+type="text"]:focus, #addForm input[type="number"]:focus { border-color: var(--accent-primary); box-shadow: 0 0 0 3px var(--brand-glow); }
+@@ -1256,2 +1294,2 @@ body.keyboard-open .panel { padding-bottom: 16px; }
+-#confirmModalOK { background: var(--accent-primary) !important; }
+-#confirmModalOK:hover { background: var(--accent-primary-hover) !important; transform: translateY(-1px); box-shadow: var(--shadow-indigo); }
++#confirmModalOK { background: var(--brand) !important; }
++#confirmModalOK:hover { background: var(--brand-hover) !important; transform: translateY(-1px); box-shadow: var(--shadow-indigo); }
+@@ -1270 +1308 @@ body.keyboard-open .panel { padding-bottom: 16px; }
+-.insight-qs-logo-wrap { width: 32px; height: 32px; min-width: 32px; border-radius: 9px; background: linear-gradient(135deg, var(--accent-primary), var(--accent-primary-hover)); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
++.insight-qs-logo-wrap { width: 32px; height: 32px; min-width: 32px; border-radius: 9px; background: linear-gradient(135deg, var(--brand), var(--brand-hover)); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+@@ -1292 +1330 @@ body.keyboard-open .panel { padding-bottom: 16px; }
+-.toast.info { background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.3); color: #c7d2fe; }
++.toast.info { background: var(--brand-glow); border-color: var(--accent-primary); color: var(--brand-text); }
+@@ -1296,2 +1334,2 @@ input[type="fil
