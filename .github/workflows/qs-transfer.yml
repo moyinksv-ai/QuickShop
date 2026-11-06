@@ -17,18 +17,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Reassemble and apply verified local patch
+      - name: Restore exact verified local files
         shell: bash
         run: |
           set -e
-          git config core.autocrlf false
-          git reset --hard HEAD
-          cat .transfer/parts/* > .transfer/qs.patch
-          git apply --check .transfer/qs.patch
-          git apply --index .transfer/qs.patch
-          rm -rf .transfer
+          cat .transfer/qsf/* > /tmp/qs-final.tar.xz
+          xz -dc /tmp/qs-final.tar.xz | tar -x -C .
+          rm -rf .transfer /tmp/qs-final.tar.xz
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
           if git diff --cached --quiet; then
             echo "No changes to publish."
             exit 0
