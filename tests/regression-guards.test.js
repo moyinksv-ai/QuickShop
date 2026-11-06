@@ -14,6 +14,7 @@ const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const qsInitSource = fs.readFileSync(path.join(root, 'qs-init.js'), 'utf8');
 const catalogSource = fs.readFileSync(path.join(root, 'catalog.js'), 'utf8');
 const marketHtml = fs.readFileSync(path.join(root, 'search.html'), 'utf8');
+const styleSource = fs.readFileSync(path.join(root, 'styless.css'), 'utf8');
 
 function countMatches(source, regex) {
   return Array.from(source.matchAll(regex)).length;
@@ -508,4 +509,73 @@ test('admin action queue includes only actionable payment claims and reviews the
   assert.doesNotMatch(adminHtml, /#payout-list\{overflow:auto/);
   assert.match(adminHtml, /return outstanding \|\| \(isActive && \(v\.ready \|\| v\.eligibleCount >= 10\)\)/);
   assert.match(adminHtml, /Open action queue/);
+});
+
+
+test('semantic brand and money tokens exist in both dark and light themes', () => {
+  const lightStart = styleSource.indexOf('[data-theme="light"]');
+  assert.ok(lightStart > 0, 'light theme token block must exist');
+  const darkBlock = styleSource.slice(styleSource.indexOf(':root,'), lightStart);
+  const lightEnd = styleSource.indexOf('\n}', lightStart);
+  assert.ok(lightEnd > lightStart, 'light theme token block must close');
+  const lightBlock = styleSource.slice(lightStart, lightEnd);
+  for (const token of ['brand', 'brand-hover', 'brand-text', 'brand-text-strong', 'money-fill', 'money-fill-hover', 'money-text']) {
+    const pattern = new RegExp('--' + token + '\\s*:');
+    assert.match(darkBlock, pattern, 'dark theme is missing --' + token);
+    assert.match(lightBlock, pattern, 'light theme is missing --' + token);
+  }
+});
+
+test('cyan is not used as a button or component background', () => {
+  const combined = styleSource + '\n' + indexHtml + '\n' + appSource;
+  for (const line of combined.split('\n')) {
+    if (/background(?:-color)?\s*:/i.test(line)) {
+      assert.doesNotMatch(line, /var\(\s*--accent-cyan\s*\)/, 'cyan background remains: ' + line.trim());
+    }
+  }
+});
+
+
+test('generic success and online states use brand while money balance uses money tokens', () => {
+  assert.match(appSource, /success: \{ icon: '✓', accent: 'var\(--brand-text\)'/);
+  assert.match(appSource, /\.qs-sp-badge\.online \{[\s\S]*?color: var\(--brand-text\)/);
+  assert.match(appSource, /\.qs-save-btn \{[\s\S]*?background: var\(--brand\)/);
+  assert.match(appSource, /Available balance[\s\S]*?var\(--money-text\)/);
+});
+
+test('muted text opacity meets the documented dark and light contrast floors', () => {
+  assert.match(styleSource, /--text-muted:\s*rgba\(244,244,245,0\.56\)/);
+  assert.match(styleSource, /--text-muted:\s*rgba\(9,9,11,0\.60\)/);
+  assert.match(styleSource, /--text-secondary:\s*rgba\(244,244,245,0\.72\)/);
+  assert.match(styleSource, /--text-secondary:\s*rgba\(9,9,11,0\.72\)/);
+});
+
+
+test('Add/Edit Product uses a dedicated full-screen workspace and preserves the shared form', () => {
+  assert.match(indexHtml, /id="addFormMount"/);
+  assert.match(indexHtml, /id="addProductWorkspace" class="full-screen-modal add-product-workspace"/);
+  assert.match(indexHtml, /id="addProductWorkspaceContent"/);
+  assert.match(indexHtml, /id="closeAddProductWorkspaceBtn"[^>]*aria-label="Back to Inventory"/);
+  for (const id of ['invId','invName','invBarcode','invPrice','invCost','invQty','invCategory','invDesc','invImg','invImg2','invImgBoth','addProductBtn','cancelProductBtn']) {
+    assert.match(indexHtml, new RegExp('id="' + id + '"'), 'shared form field missing: ' + id);
+  }
+  const inventorySource = fs.readFileSync(path.join(root, 'inventory.js'), 'utf8');
+  assert.match(inventorySource, /content\.appendChild\(addForm\)/);
+  assert.match(inventorySource, /mount\.appendChild\(addForm\)/);
+  assert.match(styleSource, /\.add-product-workspace-content/);
+});
+
+
+test('Add Product draft recovery is vendor-scoped, local-only, and never queues an unsaved product', () => {
+  assert.match(indexHtml, /id="addProductDraftPrompt"/);
+  assert.match(indexHtml, /id="resumeAddProductDraftBtn"/);
+  assert.match(indexHtml, /id="discardAddProductDraftBtn"/);
+  const source = fs.readFileSync(path.join(root, 'inventory.js'), 'utf8');
+  assert.match(source, /ADD_PRODUCT_DRAFT_PREFIX \+ u\.id/);
+  assert.match(source, /localStorage\.setItem\(key, JSON\.stringify\(\{ version: 1, savedAt: Date\.now\(\), fields \}\)\)/);
+  assert.match(source, /function restoreAddProductDraft/);
+  assert.match(source, /removeAddProductDraft\(\);[\s\S]*?clearAddForm\(\)/);
+  assert.match(source, /if \(!getEditingProductId\(\)\) saveAddProductDraft\(\)/);
+  assert.match(source, /scheduleAddProductDraftSave\(\)/);
+  assert.match(styleSource, /\.add-product-draft-prompt/);
 });

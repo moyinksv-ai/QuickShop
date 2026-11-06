@@ -158,3 +158,37 @@ The duplicate-submit guard was set before synchronous field validation. Any inva
 - Set the in-flight guard immediately before asynchronous work and always release it in `finally`.
 - Keep regression assertions that invalid name, email, and password-confirmation paths occur before the guard is set.
 
+
+
+## Design System Guardrails
+
+These rules govern new and edited UI during the brand/UI refinement. Keep the landing c-token system and app accent-token system separate; align their role values and document the mapping rather than merging the systems.
+
+### Current token mapping
+
+| Landing token | App token | Shared role | Aligned value |
+|---|---|---|---|
+| --c-bg | --bg-obsidian | Main dark surface | #09090b |
+| --c-surface | --bg-glass | Raised surface | #111115 |
+| --c-lift | --card-glass | Card surface | #1c1c22 |
+| --c-accent | --accent-primary | Decorative border/focus only | #6366f1 |
+| --c-green | --brand | Brand fill | #4f46e5 |
+| --c-green-d | --brand-text | Brand text (dark / light) | #818cf8 / #4f46e5 |
+| — | --money-fill | Actual payment/revenue action fill | #047857 |
+| — | --money-text | Actual money value (dark / light) | #34d399 / #047857 |
+
+The legacy c-green names are retained for compatibility but now carry brand roles. The brand-text and money-text values switch for dark/light contrast. App money tokens are separate; green is not used for generic success, online status, save actions, quality scores, or scanning feedback. The Available balance amount and actual payment/sale moments retain money styling.
+
+| # | Rule |
+|---|---|
+| N1 | **Tokens only.** New or edited component CSS uses CSS variables, never raw hex or rgba. Existing raw values stay unless a work package edits that rule. No mass find-and-replace. |
+| N2 | **Label follows mode.** Any element whose meaning changes with state gets its label set in the same function that sets the state. Static HTML text is only a fallback. A shared modal sets on every open: title, primary-button label, visibility of mode-specific rows, and clears stale errors. |
+| N3 | **One verb per action.** Use the approved QuickShop glossary consistently across screens, logs, and action labels. |
+| N4 | **Type floor.** Landing body text at least 14px (target 15). Informational text at least 12px. 11px only for uppercase micro-labels with tracking and 4.5:1 contrast. Nothing below 11px. Form inputs stay 16px or larger. |
+| N5 | **Contrast floor (WCAG AA).** Text under 18px (or 14px bold): 4.5:1. Large text, UI components, icons: 3:1. Compute ratios; do not eyeball. |
+| N6 | **Never block zoom.** No user-scalable=no or maximum-scale=1 in any viewport meta. |
+| N7 | **Touch targets.** Primary and frequent actions at least 44x44 CSS px (40px minimum for secondary), with 8px spacing. |
+| N8 | **Focus.** No outline:none without a visible focus-visible replacement. |
+| N9 | **Copy truth.** Every claim on landing, marketplace, and metadata must be true in the code today. No sales guarantees or hardcoded scarcity counters. |
+| N10 | **One role per color.** Brand, money, warning, danger, and decorative colors each have one semantic role. Green is reserved for actual money/revenue/payment moments. |
+| N11 | **Keep token systems separate.** Do not merge landing c-tokens and app accent-tokens in this pass. Align their values and document the mapping; unification is a separate task. |
