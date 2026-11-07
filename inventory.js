@@ -94,7 +94,7 @@
 
     if (currentScanMode === 'form') {
       const invBarcode = $('invBarcode');
-      if (invBarcode) { invBarcode.value = scannedStr; invBarcode.focus(); }
+      if (invBarcode) { invBarcode.value = scannedStr; invBarcode.focus(); scheduleAddProductDraftSave(); }
       stopScanner();
     } else if (currentScanMode === 'smart') {
       stopScanner();
@@ -118,7 +118,7 @@
         toast('New barcode — fill in the product details.', 'info');
         showAddForm();
         const invBarcode = $('invBarcode');
-        if (invBarcode) { invBarcode.value = scannedText; }
+        if (invBarcode) { invBarcode.value = scannedText; scheduleAddProductDraftSave(); }
         setTimeout(() => { const invName = $('invName'); if (invName) invName.focus(); }, 220);
       }
     }
@@ -316,8 +316,8 @@
     async function handleFileForSlot(file, slot) {
       if (!file) return;
       const url = await uploadImageToSlot(file, slot);
-      if (url) showImageInSlot(url, slot);
-      else { if (slot === 'img1') clearInvImage(); else clearInvImage2(); }
+      if (url) { showImageInSlot(url, slot); scheduleAddProductDraftSave(); }
+      else { if (slot === 'img1') clearInvImage(); else clearInvImage2(); scheduleAddProductDraftSave(); }
     }
 
     const bothBtn      = $('invPhotoBothBtn');
@@ -368,9 +368,9 @@
     }
 
     const clr1 = $('invImgClear');
-    if (clr1) clr1.addEventListener('click', function (e) { e.preventDefault(); clearInvImage(); });
+    if (clr1) clr1.addEventListener('click', function (e) { e.preventDefault(); clearInvImage(); scheduleAddProductDraftSave(); });
     const clr2 = $('invImgClear2');
-    if (clr2) clr2.addEventListener('click', function (e) { e.preventDefault(); clearInvImage2(); });
+    if (clr2) clr2.addEventListener('click', function (e) { e.preventDefault(); clearInvImage2(); scheduleAddProductDraftSave(); });
 
     // ── "Cost & stock" collapsible row toggle ────────────────────────────
     const moreToggle = $('invMoreDetailsToggle');
@@ -424,20 +424,135 @@
     if (cancelProductBtn) cancelProductBtn.style.display      = 'none';
   }
 
+  const ADD_PRODUCT_DRAFT_PREFIX = 'qs_add_product_draft_v1_';
+  let _addProductDraftTimer = null;
+  let _draftSavedTimer = null;
+
+  function addProductDraftKey() {
+    const u = user();
+    return u && u.id ? ADD_PRODUCT_DRAFT_PREFIX + u.id : null;
+  }
+
+  function readAddProductDraft() {
+    const key = addProductDraftKey();
+    if (!key) return null;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const draft = JSON.parse(raw);
+      if (!draft || draft.version !== 1 || !draft.fields || typeof draft.fields !== 'object' || Array.isArray(draft.fields)) return null;
+      return draft;
+    } catch (e) { errlog('Add Product draft read failed', e); return null; }
+  }
+
+  function collectAddProductDraft() {
+    const value = id => { const el = $(id); return el ? String(el.value || '').slice(0, 500) : ''; };
+    const imageUrl = id => {
+      const el = $(id); const src = el && el.src ? el.src : '';
+      return /^https?:\/\//i.test(src) && src !== window.location.href ? src : '';
+    };
+    return {
+      invName: value('invName'), invBarcode: value('invBarcode'),
+      invPrice: value('invPrice'), invCost: value('invCost'), invQty: value('invQty'),
+      invCategory: value('invCategory'), invDesc: value('invDesc'),
+      image: imageUrl('invImgPreviewImg'), image2: imageUrl('invImgPreviewImg2')
+    };
+  }
+
+  function saveAddProductDraft() {
+    if (getEditingProductId()) return false;
+    const key = addProductDraftKey();
+    if (!key) return false;
+    const fields = collectAddProductDraft();
+    const hasContent = Object.entries(fields).some(([k, v]) => k === 'invCategory' ? false : !!v);
+    if (!hasContent) return false;
+    try {
+      localStorage.setItem(key, JSON.stringify({ version: 1, savedAt: Date.now(), fields }));
+      const saved = $('addProductDraftSaved');
+      if (saved) {
+        saved.style.display = 'block';
+        if (_draftSavedTimer) clearTimeout(_draftSavedTimer);
+        _draftSavedTimer = setTimeout(() => { saved.style.display = 'none'; }, 2200);
+      }
+      return true;
+    } catch (e) {
+      errlog('Add Product draft save failed', e);
+      toast('Could not save this draft on your device.', 'error');
+      return false;
+    }
+  }
+
+  function scheduleAddProductDraftSave() {
+    if (getEditingProductId()) return;
+    if (_addProductDraftTimer) clearTimeout(_addProductDraftTimer);
+    _addProductDraftTimer = setTimeout(saveAddProductDraft, 250);
+  }
+
+  function removeAddProductDraft() {
+    const key = addProductDraftKey();
+    if (key) { try { localStorage.removeItem(key); } catch (e) { errlog('Add Product draft remove failed', e); } }
+    const prompt = $('addProductDraftPrompt');
+    const saved = $('addProductDraftSaved');
+    if (prompt) prompt.style.display = 'none';
+    if (saved) saved.style.display = 'none';
+  }
+
+  function restoreAddProductDraft(draft) {
+    if (!draft || !draft.fields || getEditingProductId()) return;
+    const fields = draft.fields;
+    ['invName','invBarcode','invPrice','invCost','invQty','invCategory','invDesc'].forEach(id => {
+      const el = $(id); if (el && typeof fields[id] === 'string') el.value = fields[id].slice(0, 500);
+    });
+    if (fields.image && /^https?:\/\//i.test(fields.image)) showImageInSlot(fields.image, 'img1');
+    if (fields.image2 && /^https?:\/\//i.test(fields.image2)) showImageInSlot(fields.image2, 'img2');
+    const prompt = $('addProductDraftPrompt');
+    if (prompt) prompt.style.display = 'none';
+    scheduleAddProductDraftSave();
+    toast('Draft restored. Continue where you left off.', 'success');
+  }
+
+  function initAddProductDraftControls() {
+    const form = $('addForm');
+    if (form && !form.dataset.draftBound) {
+      form.dataset.draftBound = '1';
+      form.addEventListener('input', scheduleAddProductDraftSave);
+      form.addEventListener('change', scheduleAddProductDraftSave);
+    }
+    const resume = $('resumeAddProductDraftBtn');
+    const discard = $('discardAddProductDraftBtn');
+    if (resume) resume.addEventListener('click', () => restoreAddProductDraft(readAddProductDraft()));
+    if (discard) discard.addEventListener('click', () => {
+      removeAddProductDraft();
+      clearAddForm();
+      toast('Draft discarded.', 'info');
+    });
+  }
+
   function showAddForm() {
     populateCategoryDropdown();
     const addForm = $('addForm');
-    if (!addForm) return;
-    const backdrop = createModalBackdrop('addFormBackdrop', 99998);
-    if (addForm.parentElement !== document.body) document.body.appendChild(addForm);
-    addForm.style.cssText = `position:fixed;left:50%;top:15vh;transform:translateX(-50%);z-index:99999;max-width:720px;width:calc(100% - 32px);max-height:80vh;overflow-y:auto;border-radius:var(--radius);box-shadow:var(--shadow-glass-lg);background:var(--bg-glass);border:1px solid var(--border-glass);padding:52px 20px 20px;display:flex;flex-direction:column;gap:12px;transition:opacity 0.18s ease,transform 0.18s ease;will-change:transform,opacity;`;
-    let closeBtn = addForm.querySelector('.modal-close-x');
-    if (closeBtn) closeBtn.remove();
-    closeBtn = createModalCloseButton(hideAddForm);
-    if (closeBtn) addForm.insertBefore(closeBtn, addForm.firstChild);
-    if (backdrop) { backdrop.style.display = 'flex'; backdrop.onclick = (e) => { if (e.target === backdrop) hideAddForm(); }; }
+    const workspace = $('addProductWorkspace');
+    const content = $('addProductWorkspaceContent');
+    if (!addForm || !workspace || !content) return;
+
+    if (addForm.parentElement !== content) content.appendChild(addForm);
     addForm.style.display = 'flex';
+    addForm.style.opacity = '';
+    addForm.style.transform = '';
+    workspace.style.display = 'flex';
+    workspace.classList.remove('closing');
+    workspace.setAttribute('aria-hidden', 'false');
+    const title = $('addProductWorkspaceTitle');
+    if (title) title.textContent = getEditingProductId() ? 'Edit product' : 'Add product';
+    const draftPrompt = $('addProductDraftPrompt');
+    const draft = !getEditingProductId() ? readAddProductDraft() : null;
+    if (draftPrompt) draftPrompt.style.display = draft ? 'flex' : 'none';
+    const draftSaved = $('addProductDraftSaved');
+    if (draftSaved) draftSaved.style.display = 'none';
+    const backBtn = $('closeAddProductWorkspaceBtn');
+    if (backBtn) backBtn.onclick = hideAddForm;
     document.body.classList.add('modal-open');
+
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const invName = $('invName');
@@ -447,30 +562,32 @@
   }
 
   function hideAddForm() {
+    if (_addProductDraftTimer) { clearTimeout(_addProductDraftTimer); _addProductDraftTimer = null; }
+    const draftWasSaved = !getEditingProductId() && saveAddProductDraft();
+    if (draftWasSaved) toast('Your progress has been saved on this device.', 'success');
     clearAddForm();
-    const addForm  = $('addForm');
-    const backdrop = $('addFormBackdrop');
-    // If neither is visible there's nothing to animate — bail fast.
-    if (!addForm && !backdrop) { document.body.classList.remove('modal-open'); return; }
-    const isVisible = addForm && addForm.style.display !== 'none';
-    if (!isVisible) {
-      if (addForm)  addForm.style.display  = 'none';
-      if (backdrop) backdrop.style.display = 'none';
+    const addForm = $('addForm');
+    const workspace = $('addProductWorkspace');
+    const mount = $('addFormMount');
+    if (!workspace || workspace.style.display === 'none') {
+      if (addForm) addForm.style.display = 'none';
       document.body.classList.remove('modal-open');
       return;
     }
-    // Animate addForm out — scale down + fade, matching the CSS scaleOut timing.
-    // The backdrop has no CSS class so we drive its fade inline.
-    if (addForm) {
-      addForm.style.opacity   = '0';
-      addForm.style.transform = 'translateX(-50%) scale(0.97)';
-    }
-    if (backdrop) backdrop.style.opacity = '0';
+
+    workspace.classList.add('closing');
+    workspace.setAttribute('aria-hidden', 'true');
     setTimeout(() => {
-      if (addForm)  { addForm.style.display  = 'none'; addForm.style.opacity = ''; addForm.style.transform = ''; }
-      if (backdrop) { backdrop.style.display = 'none'; backdrop.style.opacity = ''; }
+      workspace.style.display = 'none';
+      workspace.classList.remove('closing');
+      if (addForm) {
+        addForm.style.display = 'none';
+        addForm.style.opacity = '';
+        addForm.style.transform = '';
+        if (mount && addForm.parentElement !== mount) mount.appendChild(addForm);
+      }
       document.body.classList.remove('modal-open');
-    }, 190);
+    }, 220);
   }
 
   function populateCategoryDropdown() {
@@ -504,6 +621,7 @@
   }
 
   function initAddProductHandler() {
+    initAddProductDraftControls();
     const addProductBtn    = $('addProductBtn');
     const cancelProductBtn = $('cancelProductBtn');
 
@@ -562,7 +680,7 @@
             product = Object.assign({}, _existing, patch);
             syncType = 'updateProduct';
             addActivityLog('Edit', 'Updated product: ' + name);
-            toast('Product updated ✓');
+            toast('Product updated successfully.', 'success');
             hideAddForm();
           } else {
             product = {
@@ -574,7 +692,8 @@
             app().addProduct(product);
             syncType = 'addProduct';
             addActivityLog('Create', 'Created product: ' + name);
-            toast('Product saved! Keep adding product orTap X to cancel.', 'success');
+            toast('Product saved successfully.', 'success');
+            removeAddProductDraft();
             // Persist last-used values so the next add starts pre-filled
             try { localStorage.setItem('qs_last_cost', cost > 0 ? String(cost) : ''); } catch(e) {}
             try { localStorage.setItem('qs_last_qty',  qty  > 0 ? String(qty)  : ''); } catch(e) {}

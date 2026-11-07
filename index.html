@@ -134,17 +134,17 @@
     ─────────────────────────────────────────────────────────────────── */
 
     #qs-landing {
-      --c-bg:      #0a0a0f;
-      --c-surface: #111118;
-      --c-lift:    #18181f;
+      --c-bg:      #09090b;
+      --c-surface: #111115;
+      --c-lift:    #1c1c22;
       --c-border:  rgba(255,255,255,0.08);
       --c-border2: rgba(255,255,255,0.04);
       --c-text:    #ececf1;
-      --c-muted:   rgba(236,236,241,0.44);
-      --c-dim:     rgba(236,236,241,0.22);
-      --c-accent:  #6366f1;
-      --c-green:   #22c55e;
-      --c-green-d: #4ade80;
+      --c-muted:   rgba(236,236,241,0.68);
+      --c-dim:     rgba(236,236,241,0.55);
+      --c-accent:  #6366f1; /* decorative border/accent only */
+      --c-green:   #4f46e5; /* legacy landing brand-fill role */
+      --c-green-d: #818cf8; /* legacy landing brand-text role */
       --nav-h:     60px;
       --px:        clamp(20px, 5vw, 80px);
       background: var(--c-bg);
@@ -256,8 +256,8 @@
       display: inline-flex; align-items: center; gap: 7px;
       font-size: 11px; font-weight: 700; letter-spacing: 1.8px;
       text-transform: uppercase; color: var(--c-green-d);
-      background: rgba(74,222,128,0.08);
-      border: 1px solid rgba(74,222,128,0.20);
+      background: var(--c-lift);
+      border: 1px solid var(--c-border);
       border-radius: 99px;
       padding: 5px 13px;
       margin-bottom: 20px;
@@ -398,7 +398,7 @@
     /* ── Section headings ─────────────────────────────────────────────────── */
     #qs-landing .ql-eyebrow {
       font-size: 11px; font-weight: 700; letter-spacing: 2px;
-      text-transform: uppercase; color: var(--c-accent);
+      text-transform: uppercase; color: var(--c-green-d);
       margin-bottom: 20px; display: block;
     }
     #qs-landing .ql-h2 {
@@ -424,7 +424,7 @@
     }
     #qs-landing .ql-step-num {
       font-size: 11px; font-weight: 800; letter-spacing: 1px;
-      color: var(--c-accent); padding-top: 3px;
+      color: var(--c-green-d); padding-top: 3px;
     }
     #qs-landing .ql-step-connector { display: none; }
     #qs-landing .ql-step-body { }
@@ -501,7 +501,7 @@
       width: 18px; height: 18px; border-radius: 4px;
       background: var(--c-green); display: flex;
       align-items: center; justify-content: center;
-      flex-shrink: 0; margin-top: 2px; font-size: 9px; color: #000;
+      flex-shrink: 0; margin-top: 2px; font-size: 9px; color: #fff;
     }
     #qs-landing .ql-trust-txt { font-size: 14px; color: var(--c-muted); line-height: 1.6; }
     #qs-landing .ql-trust-txt strong { color: var(--c-text); font-weight: 600; }
@@ -515,7 +515,7 @@
     }
     #qs-landing .ql-plan-free { }
     #qs-landing .ql-plan-pro {
-      border-color: rgba(99,102,241,0.35);
+      border-color: var(--c-accent);
       position: relative;
     }
     #qs-landing .ql-plan-pro::before {
@@ -528,7 +528,7 @@
       padding: 3px 10px; border-radius: 4px; margin-bottom: 16px;
     }
     #qs-landing .ql-pill-free { background: var(--c-lift); color: var(--c-dim); }
-    #qs-landing .ql-pill-pro { background: rgba(99,102,241,0.15); color: #a5b4fc; }
+    #qs-landing .ql-pill-pro { background: var(--c-lift); color: var(--c-green-d); }
     #qs-landing .ql-plan-name {
       font-size: 20px; font-weight: 800; color: var(--c-text);
       letter-spacing: -0.5px; margin-bottom: 4px;
@@ -550,7 +550,7 @@
       display: flex; align-items: center; gap: 10px;
       font-size: 13px; color: var(--c-muted);
     }
-    #qs-landing .ql-pf-emerald { color: var(--c-green); flex-shrink: 0; font-size: 11px; }
+    #qs-landing .ql-pf-emerald { color: var(--c-green-d); flex-shrink: 0; font-size: 11px; }
     #qs-landing .ql-pf-indigo { color: #818cf8; flex-shrink: 0; font-size: 11px; }
     #qs-landing .ql-plan-btn {
       width: 100%; padding: 13px; border-radius: 8px;
@@ -564,7 +564,7 @@
     }
     #qs-landing .ql-plan-btn-free:hover { color: var(--c-text); }
     #qs-landing .ql-plan-btn-pro {
-      background: var(--c-accent); color: #fff;
+      background: var(--c-green); color: #fff;
     }
     #qs-landing .ql-plan-btn-pro:hover { opacity: .88; transform: translateY(-1px); }
 
@@ -958,7 +958,7 @@
           <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>Everything in Starter</div>
           <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>6-month reports &amp; trend analysis</div>
           <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>CSV export for all data</div>
-          <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>Whatsapp catalogue sharing</div>
+          <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>WhatsApp catalog sharing</div>
           <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>Barcode scanner support</div>
           <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>Smart stock insights</div>
           <div class="ql-plan-feat"><span class="ql-pf-indigo">✓</span>Priority support</div>
@@ -1085,12 +1085,13 @@
   <div class="sticky-header-wrapper">
     <div style="font-weight:700; font-size: 18px; color: var(--text-primary);">Inventory</div>
     <div style="display:flex; gap: 8px; flex-wrap:wrap;">
-      <button id="primaryScanBtn" class="save-btn" type="button" style="background: var(--accent-cyan);">📷 Scan</button>
-      <button id="csvImportBtn2" class="save-btn" type="button" style="background:var(--accent-indigo, #6366f1);">📥 Import</button>
+      <button id="primaryScanBtn" class="save-btn" type="button" style="background: var(--brand);">📷 Scan</button>
+      <button id="csvImportBtn2" class="save-btn" type="button" style="background:var(--brand);">📥 Import</button>
       <button id="insightBtn" class="save-btn" type="button">💡 Insight</button>
       <button id="toggleAddFormBtn" class="save-btn" type="button">+ Add</button>
     </div>
   </div>
+  <div id="addFormMount">
   <div id="addForm" class="add-card" style="display:none;flex-direction:column;gap:12px;">
     <div class="add-row">
       <input id="invId" type="hidden" />
@@ -1194,6 +1195,7 @@
       <button id="cancelProductBtn" class="btn-undo" style="display:none;">Cancel</button>
     </div>
   </div>
+  </div><!-- /addFormMount -->
   <div id="inventoryInsightView" class="insight-fullscreen" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="inventoryInsightTitle">
     <div class="insight-fullscreen-header">
       <button id="closeInventoryInsightBtn" class="insight-back-btn" aria-label="Close insights">
@@ -1228,7 +1230,7 @@
     <button class="report-range-btn active" data-range="daily">7 Days</button>
     <button class="report-range-btn" data-range="weekly">4 Weeks</button>
     <button class="report-range-btn" data-range="monthly">6 Months</button>
-    <button id="exportReport" class="save-btn" style="background:var(--accent-cyan);">📥 Export CSV</button>
+    <button id="exportReport" class="save-btn" style="background:var(--brand);">📥 Export CSV</button>
   </div>
   <div id="reportBreakdown" style="margin-top:12px;"></div>
 </div>
@@ -1269,13 +1271,37 @@
 <div id="settingsPanel" class="panel">
 </div>
 
+  <div id="addProductWorkspace" class="full-screen-modal add-product-workspace" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="addProductWorkspaceTitle" aria-hidden="true">
+    <div class="full-screen-header add-product-workspace-header">
+      <button id="closeAddProductWorkspaceBtn" class="insight-back-btn" type="button" aria-label="Back to Inventory">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <div class="add-product-workspace-heading">
+        <h2 id="addProductWorkspaceTitle">Add product</h2>
+        <p>Enter the product details for your store</p>
+      </div>
+    </div>
+    <div id="addProductDraftPrompt" class="add-product-draft-prompt" style="display:none;" role="status">
+      <div class="add-product-draft-copy">
+        <strong>Unfinished product draft found</strong>
+        <span>Your saved details are still on this device.</span>
+      </div>
+      <div class="add-product-draft-actions">
+        <button id="resumeAddProductDraftBtn" type="button" class="save-btn">Resume draft</button>
+        <button id="discardAddProductDraftBtn" type="button" class="btn-undo">Discard</button>
+      </div>
+    </div>
+    <div id="addProductDraftSaved" class="add-product-draft-saved" style="display:none;" aria-live="polite">Draft saved on this device</div>
+    <div id="addProductWorkspaceContent" class="add-product-workspace-content"></div>
+  </div>
+
   </div>  <div id="fullAuditLogModal" class="full-screen-modal" style="display:none;">
     <div class="full-screen-header">
       <div style="display:flex; align-items:center; gap:10px;">
         <button id="closeAuditModalBtn" class="btn-undo" style="border:0; padding:0; font-size:24px;">←</button>
         <h2 style="color: var(--text-primary); margin:0; font-size: 18px;">Audit Report</h2>
       </div>
-      <button id="exportAuditLogBtn" class="save-btn" style="background: var(--accent-cyan);">📥 CSV</button>
+      <button id="exportAuditLogBtn" class="save-btn" style="background: var(--brand);">📥 CSV</button>
     </div>
     <div class="small" style="padding: 12px 16px; color: var(--text-muted); background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--border-glass);">
       Full history of all actions performed in this store.
@@ -1307,10 +1333,10 @@
       <h3>Scan Barcode</h3>
       <div style="position:relative;margin:16px 0; border-radius:12px; overflow:hidden; background:#000;">
         <video id="barcodeVideo" style="width:100%; height: 300px; object-fit: cover;"></video>
-        <div id="barcodeScanLine" style="position:absolute;top:0;left:0;right:0;height:4px;background:rgba(18,183,106,0.8);box-shadow: 0 0 10px rgba(18,183,106,1);animation:scanLine 2s linear infinite;"></div>
+        <div id="barcodeScanLine" style="position:absolute;top:0;left:0;right:0;height:4px;background:var(--brand-text);box-shadow:0 0 10px var(--brand-glow);animation:scanLine 2s linear infinite;"></div>
       </div>
-      <div id="barcodeResult" style="padding:12px;background:rgba(16,185,129,0.15);border-radius:8px;margin-bottom:12px;display:none;border:1px solid rgba(16,185,129,0.3);">
-        <div style="font-weight:700;color:var(--accent-emerald);margin-bottom:4px">Barcode Detected:</div>
+      <div id="barcodeResult">
+        <div style="font-weight:700;color:var(--brand-text);margin-bottom:4px">Barcode Detected:</div>
         <div id="barcodeValue" style="font-size:18px;font-weight:700;color:var(--text-primary)"></div>
       </div>
       <div class="actions" style="display:flex;gap:8px;justify-content:flex-end">
@@ -1325,7 +1351,7 @@
       <div id="smartModalStock" class="small" style="font-size: 14px;">X in stock</div>
       <div class="row" style="margin-top:16px; display:flex; flex-direction:column; gap: 10px;">
         <button id="smartModalSellBtn" class="save-btn" style="width:100%;">Sell</button>
-        <button id="smartModalRestockBtn" class="save-btn" style="width:100%; background: var(--accent-cyan);">Restock</button>
+        <button id="smartModalRestockBtn" class="save-btn" style="width:100%; background: var(--brand);">Restock</button>
       </div>
       <div class="actions">
         <button id="smartModalCancel" class="btn-undo" style="margin-top:10px">Cancel</button>

@@ -145,3 +145,33 @@ The original Sign In wiring registered `showAuth` directly as a click listener. 
 - **Activation queue/filter semantics:** Pending activation now includes inactive, non-founder accounts with no subscription expiry whether or not they have submitted a claim. Each row distinguishes `Payment claimed · Awaiting verification`, `Awaiting payment claim`, and rejected/cancelled claim states. The dashboard filter is an anchored fixed-position popover; selecting a filter closes it, active chips remain available to clear filters, outside click/Escape closes it, and it no longer pushes vendor cards down.
 - **Referral attribution:** `/r/<16-hex-code>` redirects to `/?ref=<code>`; the landing app captures the valid code, resolves it with `resolve_referral_code`, and calls `set_my_referrer`. The new database migration writes `referral_source` and `referral_attributed_at` with the immutable `referred_by` assignment and exposes a narrow owner-only activation-status RPC. Admin activation fallback now records its source and timestamp too.
 - **Referral reward timing:** `public.referrals` remains activation-triggered by design. A correctly attributed but inactive account should not yet have a reward row. Admin activation is the step that awards the referral after payment has been verified.
+
+
+## 2026-11-07 — Add Product save feedback hidden behind full-screen workspace
+
+### User-observed regression
+
+The user reported that pressing Save cleared the entered product details but gave no visible confirmation that the product had been saved. The same workspace also contains validation, image-upload, and edit actions that rely on the shared toast system.
+
+### Confirmed source root cause
+
+- The Add Product workspace uses CSS `z-index: 1000000`.
+- The global `appToast` is appended to `document.body` with inline `z-index: 99999`.
+- The save handler did call its success toast, but the workspace was stacked above it. The same ordering hid other toast messages while Add/Edit Product was open.
+- The add flow updates local app state and `addActivityLog()` calls `saveState()`, whose synchronous first step flushes local state to localStorage. The product is then handed to the IndexedDB pending-sync queue; cloud sync is asynchronous. The success toast is therefore a local-save acknowledgement, not proof that Supabase has already completed a remote sync.
+
+### Scoped correction
+
+- Raise the shared toast layer above the highest CSS overlay, not just above the Add Product workspace, so success and error feedback remain visible consistently.
+- Use explicit success styling and clear copy for both product creation and product editing.
+- Add regression guards for toast stacking and both save-success messages.
+- Do not change product creation, validation, image upload, edit, or offline-sync semantics as part of this visibility correction.
+
+### Verification status
+
+Source inspection confirms the stacking mismatch and the save/queue ordering described above. Automated regression and preview deployment checks must be recorded against the resulting commit. The user must still confirm the visible success feedback on the preview. No main-branch or production change is authorized.
+
+
+### CI follow-up — stale draft guard corrected
+
+The first CI run after adding the toast-layering guard also exposed an older assertion in the draft-recovery test. It expected a pre-refactor inline call to `saveAddProductDraft()`; the current implementation correctly performs that save in `hideAddForm()` through the `draftWasSaved` result before clearing the form. The test now asserts the current lifecycle contract instead of requiring the obsolete source pattern. No draft runtime code was changed for this test correction.

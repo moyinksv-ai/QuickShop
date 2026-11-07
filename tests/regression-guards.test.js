@@ -14,10 +14,35 @@ const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const qsInitSource = fs.readFileSync(path.join(root, 'qs-init.js'), 'utf8');
 const catalogSource = fs.readFileSync(path.join(root, 'catalog.js'), 'utf8');
 const marketHtml = fs.readFileSync(path.join(root, 'search.html'), 'utf8');
+const styleSource = fs.readFileSync(path.join(root, 'styless.css'), 'utf8');
 
 function countMatches(source, regex) {
   return Array.from(source.matchAll(regex)).length;
 }
+
+test('restock actions use one consistent verb', () => {
+  assert.match(appSource, /'Restock ' \+ a\.suggest, '#ef4444'/);
+  assert.match(appSource, /'Restock ' \+ a\.suggest, '#f59e0b'/);
+  assert.doesNotMatch(appSource, /'Order ' \+ a\.suggest/);
+  assert.doesNotMatch(indexHtml, /Whatsapp catalogue sharing/);
+});
+
+
+test('sell and restock modal labels and mode-specific rows are set on every open', () => {
+  const openStart = appSource.indexOf('  function openModalFor(mode, productId) {');
+  const openEnd = appSource.indexOf('  // FIX 3: _modalConfirmLock', openStart);
+  assert.ok(openStart >= 0 && openEnd > openStart, 'openModalFor must remain a single identifiable modal-state owner');
+  const openModalSource = appSource.slice(openStart, openEnd);
+
+  assert.match(openModalSource, /const isSell = mode === 'sell';/);
+  assert.match(openModalSource, /titleEl\.textContent = isSell \? 'Sell item' : 'Restock';/);
+  assert.match(openModalSource, /confirm\.textContent = isSell \? 'Confirm sale' : 'Confirm restock';/);
+  assert.match(openModalSource, /totalEl\.style\.display = isSell \? '' : 'none';/);
+  assert.match(openModalSource, /if \(isSell\) totalEl\.textContent = 'Total \\u2014 '/);
+  assert.match(openModalSource, /const modalErrorEl = \$\('modalError'\);\s*if \(modalErrorEl\) modalErrorEl\.textContent = '';/);
+  assert.match(openModalSource, /if \(confirm\) confirm\.disabled = isSell;/,
+    'sell must remain disabled until a payment method is selected; restock remains enabled');
+});
 
 test('vendor sign-out supports the Settings button being rendered after startup', () => {
   assert.match(
@@ -484,4 +509,124 @@ test('admin action queue includes only actionable payment claims and reviews the
   assert.doesNotMatch(adminHtml, /#payout-list\{overflow:auto/);
   assert.match(adminHtml, /return outstanding \|\| \(isActive && \(v\.ready \|\| v\.eligibleCount >= 10\)\)/);
   assert.match(adminHtml, /Open action queue/);
+});
+
+
+test('semantic brand and money tokens exist in both dark and light themes', () => {
+  const lightStart = styleSource.indexOf('[data-theme="light"]');
+  assert.ok(lightStart > 0, 'light theme token block must exist');
+  const darkBlock = styleSource.slice(styleSource.indexOf(':root,'), lightStart);
+  const lightEnd = styleSource.indexOf('\n}', lightStart);
+  assert.ok(lightEnd > lightStart, 'light theme token block must close');
+  const lightBlock = styleSource.slice(lightStart, lightEnd);
+  for (const token of ['brand', 'brand-hover', 'brand-text', 'brand-text-strong', 'money-fill', 'money-fill-hover', 'money-text']) {
+    const pattern = new RegExp('--' + token + '\\s*:');
+    assert.match(darkBlock, pattern, 'dark theme is missing --' + token);
+    assert.match(lightBlock, pattern, 'light theme is missing --' + token);
+  }
+});
+
+test('cyan is not used as a button or component background', () => {
+  const combined = styleSource + '\n' + indexHtml + '\n' + appSource;
+  for (const line of combined.split('\n')) {
+    if (/background(?:-color)?\s*:/i.test(line)) {
+      assert.doesNotMatch(line, /var\(\s*--accent-cyan\s*\)/, 'cyan background remains: ' + line.trim());
+    }
+  }
+});
+
+
+test('generic success and online states use brand while money balance uses money tokens', () => {
+  assert.match(appSource, /success: \{ icon: '✓', accent: 'var\(--brand-text\)'/);
+  assert.match(appSource, /\.qs-sp-badge\.online \{[\s\S]*?color: var\(--brand-text\)/);
+  assert.match(appSource, /\.qs-save-btn \{[\s\S]*?background: var\(--brand\)/);
+  assert.match(appSource, /Available balance[\s\S]*?var\(--money-text\)/);
+});
+
+test('muted text opacity meets the documented dark and light contrast floors', () => {
+  assert.match(styleSource, /--text-muted:\s*rgba\(244,244,245,0\.56\)/);
+  assert.match(styleSource, /--text-muted:\s*rgba\(9,9,11,0\.60\)/);
+  assert.match(styleSource, /--text-secondary:\s*rgba\(244,244,245,0\.72\)/);
+  assert.match(styleSource, /--text-secondary:\s*rgba\(9,9,11,0\.72\)/);
+});
+
+
+test('Add/Edit Product uses a dedicated full-screen workspace and preserves the shared form', () => {
+  assert.match(indexHtml, /id="addFormMount"/);
+  assert.match(indexHtml, /id="addProductWorkspace" class="full-screen-modal add-product-workspace"/);
+  assert.match(indexHtml, /id="addProductWorkspaceContent"/);
+  assert.match(indexHtml, /id="closeAddProductWorkspaceBtn"[^>]*aria-label="Back to Inventory"/);
+  for (const id of ['invId','invName','invBarcode','invPrice','invCost','invQty','invCategory','invDesc','invImg','invImg2','invImgBoth','addProductBtn','cancelProductBtn']) {
+    assert.match(indexHtml, new RegExp('id="' + id + '"'), 'shared form field missing: ' + id);
+  }
+  const inventorySource = fs.readFileSync(path.join(root, 'inventory.js'), 'utf8');
+  assert.match(inventorySource, /content\.appendChild\(addForm\)/);
+  assert.match(inventorySource, /mount\.appendChild\(addForm\)/);
+  assert.match(styleSource, /\.add-product-workspace-content/);
+});
+
+
+test('Add Product draft recovery is vendor-scoped, local-only, and never queues an unsaved product', () => {
+  assert.match(indexHtml, /id="addProductDraftPrompt"/);
+  assert.match(indexHtml, /id="resumeAddProductDraftBtn"/);
+  assert.match(indexHtml, /id="discardAddProductDraftBtn"/);
+  const source = fs.readFileSync(path.join(root, 'inventory.js'), 'utf8');
+  assert.match(source, /ADD_PRODUCT_DRAFT_PREFIX \+ u\.id/);
+  assert.match(source, /localStorage\.setItem\(key, JSON\.stringify\(\{ version: 1, savedAt: Date\.now\(\), fields \}\)\)/);
+  assert.match(source, /function restoreAddProductDraft/);
+  assert.match(source, /removeAddProductDraft\(\);[\s\S]*?clearAddForm\(\)/);
+  const hideStart = source.indexOf('  function hideAddForm() {');
+  const hideEnd = source.indexOf('  function populateCategoryDropdown() {', hideStart);
+  assert.ok(hideStart >= 0 && hideEnd > hideStart, 'hideAddForm must remain a distinct function');
+  const hideSource = source.slice(hideStart, hideEnd);
+  assert.match(hideSource, /const draftWasSaved = !getEditingProductId\(\) && saveAddProductDraft\(\);/,
+    'leaving the workspace must persist a new-product draft before clearing the form');
+  assert.match(source, /scheduleAddProductDraftSave\(\)/);
+  assert.match(styleSource, /\.add-product-draft-prompt/);
+});
+
+test('Add Product workspace title reads edit state through the inventory bridge', () => {
+  const source = fs.readFileSync(path.join(root, 'inventory.js'), 'utf8');
+  const start = source.indexOf('  function showAddForm() {');
+  const end = source.indexOf('  function hideAddForm() {', start);
+  assert.ok(start >= 0 && end > start, 'showAddForm must remain a distinct function');
+  const showAddFormSource = source.slice(start, end);
+  assert.match(showAddFormSource, /getEditingProductId\(\)/,
+    'workspace title and draft visibility must use the inventory bridge getter');
+  assert.doesNotMatch(showAddFormSource, /\beditingProductId\b/,
+    'inventory.js must not reference appss.js private editingProductId state');
+});
+
+test('Add Product Back confirms only a successfully persisted draft', () => {
+  const source = fs.readFileSync(path.join(root, 'inventory.js'), 'utf8');
+  const saveStart = source.indexOf('  function saveAddProductDraft() {');
+  const saveEnd = source.indexOf('  function scheduleAddProductDraftSave() {', saveStart);
+  const hideStart = source.indexOf('  function hideAddForm() {');
+  const hideEnd = source.indexOf('  function populateCategoryDropdown() {', hideStart);
+  assert.ok(saveStart >= 0 && saveEnd > saveStart, 'draft save function must exist');
+  assert.ok(hideStart >= 0 && hideEnd > hideStart, 'draft hide function must exist');
+  const saveSource = source.slice(saveStart, saveEnd);
+  const hideSource = source.slice(hideStart, hideEnd);
+  assert.match(saveSource, /return true;/, 'save must report successful local persistence');
+  assert.match(saveSource, /return false;/, 'save must report unsuccessful or empty persistence');
+  assert.match(hideSource, /const draftWasSaved = !getEditingProductId\(\) && saveAddProductDraft\(\);/);
+  assert.match(hideSource, /if \(draftWasSaved\) toast\('Your progress has been saved on this device\.', 'success'\);/);
+});
+
+
+test('global toast stays above every CSS overlay, including the Add Product workspace', () => {
+  const toastZIndex = Number((appSource.match(/zIndex:\s*'(\d+)'/) || [])[1]);
+  const overlayZIndexes = Array.from(styleSource.matchAll(/z-index:\s*(\d+)/g), match => Number(match[1]));
+  assert.ok(Number.isFinite(toastZIndex), 'global toast must declare a numeric stacking level');
+  assert.ok(overlayZIndexes.length > 0, 'overlay stacking levels must be discoverable');
+  assert.ok(
+    toastZIndex > Math.max(...overlayZIndexes),
+    'global toast must render above every CSS overlay'
+  );
+});
+
+test('Add Product creation and edit paths provide explicit success feedback', () => {
+  const inventorySource = fs.readFileSync(path.join(root, 'inventory.js'), 'utf8');
+  assert.match(inventorySource, /toast\('Product saved successfully\.', 'success'\)/);
+  assert.match(inventorySource, /toast\('Product updated successfully\.', 'success'\)/);
 });

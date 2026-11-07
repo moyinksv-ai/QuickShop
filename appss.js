@@ -175,10 +175,10 @@ function initApp() {
   // background for contrast. Semi-transparent bgs looked washed out in
   // light mode (screenshot confirmed).
   const TOAST_CFG = {
-    success: { icon: '✓', accent: '#10b981', bg: '#052e16', border: 'rgba(16,185,129,0.4)',  text: '#6ee7b7' },
+    success: { icon: '✓', accent: 'var(--brand-text)', bg: 'var(--bg-glass)', border: 'var(--border-glass)', text: 'var(--text-primary)' },
     error:   { icon: '✕', accent: '#ef4444', bg: '#1c0a0a', border: 'rgba(239,68,68,0.4)',   text: '#fca5a5' },
     warning: { icon: '⚠', accent: '#f59e0b', bg: '#1c1007', border: 'rgba(245,158,11,0.4)', text: '#fcd34d' },
-    info:    { icon: 'ℹ', accent: '#818cf8', bg: '#0d0d1f', border: 'rgba(99,102,241,0.4)', text: '#c7d2fe' },
+    info:    { icon: 'ℹ', accent: 'var(--brand-text)', bg: 'var(--bg-glass)', border: 'var(--border-glass)', text: 'var(--brand-text)' },
   };
 
   function toast(message, type = 'info', ms = 3200) {
@@ -200,7 +200,7 @@ function initApp() {
           opacity: '0',
           transform: 'translateY(-24px) scale(0.97)',
           transition: 'opacity 0.28s cubic-bezier(0.34,1.56,0.64,1), transform 0.28s cubic-bezier(0.34,1.56,0.64,1)',
-          zIndex: '99999',
+          zIndex: '1000002',
           pointerEvents: 'none', // none when invisible — never blocks taps underneath
           overflow: 'hidden',
           display: 'flex',
@@ -360,7 +360,7 @@ function initApp() {
     ptr.style.cssText = `position:fixed;top:0;left:0;right:0;height:60px;display:flex;align-items:center;justify-content:center;background:var(--bg-glass);transform:translateY(-60px);transition:transform 0.3s cubic-bezier(0.4,0,0.2,1);z-index:9999;pointer-events:none;`;
     const spinner = document.createElement('div');
     spinner.className = 'spinner';
-    spinner.style.cssText = `width:30px;height:30px;border:3px solid rgba(16,185,129,0.2);border-top-color:var(--accent-emerald);border-radius:50%;`;
+    spinner.style.cssText = `width:30px;height:30px;border:3px solid var(--border-glass);border-top-color:var(--brand-text);border-radius:50%;`;
     ptr.appendChild(spinner);
     document.body.appendChild(ptr);
     pullToRefresh.element = ptr;
@@ -648,7 +648,7 @@ function handleTouchEnd() {
       titleEl.textContent = title;
       messageEl.textContent = message;
       okBtn.textContent = okText;
-      okBtn.style.background = okDanger ? 'var(--danger)' : 'var(--accent-emerald)';
+      okBtn.style.background = okDanger ? 'var(--danger)' : 'var(--brand)';
       backdrop.style.display = 'flex';
       // Focus cancel by default — safer UX for destructive actions
       requestAnimationFrame(() => { const c = $('confirmModalCancel'); if (c) c.focus(); });
@@ -1922,7 +1922,10 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     const payLabel = $('modalPayLabel');
     const confirm  = $('modalConfirm');
 
-    if (titleEl) titleEl.textContent = mode === 'sell' ? 'Sell Items' : 'Add Stock';
+    const isSell = mode === 'sell';
+
+    if (titleEl) titleEl.textContent = isSell ? 'Sell item' : 'Restock';
+    if (confirm) confirm.textContent = isSell ? 'Confirm sale' : 'Confirm restock';
 
     if (itemEl) itemEl.textContent = p.name;
 
@@ -1941,10 +1944,12 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     if (qtyEl) qtyEl.value = 1;
 
     if (totalEl) {
-      totalEl.textContent = 'Total \u2014 ' + fmt(window.n(p.price) * 1);
+      totalEl.style.display = isSell ? '' : 'none';
+      if (isSell) totalEl.textContent = 'Total \u2014 ' + fmt(window.n(p.price) * 1);
     }
 
-    const isSell = mode === 'sell';
+    const modalErrorEl = $('modalError');
+    if (modalErrorEl) modalErrorEl.textContent = '';
     if (payRow)   payRow.style.display   = isSell ? 'flex'  : 'none';
     if (payLabel) payLabel.style.display = isSell ? 'block' : 'none';
 
@@ -2413,7 +2418,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       if (!prev) return '';
       const pct = ((cur - prev) / prev * 100).toFixed(0);
       const up  = cur >= prev;
-      return '<span style="font-size:10px;font-weight:700;color:' + (up ? 'var(--accent-emerald)' : 'var(--danger)') + ';margin-left:4px;">' + (up ? '▲' : '▼') + Math.abs(pct) + '%</span>';
+      return '<span style="font-size:10px;font-weight:700;color:' + (up ? 'var(--money-text)' : 'var(--danger)') + ';margin-left:4px;">' + (up ? '▲' : '▼') + Math.abs(pct) + '%</span>';
     }
 
     function animateDashVal(el, text, cardEl) {
@@ -3037,10 +3042,10 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     // switch caused note edits to create a NEW note instead of updating the existing one
     // when the user navigated away and returned. It is only nulled after a confirmed save
     // (in noteSaveBtn handler) or an explicit Cancel click (in noteCancelBtn handler).
-    editingProductId = null;
     modalContext = null;
     hideModal();
     hideAddForm();
+    editingProductId = null;
     stopScanner();
     closeInventoryInsight();
     const headerSearch = $('headerSearchInput');
@@ -3409,7 +3414,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       const right = document.createElement('div');
       right.style.textAlign = 'right';
       const profitEl = document.createElement('div');
-      profitEl.style.cssText = 'font-weight:700;color:var(--accent-emerald);font-size:16px;';
+      profitEl.style.cssText = 'font-weight:700;color:var(--money-text);font-size:16px;';
       profitEl.textContent = fmt(metrics.profit);
       const profitLbl = document.createElement('div');
       profitLbl.className = 'small';
@@ -3451,13 +3456,13 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         {
           label: 'Revenue',
           value: fmt(totalMetrics.revenue),
-          accent: 'var(--accent-primary)',
+          accent: 'var(--brand)',
           sub: range === 'daily' ? 'Last 7 days' : range === 'weekly' ? 'Last 4 weeks' : 'Last 6 months'
         },
         {
           label: 'Profit',
           value: fmt(totalMetrics.profit),
-          accent: 'var(--accent-emerald)',
+          accent: 'var(--money-text)',
           sub: marginPct + '% margin'
         },
         {
@@ -3551,7 +3556,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         <td style="padding:10px 8px; ${borderStyle}; color:var(--text-secondary);">${escapeHtml(b.label)}</td>
         <td style="padding:10px 8px; ${borderStyle};">${m.units}</td>
         <td style="padding:10px 8px; ${borderStyle};">${fmt(m.revenue)}</td>
-        <td style="padding:10px 8px; ${borderStyle}; color:var(--accent-emerald);">${fmt(m.profit)}</td>
+        <td style="padding:10px 8px; ${borderStyle}; color:var(--money-text);">${fmt(m.profit)}</td>
         <td style="padding:10px 8px; ${borderStyle}; opacity:0.8;">${margin}%</td>
       `;
       tbody.appendChild(tr);
@@ -4083,7 +4088,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         const num = document.createElement('div');
         num.style.cssText = [
           'width:22px;height:22px;border-radius:50%;flex-shrink:0;',
-          'background:rgba(124,58,237,0.18);border:1px solid rgba(124,58,237,0.3);',
+          'background:var(--brand-glow);border:1px solid var(--accent-primary);',
           'display:flex;align-items:center;justify-content:center;',
           'font-size:11px;font-weight:800;color:#a78bfa;',
         ].join('');
@@ -4112,9 +4117,9 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     // ─────────────────────────────────────────────────────────────────────
     {
       const score = growth.visibilityScore;
-      const scoreColor = score >= 80 ? '#10b981' : score >= 55 ? '#f59e0b' : '#ef4444';
-      const scoreBg    = score >= 80 ? 'rgba(16,185,129,0.12)' : score >= 55 ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.12)';
-      const scoreBorder= score >= 80 ? 'rgba(16,185,129,0.3)'  : score >= 55 ? 'rgba(245,158,11,0.3)'  : 'rgba(239,68,68,0.3)';
+      const scoreColor = score >= 80 ? 'var(--brand-text)' : score >= 55 ? '#f59e0b' : '#ef4444';
+      const scoreBg    = score >= 80 ? 'var(--card-glass)' : score >= 55 ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.12)';
+      const scoreBorder= score >= 80 ? 'var(--border-glass)' : score >= 55 ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.3)';
 
       const card = document.createElement('div');
       card.style.cssText = [
@@ -4260,7 +4265,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         soon.slice(0, 3).forEach(function(a) {
           _insRow(rc, a.product.name,
             a.daysLeft + ' day' + (a.daysLeft === 1 ? '' : 's') + ' left · ' + a.product.qty + ' in stock',
-            'Order ' + a.suggest, '#f59e0b',
+            'Restock ' + a.suggest, '#f59e0b',
             { action: 'restock', productId: a.product.id, qty: String(a.suggest) });
         });
       }
@@ -4336,7 +4341,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
                        cashTraps.length + priceOpps.length + topByProfit.length +
                        growth.promote.length + growth.fixNow.length;
     if (!hasSignals && rev7 === 0) {
-      const cl = _insCard('rgba(16,185,129,0.2)', 'rgba(16,185,129,0.05)');
+      const cl = _insCard('var(--accent-primary)', 'var(--card-glass)');
       const inner = document.createElement('div');
       inner.style.cssText = 'padding:24px 16px;text-align:center;';
       const ico = document.createElement('div'); ico.style.fontSize = '32px'; ico.style.marginBottom = '8px'; ico.textContent = '✅';
@@ -4359,7 +4364,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     aiBtn.style.cssText = [
       'width:100%;padding:14px;border-radius:14px;border:0;',
       hasKey
-        ? 'background:linear-gradient(135deg,#7c3aed,#4f46e5);box-shadow:0 6px 20px rgba(124,58,237,0.3);'
+        ? 'background:linear-gradient(135deg,var(--brand),var(--brand-hover));box-shadow:var(--shadow-indigo);'
         : 'background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);',
       'color:#fff;font-size:15px;font-weight:800;cursor:pointer;',
       'display:flex;align-items:center;justify-content:center;gap:8px;',
@@ -4696,9 +4701,9 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       const av = document.createElement('div');
       av.style.cssText = [
         'width:30px;height:30px;min-width:30px;border-radius:8px;flex-shrink:0;margin-top:2px;',
-        'background:linear-gradient(135deg,var(--accent-primary),var(--accent-primary-hover));',
+        'background:linear-gradient(135deg,var(--brand),var(--brand-hover));',
         'display:flex;align-items:center;justify-content:center;',
-        'box-shadow:0 2px 8px rgba(99,102,241,0.3);',
+        'box-shadow:var(--shadow-indigo);',
       ].join('');
       const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
       svg.setAttribute('width','15'); svg.setAttribute('height','15');
@@ -4721,15 +4726,15 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
         img.onerror = function() {
           av.removeChild(img);
-          av.style.cssText += 'background:linear-gradient(135deg,rgba(99,102,241,0.4),rgba(79,70,229,0.6));display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;font-weight:700;';
+          av.style.cssText += 'background:linear-gradient(135deg,var(--brand),var(--brand-hover));display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;font-weight:700;';
           av.textContent = 'Y';
         };
         av.appendChild(img);
       } else {
-        av.style.cssText += 'background:rgba(99,102,241,0.25);border:1px solid rgba(99,102,241,0.3);display:flex;align-items:center;justify-content:center;';
+        av.style.cssText += 'background:var(--brand-glow);border:1px solid var(--accent-primary);display:flex;align-items:center;justify-content:center;';
         const icon = document.createElement('svg');
         icon.setAttribute('width','14'); icon.setAttribute('height','14'); icon.setAttribute('viewBox','0 0 24 24');
-        icon.setAttribute('fill','none'); icon.setAttribute('stroke','rgba(167,139,250,0.9)'); icon.setAttribute('stroke-width','2');
+        icon.setAttribute('fill','none'); icon.setAttribute('stroke','var(--brand-text)'); icon.setAttribute('stroke-width','2');
         icon.innerHTML = '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>';
         av.appendChild(icon);
       }
@@ -4781,10 +4786,10 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       const bubble = document.createElement('div');
       bubble.style.cssText = [
         'max-width:82%;',
-        'background:var(--accent-primary);',
+        'background:var(--brand);',
         'border-radius:18px 4px 18px 18px;padding:12px 15px;',
         'font-size:14px;color:#fff;line-height:1.7;',
-        'box-shadow:0 2px 8px rgba(99,102,241,0.25);',
+        'box-shadow:var(--shadow-indigo);',
       ].join('');
       bubble.textContent = content;
       row.appendChild(bubble);
@@ -4808,7 +4813,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         const dot = document.createElement('span');
         dot.style.cssText = [
           'display:inline-block;width:7px;height:7px;border-radius:50%;',
-          'background:var(--accent-primary);',
+          'background:var(--brand);',
           'animation:qsDotBounce 1.1s ease-in-out infinite;',
           'animation-delay:' + delay + 's;',
         ].join('');
@@ -4875,7 +4880,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         'background:var(--card-glass);border:1px solid var(--border-glass);',
         'border-radius:14px;padding:11px 14px;color:var(--text-primary);font-size:14px;line-height:1.55;',
         'outline:none;min-height:44px;max-height:108px;',
-        'transition:border-color 0.15s;caret-color:var(--accent-primary);',
+        'transition:border-color 0.15s;caret-color:var(--brand-text);',
       ].join('');
 
       reply.addEventListener('input', function() {
@@ -4893,9 +4898,9 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       sendBtn.type = 'button';
       sendBtn.style.cssText = [
         'width:42px;height:42px;border-radius:13px;border:0;flex-shrink:0;',
-        'background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;',
+        'background:linear-gradient(135deg,var(--brand),var(--brand-hover));color:#fff;',
         'cursor:pointer;display:flex;align-items:center;justify-content:center;',
-        'box-shadow:0 4px 14px rgba(124,58,237,0.3);',
+        'box-shadow:var(--shadow-indigo);',
         'transition:opacity 0.15s;',
       ].join('');
       sendBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>';
@@ -5017,7 +5022,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       chatZone.innerHTML = '';
       var setupCard = document.createElement('div');
       setupCard.style.cssText = [
-        'background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.2);',
+        'background:var(--card-glass);border:1px solid var(--border-glass);',
         'border-radius:16px;padding:18px;margin:16px 0;',
       ].join('');
       var steps = [
@@ -5034,7 +5039,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         var row = document.createElement('div');
         row.style.cssText = 'display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;';
         var ic = document.createElement('span');
-        ic.style.cssText = 'font-weight:700;color:var(--accent-primary);flex-shrink:0;';
+        ic.style.cssText = 'font-weight:700;color:var(--brand-text);flex-shrink:0;';
         ic.textContent = step.icon;
         var tx = document.createElement('span');
         tx.style.cssText = 'font-size:13px;color:var(--text-secondary);line-height:1.5;';
@@ -5099,7 +5104,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       'border-radius:16px;padding:20px 18px;',
     ].join('');
     const skelLbl = document.createElement('div');
-    skelLbl.style.cssText = 'font-size:11px;font-weight:700;color:var(--accent-primary);letter-spacing:0.5px;text-transform:uppercase;margin-bottom:12px;opacity:0.7;';
+    skelLbl.style.cssText = 'font-size:11px;font-weight:700;color:var(--brand-text);letter-spacing:0.5px;text-transform:uppercase;margin-bottom:12px;opacity:0.7;';
     skelLbl.textContent = '\u2728 Growth Copilot is thinking\u2026';
     [92, 78, 88, 66, 82].forEach(function(w) {
       const l = document.createElement('div');
@@ -5517,15 +5522,12 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         position: relative;
         width: 52px; height: 52px;
         border-radius: 50%;
-        background: linear-gradient(135deg, #6366f1 0%, #a78bfa 100%);
+        background: linear-gradient(135deg, var(--brand) 0%, var(--brand-text) 100%);
         display: flex; align-items: center; justify-content: center;
         font-size: 18px; font-weight: 800; color: #fff;
         flex-shrink: 0;
         /* Gradient ring */
-        box-shadow:
-          0 0 0 2px var(--bg-obsidian),
-          0 0 0 4px rgba(99,102,241,0.45),
-          0 4px 16px rgba(99,102,241,0.2);
+        box-shadow: 0 0 0 2px var(--bg-obsidian), 0 0 0 4px var(--accent-primary);
         cursor: pointer;
         transition: box-shadow 0.2s, transform 0.15s;
         -webkit-tap-highlight-color: transparent;
@@ -5541,13 +5543,13 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         position: absolute;
         bottom: -1px; right: -1px;
         width: 20px; height: 20px;
-        background: var(--accent-primary);
+        background: var(--brand);
         border-radius: 50%;
         border: 2px solid var(--bg-obsidian);
         display: flex; align-items: center; justify-content: center;
         font-size: 9px; line-height: 1;
         pointer-events: none;
-        box-shadow: 0 2px 6px rgba(99,102,241,0.4);
+        box-shadow: var(--shadow-indigo);
       }
       .qs-sp-uploading { opacity: 0.4; pointer-events: none; }
 
@@ -5584,9 +5586,9 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         transition: background 0.4s, border-color 0.4s, color 0.4s;
       }
       .qs-sp-badge.online {
-        background: rgba(16,185,129,0.10);
-        border: 1px solid rgba(16,185,129,0.25);
-        color: #10b981;
+        background: var(--card-glass);
+        border: 1px solid var(--border-glass);
+        color: var(--brand-text);
       }
       .qs-sp-badge.offline {
         background: rgba(239,68,68,0.10);
@@ -5599,13 +5601,13 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         flex-shrink: 0;
         position: relative;
       }
-      .qs-sp-badge.online  .qs-sp-dot { background: #10b981; }
+      .qs-sp-badge.online  .qs-sp-dot { background: var(--brand-text); }
       .qs-sp-badge.offline .qs-sp-dot { background: #ef4444; animation: none; }
       .qs-sp-badge.online .qs-sp-dot::after {
         content: '';
         position: absolute; inset: -3px;
         border-radius: 50%;
-        background: rgba(16,185,129,0.4);
+        background: var(--brand-glow);
         animation: qs-dot-pulse 2s ease-out infinite;
       }
       @keyframes qs-dot-pulse {
@@ -5712,25 +5714,25 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
 
       /* Active / expanded state — accent left border */
       .qs-action-btn[aria-expanded="true"] {
-        background: rgba(99,102,241,0.06);
-        color: var(--accent-primary);
+        background: var(--brand-glow);
+        color: var(--brand-text);
       }
       .qs-action-btn[aria-expanded="true"] .qs-row-chevron {
         opacity: 1;
         transform: rotate(90deg);
-        color: var(--accent-primary);
+        color: var(--brand-text);
       }
       .qs-action-btn[aria-expanded="true"] .qs-row-icon {
-        background: rgba(99,102,241,0.15);
+        background: var(--brand-glow);
       }
 
       /* Share button accent variant */
       .qs-action-btn.qs-action-share-btn .qs-row-icon {
-        background: rgba(99,102,241,0.12);
-        color: var(--accent-primary);
+        background: var(--brand-glow);
+        color: var(--brand-text);
       }
       .qs-action-btn.qs-action-share-btn {
-        color: var(--accent-primary);
+        color: var(--brand-text);
       }
 
       .qs-action-icon { font-size: 18px; line-height: 1; }
@@ -5793,8 +5795,8 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         -webkit-appearance: none;
       }
       .qs-input:focus {
-        border-color: var(--accent-primary);
-        box-shadow: 0 0 0 3px rgba(99,102,241,0.14);
+        border-color: var(--brand-text);
+        box-shadow: 0 0 0 3px var(--brand-glow);
       }
       .qs-textarea {
         resize: none;
@@ -5804,19 +5806,19 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       /* ── Save buttons inside drawers — filled emerald ────────────── */
       .qs-save-btn {
         align-self: flex-end;
-        background: rgba(16,185,129,0.12);
-        border: 1px solid rgba(16,185,129,0.3);
+        background: var(--brand);
+        border: 1px solid var(--accent-primary);
         border-radius: 10px;
         padding: 9px 18px;
         font-size: 13px;
         font-weight: 700;
-        color: #10b981;
+        color: #fff;
         cursor: pointer;
         transition: background 0.15s, transform 0.12s, box-shadow 0.15s;
         -webkit-tap-highlight-color: transparent;
       }
       .qs-save-btn:active {
-        background: rgba(16,185,129,0.22);
+        background: var(--brand-hover);
         transform: translateY(1px);
         box-shadow: none;
       }
@@ -5905,7 +5907,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       .qs-cat-dot {
         width: 8px; height: 8px;
         border-radius: 50%;
-        background: var(--accent-primary);
+        background: var(--brand);
         flex-shrink: 0;
       }
       .qs-cat-name {
@@ -5932,13 +5934,13 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       .qs-cat-icon-btn:active { background: var(--card-glass-hover); }
       .qs-cat-icon-btn.danger:active { color: #ef4444; }
       .qs-cat-save-btn {
-        background: var(--accent-primary); border: 0;
+        background: var(--brand); border: 0;
         padding: 5px 12px; border-radius: 8px;
         font-size: 12px; font-weight: 700;
         color: #fff; cursor: pointer;
         transition: background 0.15s;
       }
-      .qs-cat-save-btn:active { background: var(--accent-primary-hover); }
+      .qs-cat-save-btn:active { background: var(--brand-hover); }
       .qs-cat-cancel-btn {
         background: transparent;
         border: 1px solid var(--border-glass);
@@ -5962,11 +5964,11 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         transition: border-color 0.18s, box-shadow 0.18s;
       }
       .qs-add-cat-input:focus {
-        border-color: var(--accent-primary);
-        box-shadow: 0 0 0 3px rgba(99,102,241,0.14);
+        border-color: var(--brand-text);
+        box-shadow: 0 0 0 3px var(--brand-glow);
       }
       .qs-add-cat-btn {
-        background: var(--accent-primary); border: 0;
+        background: var(--brand); border: 0;
         padding: 9px 16px; border-radius: 10px;
         font-size: 13px; font-weight: 700;
         color: #fff; cursor: pointer;
@@ -5974,7 +5976,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         transition: background 0.15s, transform 0.12s;
       }
       .qs-add-cat-btn:active {
-        background: var(--accent-primary-hover);
+        background: var(--brand-hover);
         transform: translateY(1px);
       }
 
@@ -5997,9 +5999,9 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         transform: translateY(1px);
       }
       .qs-sector-pill--active {
-        background: rgba(16,185,129,0.14);
-        border-color: rgba(16,185,129,0.5);
-        color: #10b981;
+        background: var(--brand);
+        border-color: var(--accent-primary);
+        color: #fff;
       }
 
       /* ── Sign out section spacer ─────────────────────────────────── */
@@ -6217,12 +6219,12 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
                       <div style="display:flex;gap:10px;margin-top:8px;">
                         <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;color:var(--text-secondary);">
                           <input type="radio" id="qs-delivery-yes" name="qs-delivery" value="yes"
-                                 style="accent-color:var(--accent-primary);width:16px;height:16px;" />
+                                 style="accent-color:var(--brand);width:16px;height:16px;" />
                           🚚 Yes, I deliver
                         </label>
                         <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;color:var(--text-secondary);">
                           <input type="radio" id="qs-delivery-no" name="qs-delivery" value="no"
-                                 style="accent-color:var(--accent-primary);width:16px;height:16px;" />
+                                 style="accent-color:var(--brand);width:16px;height:16px;" />
                           🏪 Pickup only
                         </label>
                       </div>
@@ -6297,7 +6299,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
                 <div class="qs-s-row-sub" id="qs-install-sub">Add QuickShop to your home screen</div>
               </div>
               <button id="qs-install-btn" class="qs-ghost-btn"
-                style="color:var(--accent-primary);border-color:rgba(99,102,241,0.3);">
+                style="color:var(--brand-text);border-color:var(--accent-primary);">
                 📲 Install
               </button>
             </div>
@@ -6314,7 +6316,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
                 <div class="qs-s-row-sub">Push all local products to Supabase now</div>
               </div>
               <button id="btnSyncNow" class="qs-ghost-btn"
-                style="color:#10b981;border-color:rgba(16,185,129,0.3);">☁️ Sync</button>
+                style="color:var(--brand-text);border-color:var(--accent-primary);">☁️ Sync</button>
             </div>
             <div class="qs-s-row">
               <div>
@@ -6757,7 +6759,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       fcopy.style.cssText = 'font-size:12px;color:var(--text-muted);line-height:1.8;';
       fcopy.textContent = '\u00A9 2026 Moses Olayinka Ogundahunsi';
       const flink = document.createElement('div');
-      flink.style.cssText = 'color:var(--accent-primary);font-weight:600;';
+      flink.style.cssText = 'color:var(--brand-text);font-weight:600;';
       flink.textContent = 'quickshopper.vercel.app';
       footer.appendChild(fcopy); footer.appendChild(flink);
       body.appendChild(footer);
@@ -6844,7 +6846,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         _body.replaceChildren();
         const note = document.createElement('div');
         note.style.cssText = 'font-size:13px;line-height:1.55;color:' +
-          (kind === 'success' ? 'var(--accent-emerald)' : kind === 'error' ? 'var(--danger)' : 'var(--text-muted)') + ';';
+          (kind === 'success' ? 'var(--money-text)' : kind === 'error' ? 'var(--danger)' : 'var(--text-muted)') + ';';
         note.textContent = message;
         _body.appendChild(note);
       }
@@ -7053,7 +7055,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         }
 
         const currentCycleStat = statCard('Current cycle', cycleCount + ' / ' + MILESTONE, '#a78bfa');
-        const availableBalanceStat = statCard('Available balance', '₦' + earningsNgn.toLocaleString('en-NG'), '#10b981');
+        const availableBalanceStat = statCard('Available balance', '₦' + earningsNgn.toLocaleString('en-NG'), 'var(--money-text)');
         stats.appendChild(currentCycleStat);
         stats.appendChild(availableBalanceStat);
         _body.appendChild(stats);
@@ -7114,7 +7116,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         payBtn.type = 'button';
         payBtn.style.cssText = 'width:100%;padding:13px;border-radius:16px;border:0;font-size:14px;font-weight:700;cursor:pointer;transition:opacity 0.2s,transform 0.1s;' +
           (canRequest
-            ? 'background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;box-shadow:0 6px 20px rgba(124,58,237,0.3);'
+            ? 'background:var(--money-fill);color:#fff;box-shadow:var(--shadow-emerald);'
             : 'background:var(--card-glass);color:var(--text-muted);cursor:not-allowed;border:1px solid var(--border-glass);');
 
         if (pendingBatch) {
@@ -7327,17 +7329,26 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
   function initAppUI() {
     try {
       renderChips(); renderProducts(); renderInventory(); renderDashboard(); renderNotes();
-      if (!document.querySelector('.panel.active')) {
-        // Restore the last active view from sessionStorage so a refresh
-        // lands the vendor on the same panel they were on.
-        // Fall back to 'home' if nothing is stored or the stored value is invalid.
+      {
+        // Restore the last active view from sessionStorage even when the HTML
+        // shell already marks Home as active. The static Home class is only the
+        // safe first-paint fallback; it must not override a vendor's persisted
+        // panel on refresh.
         const _TAB_VALID = ['home', 'inventory', 'reports', 'notes', 'settings'];
         let restoredView = 'home';
         try {
           const saved = sessionStorage.getItem('qs_active_view');
           if (saved && _TAB_VALID.includes(saved)) restoredView = saved;
         } catch(_) {}
-        setActiveView(restoredView, false);
+
+        const activePanel = document.querySelector('.panel.active');
+        const activeView = activePanel ? String(activePanel.id || '').replace(/Panel$/, '') : '';
+        if (activeView !== restoredView) {
+          setActiveView(restoredView, false);
+        } else {
+          _prevViewName = restoredView;
+        }
+
         // Seed the history stack with the restored view so the back button
         // has at least one entry to pop before trying to exit.
         try { history.replaceState({ qsView: restoredView }, ''); } catch(_) {}
@@ -7432,8 +7443,8 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       return;
     }
 
-    const addFormOpen = document.getElementById('addProductForm') &&
-                        document.getElementById('addProductForm').style.display !== 'none';
+    const addFormOpen = document.getElementById('addProductWorkspace') &&
+                        document.getElementById('addProductWorkspace').style.display !== 'none';
     if (addFormOpen) {
       hideAddForm();
       try { history.pushState({ qsView: _prevViewName || 'home' }, ''); } catch(_) {}
