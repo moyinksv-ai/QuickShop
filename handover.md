@@ -11,12 +11,29 @@
 
 ## 0. Immediate priorities (in order)
 
-1. **WP10 Add Product: investigate and resolve user-reported preview defects** (user has manually tested the current WP10 preview; see §2). Do not declare WP10 complete until these are fixed and mobile browser QA passes.
-2. **Urgent marketplace/catalogue egress and deterministic caching investigation** (see §3). It is a separate, high-priority workstream. Do not combine broad changes with WP10 fixes merely to save time; use small isolated commits/branches and coordinate against the current WP10 branch.
-3. Continue remaining WP10 work only after the above is safely reconciled: WP10-C browser/device Back/history root-cause work, WP10-D form UX redesign, WP10-E inventory header hierarchy, and known save-path risk R5.
-4. Keep the public engineering evidence log updated for the user's future portfolio, X and LinkedIn.
+1. **Release audit / merge PR #7:** The owner has explicitly authorized merging the 39-commit `design/quickshop-ui-refinement` branch if the audit finds no material regressions. The release audit on 2026-11-07 found no database/schema migrations and no changes to the Supabase product/sales persistence contracts, referral, payout, auth, cart, checkout, or marketplace query paths. The code changes are concentrated in semantic UI tokens, inventory modal presentation, Add Product workspace/draft handling, toast feedback, and active-panel restoration. See the current release note immediately below.
+2. **After merge:** verify the exact production deployment commit and smoke-test the vendor-critical paths. Keep the pre-release production deployment available as the rollback target. Do not run a database rollback: no database migration is part of this release.
+3. **Separate workstream:** continue the marketplace/catalogue egress and deterministic caching investigation (§3) on a separate branch. It is not part of PR #7 and must not be mixed into this release.
+4. Keep the public engineering evidence log updated with verified outcomes only.
 
-The user explicitly said to inspect all affected paths and edge cases **before fixing anything**. They expect atomic tracing, deterministic reasoning, no blind changes, and no regressions. If an operation is risky or its blast radius is unclear, stop and explain the decision needed.
+The user has paying vendors. Protect existing vendor data and operational workflows above shipping speed. The user has already manually tested the semantic colour scheme and earlier preview changes, and most recently confirmed the three Add Product feedback checks. Do not ask them to repeat those tests without a specific reason.
+
+### Current release audit — 2026-11-07 (supersedes stale historical WP10 status entries below)
+
+- Repository: `moyinksv-ai/QuickShop`; PR #7: https://github.com/moyinksv-ai/QuickShop/pull/7
+- Production baseline before release: `main` at `5267e1096c8868b4b11584c9d585915f2586b65a`; verified current production Vercel deployment: `dpl_5yaBANt9VTARFQL3vSXe39b2E3Je` (`READY`).
+- Feature branch before this handover update: `design/quickshop-ui-refinement` at `0778641e1fbdd89e5ff64c58b589cac0ee95c653`, 39 commits ahead / 0 behind main. Eight files changed: `appss.js`, `document.md`, `handover.md`, `index.html`, `inventory.js`, `regression.md`, `styless.css`, `tests/regression-guards.test.js`.
+- Exact-HEAD automated checks: GitHub Actions Regression guards succeeded; 38 tests passed, 0 failed. Vercel preview for that SHA was READY: https://quickshopper-9wj5eoao6-moyinks-projects-5a3815db.vercel.app
+- User-confirmed preview acceptance: semantic colour scheme and earlier changes tested; latest Add Product checks passed for create-success feedback, edit-success feedback, and validation feedback. Earlier draft recovery and Back-save confirmation were also reported working.
+- Source/diff audit: no SQL migrations, schema edits, RLS/policy changes, Supabase function changes, product/sales data contract changes, or changes to the marketplace/catalogue query files. Existing product create/edit business logic and inventory stock mutation handlers are retained. Drafts are device-local in localStorage, keyed by authenticated user ID, and are not inserted into the product sync queue until the vendor explicitly saves a product.
+- Inventory modal changes are presentation-state only: mode-specific title/button text, hide the sale total for restock, clear stale modal error. The sell payment-selection disabled state and sell/restock mutation handlers remain unchanged.
+- Add Product changes move the existing shared form into a dedicated full-screen workspace, persist new-product draft fields locally, and show success/validation feedback. The logout ordering now calls `hideAddForm()` before clearing `editingProductId`, preventing an edit form from being treated as a new-product draft.
+- Barcode-result visibility was specifically rechecked: although its inline `display:none` was removed from markup, the existing `#barcodeResult { display:none; }` CSS rule remains, and scanner start/stop handlers explicitly hide/show it. This is not a confirmed regression.
+- No claim is made that every device/browser edge case has been physically exercised. Automated checks and the user's preview checks passed; production smoke checks remain required after deployment.
+- Rollback point: restore production traffic to Vercel deployment `dpl_5yaBANt9VTARFQL3vSXe39b2E3Je`, which serves the exact pre-release `main` SHA above. A Git revert of the eventual merge commit is the source-control recovery path. No database rollback is required for this release.
+- The earlier WP10 status table and older “unresolved” statements later in this handover are historical snapshots and are superseded by this current release audit and the dated verification entries in `regression.md`. Re-check current source and the post-merge deployment before claiming production verification.
+
+---
 
 ## 1. Product, workflow and non-negotiable engineering rules
 
