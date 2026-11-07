@@ -610,8 +610,8 @@ test('Add Product Back confirms only a successfully persisted draft', () => {
 
 
 test('global toast stays above every CSS overlay, including the Add Product workspace', () => {
-  const toastZIndex = Number((appSource.match(/zIndex:\\s*'(\\d+)'/) || [])[1]);
-  const overlayZIndexes = Array.from(styleSource.matchAll(/z-index:\\s*(\\d+)/g), match => Number(match[1]));
+  const toastZIndex = Number((appSource.match(/zIndex:\s*'(\d+)'/) || [])[1]);
+  const overlayZIndexes = Array.from(styleSource.matchAll(/z-index:\s*(\d+)/g), match => Number(match[1]));
   assert.ok(Number.isFinite(toastZIndex), 'global toast must declare a numeric stacking level');
   assert.ok(overlayZIndexes.length > 0, 'overlay stacking levels must be discoverable');
   assert.ok(
@@ -622,6 +622,6 @@ test('global toast stays above every CSS overlay, including the Add Product work
 
 test('Add Product creation and edit paths provide explicit success feedback', () => {
   const inventorySource = fs.readFileSync(path.join(root, 'inventory.js'), 'utf8');
-  assert.match(inventorySource, /toast\\('Product saved successfully\\.', 'success'\\)/);
-  assert.match(inventorySource, /toast\\('Product updated successfully\\.', 'success'\\)/);
+  assert.match(inventorySource, /toast\('Product saved successfully\.', 'success'\)/);
+  assert.match(inventorySource, /toast\('Product updated successfully\.', 'success'\)/);
 });
