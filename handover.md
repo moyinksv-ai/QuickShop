@@ -1,7 +1,7 @@
 # QuickShop Engineering Handover
 **Updated:** 2026-11-07  
 **Repository:** `moyinksv-ai/QuickShop`  
-**Active working branch:** `design/quickshop-ui-refinement`  
+**Active working branch:** `hotfix/add-product-draft-lifecycle`  
 **Production baseline:** `main`  
 **Release rule:** No merge to `main`, production deployment, schema change, or destructive data operation without explicit user approval.
 
@@ -15,16 +15,20 @@
 - Confirmed causes: shared panel cleanup called `hideAddForm()` while the workspace was already closed; that function saved default cost/quantity values before checking visibility. The draft-content predicate counted those remembered defaults as real content. Pending autosave timers were not cancelled by discard/removal, allowing a removed draft to be written back.
 - Hotfix changes: make closed-workspace cleanup a no-op; only persist drafts containing meaningful product information (name, barcode, price, description, or image); centralize autosave cancellation and invoke it during clear/discard/remove/restore; guard scheduled saves to the open add workspace; restore saved field values without scheduling an unnecessary immediate rewrite.
 - Scope: `inventory.js`, regression guard tests, and this handover note only. No schema, Supabase, product, stock, sales, auth, referral, or vendor-account mutations.
-- Verification: GitHub Actions run `42355618335` passed **38/38** regression tests on commit `5e178d69be0e50af7aa57b44a7015062a3b085db`; Vercel preview is `READY` at https://quickshopper-ohhyh72ho-moyinks-projects-5a3815db.vercel.app for that exact commit. Automated source guards are green; real interactive preview checks by the owner are still required before merge.
+- Additional confirmed regression during preview: the first hotfix edit left orphaned lines/braces in `hideAddForm()`; `inventory.js` therefore failed to parse and the entire inventory IIFE did not execute, leaving the inventory view blank and controls inert. Corrected surgically in commit `a668ad2b605e39eafbebac308f6fddf762fd8277`; no draft-lifecycle logic was otherwise changed by that correction.
+- A syntax regression guard was added in commit `bb1136c2867f7a9c5dfc97979ccacbc50ff48d27`, using `vm.Script` to parse `inventory.js` as part of the test suite.
+- Latest verification: GitHub Actions run `42359908331` completed successfully with **39/39** tests passing, including the Inventory syntax test and draft lifecycle guard. Vercel deployment `dpl_3pXwzeYSyQwamLjPJqNPy66tVDsH` is `READY` for exact HEAD `bb1136c2867f7a9c5dfc97979ccacbc50ff48d27`: https://quickshopper-dk7bfi6lg-moyinks-projects-5a3815db.vercel.app.
+- Automated checks and deployment readiness are verified; owner must still perform interactive preview QA before PR #8 can be considered merge-ready.
 - Device-local recovery note: already-created phantom drafts may remain in a vendor's localStorage. The new meaningful-content validation prevents cost/quantity-only records from prompting; do not bulk-delete vendor storage or touch server data.
 - Rollback: revert the hotfix commit; no database rollback required.
 
 ## 0. Immediate priorities (in order)
 
-1. **Release audit / merge PR #7:** The owner has explicitly authorized merging the 39-commit `design/quickshop-ui-refinement` branch if the audit finds no material regressions. The release audit on 2026-11-07 found no database/schema migrations and no changes to the Supabase product/sales persistence contracts, referral, payout, auth, cart, checkout, or marketplace query paths. The code changes are concentrated in semantic UI tokens, inventory modal presentation, Add Product workspace/draft handling, toast feedback, and active-panel restoration. See the current release note immediately below.
-2. **After merge:** verify the exact production deployment commit and smoke-test the vendor-critical paths. Keep the pre-release production deployment available as the rollback target. Do not run a database rollback: no database migration is part of this release.
-3. **Separate workstream:** continue the marketplace/catalogue egress and deterministic caching investigation (§3) on a separate branch. It is not part of PR #7 and must not be mixed into this release.
-4. Keep the public engineering evidence log updated with verified outcomes only.
+1. **Finish PR #8 hotfix validation:** PR #8 is open as a Draft, based on current production `main`. The latest branch HEAD is `bb1136c2867f7a9c5dfc97979ccacbc50ff48d27`, 8 commits ahead / 0 behind `main` at `3d68545d507da9b8d1466edda9d8b8d5a565daaa`. Exact-HEAD CI is green (39/39) and the Vercel preview is READY. The owner must still check the preview in a real browser/mobile session, especially Inventory rendering and Add Product draft behaviour.
+2. **Do not merge PR #8 yet:** The preview previously exposed an Inventory bootstrap syntax error. It has been corrected and guarded, but runtime confirmation from the owner is still required. No production change is authorized by the current task.
+3. Keep the post-PR #7 production rollback deployment documented below. No database rollback is required for PR #7; PR #8 also contains no database/schema changes.
+4. Keep the marketplace/catalogue egress and deterministic caching investigation as a separate workstream. Do not mix it into the draft hotfix.
+5. Keep the public engineering evidence log updated with verified outcomes only.
 
 The user has paying vendors. Protect existing vendor data and operational workflows above shipping speed. The user has already manually tested the semantic colour scheme and earlier preview changes, and most recently confirmed the three Add Product feedback checks. Do not ask them to repeat those tests without a specific reason.
 
