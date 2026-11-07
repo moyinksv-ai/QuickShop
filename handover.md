@@ -33,6 +33,17 @@ The user has paying vendors. Protect existing vendor data and operational workfl
 - Rollback point: restore production traffic to Vercel deployment `dpl_5yaBANt9VTARFQL3vSXe39b2E3Je`, which serves the exact pre-release `main` SHA above. A Git revert of the eventual merge commit is the source-control recovery path. No database rollback is required for this release.
 - The earlier WP10 status table and older “unresolved” statements later in this handover are historical snapshots and are superseded by this current release audit and the dated verification entries in `regression.md`. Re-check current source and the post-merge deployment before claiming production verification.
 
+
+### Post-merge production release — 2026-11-07
+
+- PR #7 merged successfully: https://github.com/moyinksv-ai/QuickShop/pull/7
+- Merge commit and current `main` SHA at release: `e99d30e5216b3abeeefe8254f1af78d3a83e44e3`.
+- Vercel production deployment for that exact SHA: `dpl_AiyfZjGMGvbKNNFpdWDBuWPPt3tx`; state `READY`; aliases include `quickshopper.vercel.app`.
+- Pre-release rollback deployment remains `dpl_5yaBANt9VTARFQL3vSXe39b2E3Je` (READY, original `main` SHA `5267e1096c8868b4b11584c9d585915f2586b65a`). To restore service quickly, use Vercel production rollback to this deployment. Then separately revert the merge commit in Git if the code is to be removed from `main`.
+- The PR-head regression run #281 completed successfully: 38 tests passed, 0 failed. The handover-only update was separately built as a READY preview before merge.
+- Vercel confirms the production deployment is READY and the production aliases are assigned. A successful deployment is not a substitute for a real authenticated vendor smoke test; post-release device/browser checks should still cover sign-in, inventory list, add/edit product, sell/restock, and storefront/catalogue visibility. Do not make sample changes to paying vendors' real inventory merely to test production; use an authorized test vendor/account or read-only checks.
+- No Supabase migration or data transformation was deployed. Existing vendor records and inventory were not intentionally modified by this release.
+
 ---
 
 ## 1. Product, workflow and non-negotiable engineering rules
