@@ -603,6 +603,8 @@ test('Add Product draft recovery is vendor-scoped, local-only, and never queues 
     'the physical workspace Back control must have one stable listener');
   assert.match(source, /if \(!draftSaved\) \{[\s\S]*?return;/,
     'failed or unavailable draft persistence must not clear the form');
+  assert.match(source, /!isEditing && _addProductFormTouched && hasAddProductDraftContent\(\)/,
+    'remembered defaults must not be persisted as a vendor draft without user edits');
   const hideStart = source.indexOf('function hideAddForm() {');
   const hideEnd = source.indexOf('function populateCategoryDropdown()', hideStart);
   const hideHandler = source.slice(hideStart, hideEnd);
