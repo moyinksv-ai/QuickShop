@@ -541,7 +541,7 @@
     workspace.classList.remove('closing');
     workspace.setAttribute('aria-hidden', 'false');
     const title = $('addProductWorkspaceTitle');
-    if (title) title.textContent = editingProductId ? 'Edit product' : 'Add product';
+    if (title) title.textContent = getEditingProductId() ? 'Edit product' : 'Add product';
     const draftPrompt = $('addProductDraftPrompt');
     const draft = !getEditingProductId() ? readAddProductDraft() : null;
     if (draftPrompt) draftPrompt.style.display = draft ? 'flex' : 'none';
