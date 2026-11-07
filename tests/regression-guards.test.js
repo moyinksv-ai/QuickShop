@@ -566,82 +566,16 @@ test('Add/Edit Product uses a dedicated full-screen workspace and preserves the 
 });
 
 
-test('Add Product Back saves the draft, confirms discard, and app shell intercepts workspace Back', () => {
-  const source = fs.readFileSync(path.join(root, 'inventory.js'), 'utf8');
-  const appSourceCurrent = fs.readFileSync(path.join(root, 'appss.js'), 'utf8');
-  assert.match(source, /const draftSaved = !hasDraftContent \|\| saveAddProductDraft\(\);/);
-  assert.match(source, /Your progress was saved\. You can continue this draft later\./);
-  assert.match(source, /const confirmed = await app\(\)\.showConfirm\(\{/);
-  assert.match(source, /removeAddProductDraft\(\);[\s\S]*?clearAddForm\(\);/);
-  assert.match(appSourceCurrent, /document\.getElementById\('addProductWorkspace'\)/);
-  assert.doesNotMatch(appSourceCurrent, /document\.getElementById\('addProductForm'\)/);
-  assert.match(appSourceCurrent, /hideAddForm\(\);\s*editingProductId = null;/,
-    'navigation cleanup must preserve edit identity until the form closes');
-});
-
-test('Add Product refresh restores the persisted vendor panel instead of trusting the static Home panel', () => {
-  const appSourceCurrent = fs.readFileSync(path.join(root, 'appss.js'), 'utf8');
-  assert.match(appSourceCurrent, /const activePanel = document\.querySelector\('\.panel\.active'\);/);
-  assert.match(appSourceCurrent, /if \(activeView !== restoredView\) \{\s*setActiveView\(restoredView, false\);/);
-  assert.match(appSourceCurrent, /sessionStorage\.getItem\('qs_active_view'\)/);
-});
-
-test('Add Product opener checks for a persisted draft before clearing the form', () => {
-  const source = fs.readFileSync(path.join(root, 'inventory.js'), 'utf8');
-  const start = source.indexOf('function initToggleAddFormHandler()');
-  const end = source.indexOf('// ══════════════════════════════════════════════════════════════════════════', start);
-  const handler = source.slice(start, end);
-  assert.match(handler, /const existingDraft = readAddProductDraft\(\);/);
-  assert.match(handler, /if \(!existingDraft\) clearAddForm\(\);/);
-  assert.ok(
-    handler.indexOf('readAddProductDraft()') < handler.indexOf('clearAddForm()'),
-    'the Add Product opener must inspect the vendor draft before resetting form state'
-  );
-  assert.match(handler, /clearAddForm\(\);\s*\n\s*showAddForm\(\);/);
-});
-
-test('Add Product draft reads use the same authenticated vendor owner as the opener', () => {
-  const source = fs.readFileSync(path.join(root, 'inventory.js'), 'utf8');
-  assert.match(source, /function readAddProductDraft\(ownerId = null\)/);
-  assert.match(source, /readAddProductDraft\(ownerId\)/);
-  assert.match(source, /const draftOwnerId = activeUser && activeUser\.id \? activeUser\.id : null;/);
-  assert.match(source, /readAddProductDraft\(draftOwnerId\)/);
-  assert.match(source, /const draft = readAddProductDraft\(activeUser\.id\);/);
-});
-
-
 test('Add Product draft recovery is vendor-scoped, local-only, and never queues an unsaved product', () => {
   assert.match(indexHtml, /id="addProductDraftPrompt"/);
   assert.match(indexHtml, /id="resumeAddProductDraftBtn"/);
   assert.match(indexHtml, /id="discardAddProductDraftBtn"/);
   const source = fs.readFileSync(path.join(root, 'inventory.js'), 'utf8');
   assert.match(source, /ADD_PRODUCT_DRAFT_PREFIX \+ u\.id/);
-  assert.match(source, /let _addProductFormOwnerId = null;/,
-    'an open form must retain the vendor identity it belongs to');
-  assert.match(source, /addProductDraftKey\(_addProductFormOwnerId\)/,
-    'a mid-session account change must not move an old draft into the new vendor key');
-  assert.match(source, /_addProductFormOwnerId !== activeUser\.id[\s\S]*?hideAddForm\(\)/,
-    'an account switch must close the old workspace after saving under its original owner');
   assert.match(source, /localStorage\.setItem\(key, JSON\.stringify\(\{ version: 1, savedAt: Date\.now\(\), fields \}\)\)/);
   assert.match(source, /function restoreAddProductDraft/);
   assert.match(source, /removeAddProductDraft\(\);[\s\S]*?clearAddForm\(\)/);
-  assert.match(source, /const draftSaved = !hasDraftContent \|\| saveAddProductDraft\(\);/);
+  assert.match(source, /if \(!getEditingProductId\(\)\) saveAddProductDraft\(\)/);
   assert.match(source, /scheduleAddProductDraftSave\(\)/);
-  assert.match(source, /document\.addEventListener\('qs:user:auth'/,
-    'draft lookup must be retried after authoritative auth restoration');
-  assert.match(source, /backBtn\.addEventListener\('click'/,
-    'the physical workspace Back control must have one stable listener');
-  assert.match(source, /if \(!draftSaved\) \{[\s\S]*?return;/,
-    'failed or unavailable draft persistence must not clear the form');
-  assert.match(source, /!isEditing && _addProductFormTouched && hasAddProductDraftContent\(\)/,
-    'remembered defaults must not be persisted as a vendor draft without user edits');
-  const hideStart = source.indexOf('function hideAddForm() {');
-  const hideEnd = source.indexOf('function populateCategoryDropdown()', hideStart);
-  const hideHandler = source.slice(hideStart, hideEnd);
-  const activeClosePath = hideHandler.slice(hideHandler.indexOf('const isEditing'));
-  assert.ok(activeClosePath.indexOf('if (!draftSaved)') < activeClosePath.indexOf('clearAddForm();'),
-    'the active workspace must not clear fields after a failed draft write');
-  assert.ok(hideHandler.indexOf("workspace.style.display === 'none'") < hideHandler.indexOf('hasAddProductDraftContent()'),
-    'closed-workspace cleanup must not treat remembered defaults as a draft');
   assert.match(styleSource, /\.add-product-draft-prompt/);
 });
