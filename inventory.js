@@ -438,8 +438,8 @@
     return id ? ADD_PRODUCT_DRAFT_PREFIX + id : null;
   }
 
-  function readAddProductDraft() {
-    const key = addProductDraftKey();
+  function readAddProductDraft(ownerId = null) {
+    const key = addProductDraftKey(ownerId);
     if (!key) return null;
     try {
       const raw = localStorage.getItem(key);
@@ -577,7 +577,8 @@
     const title = $('addProductWorkspaceTitle');
     if (title) title.textContent = editingProductId ? 'Edit product' : 'Add product';
     const draftPrompt = $('addProductDraftPrompt');
-    const draft = !getEditingProductId() ? readAddProductDraft() : null;
+    const draftOwnerId = activeUser && activeUser.id ? activeUser.id : null;
+    const draft = !getEditingProductId() ? readAddProductDraft(draftOwnerId) : null;
     if (draftPrompt) draftPrompt.style.display = draft ? 'flex' : 'none';
     const draftSaved = $('addProductDraftSaved');
     if (draftSaved) draftSaved.style.display = 'none';
@@ -980,7 +981,9 @@
       // and can make a real saved draft look like a brand-new product.
       // A genuinely new product still gets the normal clean-form defaults
       // when no draft exists.
-      const existingDraft = readAddProductDraft();
+      const activeUser = user();
+      const ownerId = activeUser && activeUser.id ? activeUser.id : null;
+      const existingDraft = ownerId ? readAddProductDraft(ownerId) : null;
       if (!existingDraft) clearAddForm();
 
       showAddForm();
@@ -1238,7 +1241,7 @@
         scheduleAddProductDraftSave();
         return;
       }
-      const draft = readAddProductDraft();
+      const draft = readAddProductDraft(activeUser.id);
       if (prompt) prompt.style.display = draft ? 'flex' : 'none';
     });
     initBarcodeScannerHandlers();
