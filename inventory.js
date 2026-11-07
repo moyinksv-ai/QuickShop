@@ -442,6 +442,11 @@
       if (!raw) return null;
       const draft = JSON.parse(raw);
       if (!draft || draft.version !== 1 || !draft.fields || typeof draft.fields !== 'object' || Array.isArray(draft.fields)) return null;
+      // Remove phantom records created by older builds from remembered defaults alone.
+      if (!hasMeaningfulAddProductDraft(draft.fields)) {
+        localStorage.removeItem(key);
+        return null;
+      }
       return draft;
     } catch (e) { errlog('Add Product draft read failed', e); return null; }
   }
@@ -473,18 +478,22 @@
       workspace.getAttribute('aria-hidden') !== 'true';
   }
 
+  function hasMeaningfulAddProductDraft(fields) {
+    return !!fields && !!(
+      String(fields.invName || '').trim() || String(fields.invBarcode || '').trim() ||
+      String(fields.invPrice || '').trim() || String(fields.invDesc || '').trim() ||
+      fields.image || fields.image2
+    );
+  }
+
   function saveAddProductDraft() {
     _addProductDraftTimer = null;
     if (getEditingProductId() || !isAddProductWorkspaceOpen()) return false;
     const key = addProductDraftKey();
     if (!key) return false;
     const fields = collectAddProductDraft();
-    // Remembered cost/quantity/category defaults alone are not a product draft.
-    const hasContent = !!(
-      fields.invName.trim() || fields.invBarcode.trim() || fields.invPrice.trim() ||
-      fields.invDesc.trim() || fields.image || fields.image2
-    );
-    if (!hasContent) return false;
+    // Remembered cost/quantity/category defaults are not meaningful product details.
+    if (!hasMeaningfulAddProductDraft(fields)) return false;
     try {
       localStorage.setItem(key, JSON.stringify({ version: 1, savedAt: Date.now(), fields }));
       const saved = $('addProductDraftSaved');
