@@ -389,6 +389,7 @@
   // ══════════════════════════════════════════════════════════════════════════
   function clearAddForm() {
     _addProductFormTouched = false;
+    _addProductFormOwnerId = null;
     ['invId','invName','invBarcode','invPrice','invDesc'].forEach(id => {
       const el = $(id); if (el) el.value = '';
     });
@@ -428,11 +429,13 @@
   const ADD_PRODUCT_DRAFT_PREFIX = 'qs_add_product_draft_v1_';
   let _addProductDraftTimer = null;
   let _addProductFormTouched = false;
+  let _addProductFormOwnerId = null;
   let _draftSavedTimer = null;
 
-  function addProductDraftKey() {
+  function addProductDraftKey(ownerId = null) {
     const u = user();
-    return u && u.id ? ADD_PRODUCT_DRAFT_PREFIX + u.id : null;
+    const id = ownerId || (u && u.id) || null;
+    return id ? ADD_PRODUCT_DRAFT_PREFIX + id : null;
   }
 
   function readAddProductDraft() {
@@ -467,7 +470,7 @@
 
   function saveAddProductDraft() {
     if (getEditingProductId()) return false;
-    const key = addProductDraftKey();
+    const key = addProductDraftKey(_addProductFormOwnerId);
     if (!key) return false;
     const fields = collectAddProductDraft();
     if (!hasAddProductDraftContent(fields)) return false;
@@ -568,6 +571,8 @@
     addForm.style.transform = '';
     workspace.style.display = 'flex';
     workspace.classList.remove('closing');
+    const activeUser = user();
+    _addProductFormOwnerId = activeUser && activeUser.id ? activeUser.id : null;
     workspace.setAttribute('aria-hidden', 'false');
     const title = $('addProductWorkspaceTitle');
     if (title) title.textContent = editingProductId ? 'Edit product' : 'Add product';
@@ -1210,6 +1215,15 @@
     document.addEventListener('qs:user:auth', function () {
       const workspace = $('addProductWorkspace');
       if (!workspace || workspace.style.display === 'none' || getEditingProductId()) return;
+      const activeUser = user();
+      if (!activeUser || !activeUser.id) return;
+      if (_addProductFormOwnerId && _addProductFormOwnerId !== activeUser.id) {
+        // The authenticated account changed while this workspace was open.
+        // hideAddForm saves any touched draft under its original owner ID.
+        hideAddForm();
+        return;
+      }
+      if (!_addProductFormOwnerId) _addProductFormOwnerId = activeUser.id;
       const prompt = $('addProductDraftPrompt');
       if (_addProductFormTouched) {
         if (prompt) prompt.style.display = 'none';
