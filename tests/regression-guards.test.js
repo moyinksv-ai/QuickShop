@@ -566,7 +566,7 @@ test('Add/Edit Product uses a dedicated full-screen workspace and preserves the 
 });
 
 
-test('Add Product draft recovery is vendor-scoped, local-only, and never queues an unsaved product', () => {
+test('Add Product draft lifecycle prevents phantom drafts and cancels stale autosaves', () => {
   assert.match(indexHtml, /id="addProductDraftPrompt"/);
   assert.match(indexHtml, /id="resumeAddProductDraftBtn"/);
   assert.match(indexHtml, /id="discardAddProductDraftBtn"/);
@@ -574,14 +574,22 @@ test('Add Product draft recovery is vendor-scoped, local-only, and never queues 
   assert.match(source, /ADD_PRODUCT_DRAFT_PREFIX \+ u\.id/);
   assert.match(source, /localStorage\.setItem\(key, JSON\.stringify\(\{ version: 1, savedAt: Date\.now\(\), fields \}\)\)/);
   assert.match(source, /function restoreAddProductDraft/);
-  assert.match(source, /removeAddProductDraft\(\);[\s\S]*?clearAddForm\(\)/);
+  assert.match(source, /function cancelAddProductDraftSave\(\)/);
+  assert.match(source, /function isAddProductWorkspaceOpen\(\)/);
+  assert.match(source, /fields\.invName\.trim\(\) \|\| fields\.invBarcode\.trim\(\) \|\| fields\.invPrice\.trim\(\)/);
   const hideStart = source.indexOf('  function hideAddForm() {');
   const hideEnd = source.indexOf('  function populateCategoryDropdown() {', hideStart);
   assert.ok(hideStart >= 0 && hideEnd > hideStart, 'hideAddForm must remain a distinct function');
   const hideSource = source.slice(hideStart, hideEnd);
-  assert.match(hideSource, /const draftWasSaved = !getEditingProductId\(\) && saveAddProductDraft\(\);/,
-    'leaving the workspace must persist a new-product draft before clearing the form');
-  assert.match(source, /scheduleAddProductDraftSave\(\)/);
+  assert.match(hideSource, /if \(!workspace \|\| workspace\.style\.display === 'none' \|\|/);
+  assert.ok(hideSource.indexOf('return;') < hideSource.indexOf('const draftWasSaved'),
+    'closed-workspace cleanup must return before any draft save');
+  assert.match(hideSource, /cancelAddProductDraftSave\(\)/);
+  const removeStart = source.indexOf('  function removeAddProductDraft() {');
+  const removeEnd = source.indexOf('  function restoreAddProductDraft(', removeStart);
+  assert.match(source.slice(removeStart, removeEnd), /cancelAddProductDraftSave\(\)/,
+    'discard and successful creation must cancel pending autosaves before removing storage');
+  assert.match(source, /return true;[\s\S]*?Draft restored/);
   assert.match(styleSource, /\.add-product-draft-prompt/);
 });
 
