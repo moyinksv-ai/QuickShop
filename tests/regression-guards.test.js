@@ -576,7 +576,9 @@ test('Add Product draft lifecycle prevents phantom drafts and cancels stale auto
   assert.match(source, /function restoreAddProductDraft/);
   assert.match(source, /function cancelAddProductDraftSave\(\)/);
   assert.match(source, /function isAddProductWorkspaceOpen\(\)/);
-  assert.match(source, /fields\.invName\.trim\(\) \|\| fields\.invBarcode\.trim\(\) \|\| fields\.invPrice\.trim\(\)/);
+  assert.match(source, /function hasMeaningfulAddProductDraft\(fields\)/);
+  assert.match(source, /if \(!hasMeaningfulAddProductDraft\(draft\.fields\)\)/);
+  assert.match(source, /localStorage\.removeItem\(key\);[\s\S]*?return null;/);
   const hideStart = source.indexOf('  function hideAddForm() {');
   const hideEnd = source.indexOf('  function populateCategoryDropdown() {', hideStart);
   assert.ok(hideStart >= 0 && hideEnd > hideStart, 'hideAddForm must remain a distinct function');
