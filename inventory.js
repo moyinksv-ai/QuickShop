@@ -388,6 +388,7 @@
   // ADD / EDIT FORM
   // ══════════════════════════════════════════════════════════════════════════
   function clearAddForm() {
+    _addProductFormTouched = false;
     ['invId','invName','invBarcode','invPrice','invDesc'].forEach(id => {
       const el = $(id); if (el) el.value = '';
     });
@@ -426,6 +427,7 @@
 
   const ADD_PRODUCT_DRAFT_PREFIX = 'qs_add_product_draft_v1_';
   let _addProductDraftTimer = null;
+  let _addProductFormTouched = false;
   let _draftSavedTimer = null;
 
   function addProductDraftKey() {
@@ -459,13 +461,16 @@
     };
   }
 
+  function hasAddProductDraftContent(fields = collectAddProductDraft()) {
+    return Object.entries(fields).some(([key, value]) => key !== 'invCategory' && !!value);
+  }
+
   function saveAddProductDraft() {
     if (getEditingProductId()) return false;
     const key = addProductDraftKey();
     if (!key) return false;
     const fields = collectAddProductDraft();
-    const hasContent = Object.entries(fields).some(([k, v]) => k === 'invCategory' ? false : !!v);
-    if (!hasContent) return false;
+    if (!hasAddProductDraftContent(fields)) return false;
     try {
       localStorage.setItem(key, JSON.stringify({ version: 1, savedAt: Date.now(), fields }));
       const saved = $('addProductDraftSaved');
@@ -500,6 +505,7 @@
   function restoreAddProductDraft(draft) {
     if (!draft || !draft.fields || getEditingProductId()) return;
     const fields = draft.fields;
+    _addProductFormTouched = true;
     ['invName','invBarcode','invPrice','invCost','invQty','invCategory','invDesc'].forEach(id => {
       const el = $(id); if (el && typeof fields[id] === 'string') el.value = fields[id].slice(0, 500);
     });
@@ -515,8 +521,22 @@
     const form = $('addForm');
     if (form && !form.dataset.draftBound) {
       form.dataset.draftBound = '1';
-      form.addEventListener('input', scheduleAddProductDraftSave);
-      form.addEventListener('change', scheduleAddProductDraftSave);
+      form.addEventListener('input', function () {
+        _addProductFormTouched = true;
+        scheduleAddProductDraftSave();
+      });
+      form.addEventListener('change', function () {
+        _addProductFormTouched = true;
+        scheduleAddProductDraftSave();
+      });
+    }
+    const backBtn = $('closeAddProductWorkspaceBtn');
+    if (backBtn && !backBtn.dataset.addProductBackBound) {
+      backBtn.dataset.addProductBackBound = '1';
+      backBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        hideAddForm();
+      });
     }
     const resume = $('resumeAddProductDraftBtn');
     const discard = $('discardAddProductDraftBtn');
@@ -556,8 +576,6 @@
     if (draftPrompt) draftPrompt.style.display = draft ? 'flex' : 'none';
     const draftSaved = $('addProductDraftSaved');
     if (draftSaved) draftSaved.style.display = 'none';
-    const backBtn = $('closeAddProductWorkspaceBtn');
-    if (backBtn) backBtn.onclick = hideAddForm;
     document.body.classList.add('modal-open');
 
     requestAnimationFrame(() => {
@@ -570,9 +588,17 @@
 
   function hideAddForm() {
     if (_addProductDraftTimer) { clearTimeout(_addProductDraftTimer); _addProductDraftTimer = null; }
-    const draftSaved = !getEditingProductId() && saveAddProductDraft();
+    const isEditing = !!getEditingProductId();
+    const hasDraftContent = !isEditing && hasAddProductDraftContent();
+    const draftSaved = !hasDraftContent || saveAddProductDraft();
+    if (!draftSaved) {
+      // Keep the workspace and its values intact when auth is not ready or
+      // local storage rejects the write. Never turn a failed save into data loss.
+      toast('Your progress could not be saved yet. Keep this screen open and try again.', 'warning', 3200);
+      return;
+    }
     clearAddForm();
-    if (draftSaved) toast('Your progress was saved. You can continue this draft later.', 'info', 2600);
+    if (hasDraftContent) toast('Your progress was saved. You can continue this draft later.', 'info', 2600);
     const addForm = $('addForm');
     const workspace = $('addProductWorkspace');
     const mount = $('addFormMount');
@@ -1173,6 +1199,20 @@
   // PUBLIC API — called by appss.js
   // ══════════════════════════════════════════════════════════════════════════
   function initAll() {
+    // Auth may resolve after inventory initialisation. Re-check only after the
+    // authoritative user is available; never derive the draft key from cache.
+    document.addEventListener('qs:user:auth', function () {
+      const workspace = $('addProductWorkspace');
+      if (!workspace || workspace.style.display === 'none' || getEditingProductId()) return;
+      const prompt = $('addProductDraftPrompt');
+      if (_addProductFormTouched) {
+        if (prompt) prompt.style.display = 'none';
+        scheduleAddProductDraftSave();
+        return;
+      }
+      const draft = readAddProductDraft();
+      if (prompt) prompt.style.display = draft ? 'flex' : 'none';
+    });
     initBarcodeScannerHandlers();
     initSmartScannerHandlers();
     initImageUploadHandler();
