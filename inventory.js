@@ -587,6 +587,20 @@
   }
 
   function hideAddForm() {
+    const addForm = $('addForm');
+    const workspace = $('addProductWorkspace');
+    const mount = $('addFormMount');
+
+    // Navigation cleanup calls this even when the workspace is already closed.
+    // Do not mistake remembered cost/quantity defaults for an unfinished draft.
+    if (!workspace || workspace.style.display === 'none') {
+      if (_addProductDraftTimer) { clearTimeout(_addProductDraftTimer); _addProductDraftTimer = null; }
+      clearAddForm();
+      if (addForm) addForm.style.display = 'none';
+      document.body.classList.remove('modal-open');
+      return;
+    }
+
     if (_addProductDraftTimer) { clearTimeout(_addProductDraftTimer); _addProductDraftTimer = null; }
     const isEditing = !!getEditingProductId();
     const hasDraftContent = !isEditing && hasAddProductDraftContent();
@@ -599,14 +613,6 @@
     }
     clearAddForm();
     if (hasDraftContent) toast('Your progress was saved. You can continue this draft later.', 'info', 2600);
-    const addForm = $('addForm');
-    const workspace = $('addProductWorkspace');
-    const mount = $('addFormMount');
-    if (!workspace || workspace.style.display === 'none') {
-      if (addForm) addForm.style.display = 'none';
-      document.body.classList.remove('modal-open');
-      return;
-    }
 
     workspace.classList.add('closing');
     workspace.setAttribute('aria-hidden', 'true');
