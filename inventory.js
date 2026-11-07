@@ -974,7 +974,15 @@
     toggleAddFormBtn.addEventListener('click', function (e) {
       e.preventDefault();
       setEditingProductId(null);
-      clearAddForm();
+
+      // Do not clear the form before showAddForm() checks for a persisted
+      // vendor draft. Clearing here also resets the draft-owner/touched state
+      // and can make a real saved draft look like a brand-new product.
+      // A genuinely new product still gets the normal clean-form defaults
+      // when no draft exists.
+      const existingDraft = readAddProductDraft();
+      if (!existingDraft) clearAddForm();
+
       showAddForm();
     });
   }
