@@ -569,7 +569,7 @@ test('Add/Edit Product uses a dedicated full-screen workspace and preserves the 
 test('Add Product Back saves the draft, confirms discard, and app shell intercepts workspace Back', () => {
   const source = fs.readFileSync(path.join(root, 'inventory.js'), 'utf8');
   const appSourceCurrent = fs.readFileSync(path.join(root, 'appss.js'), 'utf8');
-  assert.match(source, /const draftSaved = !getEditingProductId\(\) && saveAddProductDraft\(\);/);
+  assert.match(source, /const draftSaved = !hasDraftContent \|\| saveAddProductDraft\(\);/);
   assert.match(source, /Your progress was saved\. You can continue this draft later\./);
   assert.match(source, /const confirmed = await app\(\)\.showConfirm\(\{/);
   assert.match(source, /removeAddProductDraft\(\);[\s\S]*?clearAddForm\(\);/);
