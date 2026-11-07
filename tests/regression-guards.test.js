@@ -592,6 +592,12 @@ test('Add Product draft recovery is vendor-scoped, local-only, and never queues 
   assert.match(indexHtml, /id="discardAddProductDraftBtn"/);
   const source = fs.readFileSync(path.join(root, 'inventory.js'), 'utf8');
   assert.match(source, /ADD_PRODUCT_DRAFT_PREFIX \+ u\.id/);
+  assert.match(source, /let _addProductFormOwnerId = null;/,
+    'an open form must retain the vendor identity it belongs to');
+  assert.match(source, /addProductDraftKey\(_addProductFormOwnerId\)/,
+    'a mid-session account change must not move an old draft into the new vendor key');
+  assert.match(source, /_addProductFormOwnerId !== activeUser\.id[\s\S]*?hideAddForm\(\)/,
+    'an account switch must close the old workspace after saving under its original owner');
   assert.match(source, /localStorage\.setItem\(key, JSON\.stringify\(\{ version: 1, savedAt: Date\.now\(\), fields \}\)\)/);
   assert.match(source, /function restoreAddProductDraft/);
   assert.match(source, /removeAddProductDraft\(\);[\s\S]*?clearAddForm\(\)/);
