@@ -609,14 +609,14 @@ test('Add Product draft recovery is vendor-scoped, local-only, and never queues 
     'the physical workspace Back control must have one stable listener');
   assert.match(source, /if \(!draftSaved\) \{[\s\S]*?return;/,
     'failed or unavailable draft persistence must not clear the form');
-  const activeClosePath = hideHandler.slice(hideHandler.indexOf('const isEditing'));
-  assert.ok(activeClosePath.indexOf('if (!draftSaved)') < activeClosePath.indexOf('clearAddForm();'),
-    'the active workspace must not clear fields after a failed draft write');
   assert.match(source, /!isEditing && _addProductFormTouched && hasAddProductDraftContent\(\)/,
     'remembered defaults must not be persisted as a vendor draft without user edits');
   const hideStart = source.indexOf('function hideAddForm() {');
   const hideEnd = source.indexOf('function populateCategoryDropdown()', hideStart);
   const hideHandler = source.slice(hideStart, hideEnd);
+  const activeClosePath = hideHandler.slice(hideHandler.indexOf('const isEditing'));
+  assert.ok(activeClosePath.indexOf('if (!draftSaved)') < activeClosePath.indexOf('clearAddForm();'),
+    'the active workspace must not clear fields after a failed draft write');
   assert.ok(hideHandler.indexOf("workspace.style.display === 'none'") < hideHandler.indexOf('hasAddProductDraftContent()'),
     'closed-workspace cleanup must not treat remembered defaults as a draft');
   assert.match(styleSource, /\.add-product-draft-prompt/);
