@@ -3042,10 +3042,10 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     // switch caused note edits to create a NEW note instead of updating the existing one
     // when the user navigated away and returned. It is only nulled after a confirmed save
     // (in noteSaveBtn handler) or an explicit Cancel click (in noteCancelBtn handler).
-    editingProductId = null;
     modalContext = null;
     hideModal();
     hideAddForm();
+    editingProductId = null;
     stopScanner();
     closeInventoryInsight();
     const headerSearch = $('headerSearchInput');
