@@ -9,6 +9,16 @@
 
 ---
 
+## Add Product draft lifecycle hotfix — 2026-11-07
+
+- Branch: `hotfix/add-product-draft-lifecycle`, based directly on current production `main`.
+- Confirmed causes: shared panel cleanup called `hideAddForm()` while the workspace was already closed; that function saved default cost/quantity values before checking visibility. The draft-content predicate counted those remembered defaults as real content. Pending autosave timers were not cancelled by discard/removal, allowing a removed draft to be written back.
+- Hotfix changes: make closed-workspace cleanup a no-op; only persist drafts containing meaningful product information (name, barcode, price, description, or image); centralize autosave cancellation and invoke it during clear/discard/remove/restore; guard scheduled saves to the open add workspace; restore saved field values without scheduling an unnecessary immediate rewrite.
+- Scope: `inventory.js`, regression guard tests, and this handover note only. No schema, Supabase, product, stock, sales, auth, referral, or vendor-account mutations.
+- Verification status: source patch prepared; automated CI and Vercel preview must pass, followed by the owner testing resume/discard/navigation in preview. Do not merge until those checks pass.
+- Device-local recovery note: already-created phantom drafts may remain in a vendor's localStorage. The new meaningful-content validation prevents cost/quantity-only records from prompting; do not bulk-delete vendor storage or touch server data.
+- Rollback: revert the hotfix commit; no database rollback required.
+
 ## 0. Immediate priorities (in order)
 
 1. **Release audit / merge PR #7:** The owner has explicitly authorized merging the 39-commit `design/quickshop-ui-refinement` branch if the audit finds no material regressions. The release audit on 2026-11-07 found no database/schema migrations and no changes to the Supabase product/sales persistence contracts, referral, payout, auth, cart, checkout, or marketplace query paths. The code changes are concentrated in semantic UI tokens, inventory modal presentation, Add Product workspace/draft handling, toast feedback, and active-panel restoration. See the current release note immediately below.
