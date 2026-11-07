@@ -1850,6 +1850,8 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       thumb.className = 'p-thumb';
       if (p.image) {
         const img = document.createElement('img');
+        img.loading = 'lazy';
+        img.decoding = 'async';
         img.src = p.image;
         img.alt = p.name || 'thumb';
         img.crossOrigin = 'anonymous';
