@@ -15,6 +15,7 @@ const qsInitSource = fs.readFileSync(path.join(root, 'qs-init.js'), 'utf8');
 const catalogSource = fs.readFileSync(path.join(root, 'catalog.js'), 'utf8');
 const marketHtml = fs.readFileSync(path.join(root, 'search.html'), 'utf8');
 const styleSource = fs.readFileSync(path.join(root, 'styless.css'), 'utf8');
+const inventorySource = fs.readFileSync(path.join(root, 'inventory.js'), 'utf8');
 
 function countMatches(source, regex) {
   return Array.from(source.matchAll(regex)).length;
@@ -230,6 +231,12 @@ test('admin API keeps profiles visible when payment claims are absent or unavail
   assert.match(adminApiSource, /paymentClaimsAvailable: claimsResult\.available/);
 });
 
+
+test('application inventory module parses without syntax errors', () => {
+  const vm = require('node:vm');
+  assert.doesNotThrow(() => new vm.Script(inventorySource, { filename: 'inventory.js' }),
+    'inventory.js syntax');
+});
 
 test('application and admin scripts parse without syntax errors', () => {
   const vm = require('node:vm');
