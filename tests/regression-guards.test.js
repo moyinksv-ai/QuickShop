@@ -575,6 +575,8 @@ test('Add Product Back saves the draft, confirms discard, and app shell intercep
   assert.match(source, /removeAddProductDraft\(\);[\s\S]*?clearAddForm\(\);/);
   assert.match(appSourceCurrent, /document\.getElementById\('addProductWorkspace'\)/);
   assert.doesNotMatch(appSourceCurrent, /document\.getElementById\('addProductForm'\)/);
+  assert.match(appSourceCurrent, /hideAddForm\(\);\s*editingProductId = null;/,
+    'navigation cleanup must preserve edit identity until the form closes');
 });
 
 test('Add Product refresh restores the persisted vendor panel instead of trusting the static Home panel', () => {
@@ -595,5 +597,11 @@ test('Add Product draft recovery is vendor-scoped, local-only, and never queues 
   assert.match(source, /removeAddProductDraft\(\);[\s\S]*?clearAddForm\(\)/);
   assert.match(source, /const draftSaved = !getEditingProductId\(\) && saveAddProductDraft\(\);/);
   assert.match(source, /scheduleAddProductDraftSave\(\)/);
+  assert.match(source, /document\.addEventListener\('qs:user:auth'/,
+    'draft lookup must be retried after authoritative auth restoration');
+  assert.match(source, /backBtn\.addEventListener\('click'/,
+    'the physical workspace Back control must have one stable listener');
+  assert.match(source, /if \(!draftSaved\) \{[\s\S]*?return;/,
+    'failed or unavailable draft persistence must not clear the form');
   assert.match(styleSource, /\.add-product-draft-prompt/);
 });
