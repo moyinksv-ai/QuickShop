@@ -601,7 +601,7 @@ test('Add Product draft recovery is vendor-scoped, local-only, and never queues 
   assert.match(source, /localStorage\.setItem\(key, JSON\.stringify\(\{ version: 1, savedAt: Date\.now\(\), fields \}\)\)/);
   assert.match(source, /function restoreAddProductDraft/);
   assert.match(source, /removeAddProductDraft\(\);[\s\S]*?clearAddForm\(\)/);
-  assert.match(source, /const draftSaved = !getEditingProductId\(\) && saveAddProductDraft\(\);/);
+  assert.match(source, /const draftSaved = !hasDraftContent \|\| saveAddProductDraft\(\);/);
   assert.match(source, /scheduleAddProductDraftSave\(\)/);
   assert.match(source, /document\.addEventListener\('qs:user:auth'/,
     'draft lookup must be retried after authoritative auth restoration');
@@ -609,6 +609,9 @@ test('Add Product draft recovery is vendor-scoped, local-only, and never queues 
     'the physical workspace Back control must have one stable listener');
   assert.match(source, /if \(!draftSaved\) \{[\s\S]*?return;/,
     'failed or unavailable draft persistence must not clear the form');
+  const activeClosePath = hideHandler.slice(hideHandler.indexOf('const isEditing'));
+  assert.ok(activeClosePath.indexOf('if (!draftSaved)') < activeClosePath.indexOf('clearAddForm();'),
+    'the active workspace must not clear fields after a failed draft write');
   assert.match(source, /!isEditing && _addProductFormTouched && hasAddProductDraftContent\(\)/,
     'remembered defaults must not be persisted as a vendor draft without user edits');
   const hideStart = source.indexOf('function hideAddForm() {');
