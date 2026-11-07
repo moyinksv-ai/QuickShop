@@ -175,3 +175,33 @@ Source inspection confirms the stacking mismatch and the save/queue ordering des
 ### CI follow-up — stale draft guard corrected
 
 The first CI run after adding the toast-layering guard also exposed an older assertion in the draft-recovery test. It expected a pre-refactor inline call to `saveAddProductDraft()`; the current implementation correctly performs that save in `hideAddForm()` through the `draftWasSaved` result before clearing the form. The test now asserts the current lifecycle contract instead of requiring the obsolete source pattern. No draft runtime code was changed for this test correction.
+
+
+## 2026-11-07 — Add Product draft lifecycle and Inventory bootstrap hotfix
+
+### User-observed production regression
+
+After PR #7 reached production, the user reported repeated saved-progress messages and phantom resume prompts after ordinary panel navigation. Resume could show an effectively empty form with remembered defaults, and discarding a draft did not reliably keep it discarded.
+
+### Confirmed draft lifecycle causes
+
+- Shared panel cleanup called `hideAddForm()` while the Add Product workspace was already closed.
+- The old function saved form state before checking whether the workspace was open.
+- The meaningful-content test counted remembered cost/quantity defaults as a real draft.
+- A pending autosave timer could fire after discard/removal and recreate the just-removed localStorage record.
+
+### Hotfix and additional preview regression
+
+- `inventory.js`: closed-workspace cleanup now returns before any save/clear work; only product name, barcode, price, description, or image qualifies as meaningful draft content; pending autosave timers are cancelled during clear, discard/removal, restore, and save scheduling; scheduled saves are restricted to an open Add Product workspace.
+- The first hotfix preview exposed a separate syntax regression in `hideAddForm()`: orphaned lines/braces remained after the new closed-workspace early return. This caused `inventory.js` to fail parsing, preventing the entire inventory module from bootstrapping. The user observed a blank inventory with inert controls.
+- Commit `a668ad2b605e39eafbebac308f6fddf762fd8277` removed only the orphaned block and restored the function structure.
+- Commit `bb1136c2867f7a9c5dfc97979ccacbc50ff48d27` added an explicit `vm.Script` syntax check for `inventory.js` to the regression suite. This closes the previous test gap where `appss.js` and other scripts were parsed but `inventory.js` was not.
+
+### Verification and limits
+
+- PR #8 latest HEAD: `bb1136c2867f7a9c5dfc97979ccacbc50ff48d27`; PR remains Draft and unmerged.
+- GitHub Actions run #297 / run ID `42359908331`: **39 passed, 0 failed**, including test 14 (Inventory module parses) and test 35 (draft lifecycle prevents phantom drafts and cancels stale autosaves).
+- Vercel deployment `dpl_3pXwzeYSyQwamLjPJqNPy66tVDsH`: **READY**, exact source commit `bb1136c2867f7a9c5dfc97979ccacbc50ff48d27`; preview: https://quickshopper-dk7bfi6lg-moyinks-projects-5a3815db.vercel.app.
+- The user must still confirm actual preview runtime behaviour on mobile/browser. CI and READY establish syntax/build/deployment status, not that Inventory buttons and Add Product flows work in the user's browser.
+- No schema, Supabase, product, stock, sales, auth, referral, or vendor-account data changes. Draft state remains device-local; no production data cleanup is authorized or needed.
+- Rollback: keep PR #8 unmerged until preview acceptance. If later merged and a regression appears, revert the merge commit; no database rollback is required.
