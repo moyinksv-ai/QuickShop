@@ -607,10 +607,6 @@
     const draftWasSaved = !getEditingProductId() && saveAddProductDraft();
     if (draftWasSaved) toast('Your progress has been saved on this device.', 'success');
     clearAddForm();
-      if (addForm) addForm.style.display = 'none';
-      document.body.classList.remove('modal-open');
-      return;
-    }
 
     workspace.classList.add('closing');
     workspace.setAttribute('aria-hidden', 'true');
