@@ -460,12 +460,12 @@
   }
 
   function saveAddProductDraft() {
-    if (getEditingProductId()) return;
+    if (getEditingProductId()) return false;
     const key = addProductDraftKey();
-    if (!key) return;
+    if (!key) return false;
     const fields = collectAddProductDraft();
     const hasContent = Object.entries(fields).some(([k, v]) => k === 'invCategory' ? false : !!v);
-    if (!hasContent) return;
+    if (!hasContent) return false;
     try {
       localStorage.setItem(key, JSON.stringify({ version: 1, savedAt: Date.now(), fields }));
       const saved = $('addProductDraftSaved');
@@ -474,9 +474,11 @@
         if (_draftSavedTimer) clearTimeout(_draftSavedTimer);
         _draftSavedTimer = setTimeout(() => { saved.style.display = 'none'; }, 2200);
       }
+      return true;
     } catch (e) {
       errlog('Add Product draft save failed', e);
       toast('Could not save this draft on your device.', 'error');
+      return false;
     }
   }
 
@@ -561,7 +563,8 @@
 
   function hideAddForm() {
     if (_addProductDraftTimer) { clearTimeout(_addProductDraftTimer); _addProductDraftTimer = null; }
-    if (!getEditingProductId()) saveAddProductDraft();
+    const draftWasSaved = !getEditingProductId() && saveAddProductDraft();
+    if (draftWasSaved) toast('Your progress has been saved on this device.', 'success');
     clearAddForm();
     const addForm = $('addForm');
     const workspace = $('addProductWorkspace');
