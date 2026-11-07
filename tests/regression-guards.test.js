@@ -575,7 +575,12 @@ test('Add Product draft recovery is vendor-scoped, local-only, and never queues 
   assert.match(source, /localStorage\.setItem\(key, JSON\.stringify\(\{ version: 1, savedAt: Date\.now\(\), fields \}\)\)/);
   assert.match(source, /function restoreAddProductDraft/);
   assert.match(source, /removeAddProductDraft\(\);[\s\S]*?clearAddForm\(\)/);
-  assert.match(source, /if \(!getEditingProductId\(\)\) saveAddProductDraft\(\)/);
+  const hideStart = source.indexOf('  function hideAddForm() {');
+  const hideEnd = source.indexOf('  function populateCategoryDropdown() {', hideStart);
+  assert.ok(hideStart >= 0 && hideEnd > hideStart, 'hideAddForm must remain a distinct function');
+  const hideSource = source.slice(hideStart, hideEnd);
+  assert.match(hideSource, /const draftWasSaved = !getEditingProductId\(\) && saveAddProductDraft\(\);/,
+    'leaving the workspace must persist a new-product draft before clearing the form');
   assert.match(source, /scheduleAddProductDraftSave\(\)/);
   assert.match(styleSource, /\.add-product-draft-prompt/);
 });

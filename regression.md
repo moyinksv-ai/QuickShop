@@ -170,3 +170,8 @@ The user reported that pressing Save cleared the entered product details but gav
 ### Verification status
 
 Source inspection confirms the stacking mismatch and the save/queue ordering described above. Automated regression and preview deployment checks must be recorded against the resulting commit. The user must still confirm the visible success feedback on the preview. No main-branch or production change is authorized.
+
+
+### CI follow-up — stale draft guard corrected
+
+The first CI run after adding the toast-layering guard also exposed an older assertion in the draft-recovery test. It expected a pre-refactor inline call to `saveAddProductDraft()`; the current implementation correctly performs that save in `hideAddForm()` through the `draftWasSaved` result before clearing the form. The test now asserts the current lifecycle contract instead of requiring the obsolete source pattern. No draft runtime code was changed for this test correction.

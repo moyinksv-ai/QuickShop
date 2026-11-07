@@ -234,3 +234,11 @@ Portfolio supplied by user: https://moyinks.vercel.app. A previous attempt to re
 - The follow-up raises the global toast above all CSS overlays, clarifies create/edit success copy, and adds regression guards. See the 2026-11-07 entry in `regression.md`.
 - Required preview QA: add a valid product and confirm a visible success toast; edit a product and confirm visible update feedback; submit invalid values and confirm validation feedback; trigger an image upload failure safely and confirm the error remains visible. Also recheck draft resume/Back confirmation so the shared toast layer does not obscure other workspace behaviour.
 - Automated tests and Vercel deployment status must be checked for the exact new commit. The user must confirm the preview. Main and production remain untouched.
+
+
+### Latest verification note — 2026-11-07
+
+- Toast-layering fix commit: `f73fb0a234c94c8f9ecdf9c8a4f5de7760d71dea`; test-pattern correction commit: `a78fab9ad46a6ae8c0cb66c01c0962988aed96d8`.
+- Preview for `a78fab9` reached Vercel READY: `https://quickshopper-hweok8clw-moyinks-projects-5a3815db.vercel.app`.
+- CI run #277 exposed one stale pre-existing draft test assertion (it expected an old inline save call); 37/38 tests passed, with the only failure at the outdated assertion. The current source saves via `hideAddForm()` before clearing; update the assertion to this actual contract and verify a new CI run.
+- No physical-device or authenticated runtime QA has yet been performed for the toast fix. User confirmation is still required. Main and production remain untouched.
