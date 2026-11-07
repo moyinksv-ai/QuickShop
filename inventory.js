@@ -388,8 +388,6 @@
   // ADD / EDIT FORM
   // ══════════════════════════════════════════════════════════════════════════
   function clearAddForm() {
-    _addProductFormTouched = false;
-    _addProductFormOwnerId = null;
     ['invId','invName','invBarcode','invPrice','invDesc'].forEach(id => {
       const el = $(id); if (el) el.value = '';
     });
@@ -428,18 +426,15 @@
 
   const ADD_PRODUCT_DRAFT_PREFIX = 'qs_add_product_draft_v1_';
   let _addProductDraftTimer = null;
-  let _addProductFormTouched = false;
-  let _addProductFormOwnerId = null;
   let _draftSavedTimer = null;
 
-  function addProductDraftKey(ownerId = null) {
+  function addProductDraftKey() {
     const u = user();
-    const id = ownerId || (u && u.id) || null;
-    return id ? ADD_PRODUCT_DRAFT_PREFIX + id : null;
+    return u && u.id ? ADD_PRODUCT_DRAFT_PREFIX + u.id : null;
   }
 
-  function readAddProductDraft(ownerId = null) {
-    const key = addProductDraftKey(ownerId);
+  function readAddProductDraft() {
+    const key = addProductDraftKey();
     if (!key) return null;
     try {
       const raw = localStorage.getItem(key);
@@ -464,16 +459,13 @@
     };
   }
 
-  function hasAddProductDraftContent(fields = collectAddProductDraft()) {
-    return Object.entries(fields).some(([key, value]) => key !== 'invCategory' && !!value);
-  }
-
   function saveAddProductDraft() {
-    if (getEditingProductId()) return false;
-    const key = addProductDraftKey(_addProductFormOwnerId);
-    if (!key) return false;
+    if (getEditingProductId()) return;
+    const key = addProductDraftKey();
+    if (!key) return;
     const fields = collectAddProductDraft();
-    if (!hasAddProductDraftContent(fields)) return false;
+    const hasContent = Object.entries(fields).some(([k, v]) => k === 'invCategory' ? false : !!v);
+    if (!hasContent) return;
     try {
       localStorage.setItem(key, JSON.stringify({ version: 1, savedAt: Date.now(), fields }));
       const saved = $('addProductDraftSaved');
@@ -482,11 +474,9 @@
         if (_draftSavedTimer) clearTimeout(_draftSavedTimer);
         _draftSavedTimer = setTimeout(() => { saved.style.display = 'none'; }, 2200);
       }
-      return true;
     } catch (e) {
       errlog('Add Product draft save failed', e);
       toast('Could not save this draft on your device.', 'error');
-      return false;
     }
   }
 
@@ -508,7 +498,6 @@
   function restoreAddProductDraft(draft) {
     if (!draft || !draft.fields || getEditingProductId()) return;
     const fields = draft.fields;
-    _addProductFormTouched = true;
     ['invName','invBarcode','invPrice','invCost','invQty','invCategory','invDesc'].forEach(id => {
       const el = $(id); if (el && typeof fields[id] === 'string') el.value = fields[id].slice(0, 500);
     });
@@ -524,34 +513,13 @@
     const form = $('addForm');
     if (form && !form.dataset.draftBound) {
       form.dataset.draftBound = '1';
-      form.addEventListener('input', function () {
-        _addProductFormTouched = true;
-        scheduleAddProductDraftSave();
-      });
-      form.addEventListener('change', function () {
-        _addProductFormTouched = true;
-        scheduleAddProductDraftSave();
-      });
-    }
-    const backBtn = $('closeAddProductWorkspaceBtn');
-    if (backBtn && !backBtn.dataset.addProductBackBound) {
-      backBtn.dataset.addProductBackBound = '1';
-      backBtn.addEventListener('click', function (event) {
-        event.preventDefault();
-        hideAddForm();
-      });
+      form.addEventListener('input', scheduleAddProductDraftSave);
+      form.addEventListener('change', scheduleAddProductDraftSave);
     }
     const resume = $('resumeAddProductDraftBtn');
     const discard = $('discardAddProductDraftBtn');
     if (resume) resume.addEventListener('click', () => restoreAddProductDraft(readAddProductDraft()));
-    if (discard) discard.addEventListener('click', async () => {
-      const confirmed = await app().showConfirm({
-        title: 'Discard draft?',
-        message: 'This will permanently remove the saved product details from this device.',
-        okText: 'Discard Draft',
-        okDanger: true
-      });
-      if (!confirmed) return;
+    if (discard) discard.addEventListener('click', () => {
       removeAddProductDraft();
       clearAddForm();
       toast('Draft discarded.', 'info');
@@ -571,17 +539,16 @@
     addForm.style.transform = '';
     workspace.style.display = 'flex';
     workspace.classList.remove('closing');
-    const activeUser = user();
-    _addProductFormOwnerId = activeUser && activeUser.id ? activeUser.id : null;
     workspace.setAttribute('aria-hidden', 'false');
     const title = $('addProductWorkspaceTitle');
     if (title) title.textContent = editingProductId ? 'Edit product' : 'Add product';
     const draftPrompt = $('addProductDraftPrompt');
-    const draftOwnerId = activeUser && activeUser.id ? activeUser.id : null;
-    const draft = !getEditingProductId() ? readAddProductDraft(draftOwnerId) : null;
+    const draft = !getEditingProductId() ? readAddProductDraft() : null;
     if (draftPrompt) draftPrompt.style.display = draft ? 'flex' : 'none';
     const draftSaved = $('addProductDraftSaved');
     if (draftSaved) draftSaved.style.display = 'none';
+    const backBtn = $('closeAddProductWorkspaceBtn');
+    if (backBtn) backBtn.onclick = hideAddForm;
     document.body.classList.add('modal-open');
 
     requestAnimationFrame(() => {
@@ -593,32 +560,17 @@
   }
 
   function hideAddForm() {
+    if (_addProductDraftTimer) { clearTimeout(_addProductDraftTimer); _addProductDraftTimer = null; }
+    if (!getEditingProductId()) saveAddProductDraft();
+    clearAddForm();
     const addForm = $('addForm');
     const workspace = $('addProductWorkspace');
     const mount = $('addFormMount');
-
-    // Navigation cleanup calls this even when the workspace is already closed.
-    // Do not mistake remembered cost/quantity defaults for an unfinished draft.
     if (!workspace || workspace.style.display === 'none') {
-      if (_addProductDraftTimer) { clearTimeout(_addProductDraftTimer); _addProductDraftTimer = null; }
-      clearAddForm();
       if (addForm) addForm.style.display = 'none';
       document.body.classList.remove('modal-open');
       return;
     }
-
-    if (_addProductDraftTimer) { clearTimeout(_addProductDraftTimer); _addProductDraftTimer = null; }
-    const isEditing = !!getEditingProductId();
-    const hasDraftContent = !isEditing && _addProductFormTouched && hasAddProductDraftContent();
-    const draftSaved = !hasDraftContent || saveAddProductDraft();
-    if (!draftSaved) {
-      // Keep the workspace and its values intact when auth is not ready or
-      // local storage rejects the write. Never turn a failed save into data loss.
-      toast('Your progress could not be saved yet. Keep this screen open and try again.', 'warning', 3200);
-      return;
-    }
-    clearAddForm();
-    if (hasDraftContent) toast('Your progress was saved. You can continue this draft later.', 'info', 2600);
 
     workspace.classList.add('closing');
     workspace.setAttribute('aria-hidden', 'true');
@@ -975,17 +927,7 @@
     toggleAddFormBtn.addEventListener('click', function (e) {
       e.preventDefault();
       setEditingProductId(null);
-
-      // Do not clear the form before showAddForm() checks for a persisted
-      // vendor draft. Clearing here also resets the draft-owner/touched state
-      // and can make a real saved draft look like a brand-new product.
-      // A genuinely new product still gets the normal clean-form defaults
-      // when no draft exists.
-      const activeUser = user();
-      const ownerId = activeUser && activeUser.id ? activeUser.id : null;
-      const existingDraft = ownerId ? readAddProductDraft(ownerId) : null;
-      if (!existingDraft) clearAddForm();
-
+      clearAddForm();
       showAddForm();
     });
   }
@@ -1221,29 +1163,6 @@
   // PUBLIC API — called by appss.js
   // ══════════════════════════════════════════════════════════════════════════
   function initAll() {
-    // Auth may resolve after inventory initialisation. Re-check only after the
-    // authoritative user is available; never derive the draft key from cache.
-    document.addEventListener('qs:user:auth', function () {
-      const workspace = $('addProductWorkspace');
-      if (!workspace || workspace.style.display === 'none' || getEditingProductId()) return;
-      const activeUser = user();
-      if (!activeUser || !activeUser.id) return;
-      if (_addProductFormOwnerId && _addProductFormOwnerId !== activeUser.id) {
-        // The authenticated account changed while this workspace was open.
-        // hideAddForm saves any touched draft under its original owner ID.
-        hideAddForm();
-        return;
-      }
-      if (!_addProductFormOwnerId) _addProductFormOwnerId = activeUser.id;
-      const prompt = $('addProductDraftPrompt');
-      if (_addProductFormTouched) {
-        if (prompt) prompt.style.display = 'none';
-        scheduleAddProductDraftSave();
-        return;
-      }
-      const draft = readAddProductDraft(activeUser.id);
-      if (prompt) prompt.style.display = draft ? 'flex' : 'none';
-    });
     initBarcodeScannerHandlers();
     initSmartScannerHandlers();
     initImageUploadHandler();
