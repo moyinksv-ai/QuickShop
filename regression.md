@@ -205,3 +205,22 @@ After PR #7 reached production, the user reported repeated saved-progress messag
 - The user must still confirm actual preview runtime behaviour on mobile/browser. CI and READY establish syntax/build/deployment status, not that Inventory buttons and Add Product flows work in the user's browser.
 - No schema, Supabase, product, stock, sales, auth, referral, or vendor-account data changes. Draft state remains device-local; no production data cleanup is authorized or needed.
 - Rollback: keep PR #8 unmerged until preview acceptance. If later merged and a regression appears, revert the merge commit; no database rollback is required.
+
+
+## 2026-11-07 — PR #8 production merge and release verification
+
+- Owner explicitly confirmed all PR #8 preview tests passed and instructed merge.
+- PR #8: https://github.com/moyinksv-ai/QuickShop/pull/8 — merged successfully.
+- Merge commit / main SHA: `e1b25695af50c6ee390eb15f9c4a0a9a1f45f6a9`.
+- Pre-merge backup branch: `backup/main-before-pr8-2026-11-07` at `3d68545d507da9b8d1466edda9d8b8d5a565daaa`.
+- Pre-merge Vercel production rollback deployment: `dpl_6WmW9mzGsyJcYgMLFGH49nayG87q`, READY for that exact pre-merge SHA.
+- Latest PR-head CI run #300 / ID `42361862489`: success. The earlier exact test log for the functional syntax-guard commit `bb1136c2867f7a9c5dfc97979ccacbc50ff48d27` showed 39/39 passing, including Inventory syntax parsing and draft lifecycle checks. The final docs-only PR head also passed the workflow.
+- Vercel preview for PR head `47b1e7f9841783ab6689e5d7c107a281f6c9f9d5`: READY at https://quickshopper-knh4yusbg-moyinks-projects-5a3815db.vercel.app. Owner confirmed all preview tests passed.
+- Production deployment `dpl_E3Q1dbczVXkQ9eWic7oonKPXoGas`: READY for exact merge SHA; aliases include `quickshopper.vercel.app`.
+- Scope remained four files: `inventory.js`, `tests/regression-guards.test.js`, `handover.md`, `regression.md`. No schema, Supabase, product, stock, sales, auth, referral or vendor-account data mutation. No database rollback required.
+- Production deployment readiness is confirmed; authenticated production smoke QA remains outstanding. Use read-only checks or an authorized test vendor/account, never a paying vendor's live inventory.
+- Recovery: Vercel rollback to `dpl_6WmW9mzGsyJcYgMLFGH49nayG87q`; source control revert merge commit `e1b25695af50c6ee390eb15f9c4a0a9a1f45f6a9`.
+
+### Next workstream per handover
+
+Continue the urgent Supabase egress / marketplace / catalogue caching investigation (§3 of `handover.md)), beginning with read-only evidence gathering: official historical daily Usage breakdown for the >2 GB day (verify exact date/timezone and cached vs uncached service categories), plus request/response baselines for marketplace, product detail, storefront and logged-in vendor journeys. Then trace service-worker cache strategy, route refresh invalidation, realtime subscription scope, deterministic ordering/pagination and image delivery. Do not implement caching/schema changes or claim savings until the cause is measured and verified.
