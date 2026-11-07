@@ -591,3 +591,19 @@ test('Add Product workspace title reads edit state through the inventory bridge'
   assert.doesNotMatch(showAddFormSource, /\beditingProductId\b/,
     'inventory.js must not reference appss.js private editingProductId state');
 });
+
+test('Add Product Back confirms only a successfully persisted draft', () => {
+  const source = fs.readFileSync(path.join(root, 'inventory.js'), 'utf8');
+  const saveStart = source.indexOf('  function saveAddProductDraft() {');
+  const saveEnd = source.indexOf('  function scheduleAddProductDraftSave() {', saveStart);
+  const hideStart = source.indexOf('  function hideAddForm() {');
+  const hideEnd = source.indexOf('  function populateCategoryDropdown() {', hideStart);
+  assert.ok(saveStart >= 0 && saveEnd > saveStart, 'draft save function must exist');
+  assert.ok(hideStart >= 0 && hideEnd > hideStart, 'draft hide function must exist');
+  const saveSource = source.slice(saveStart, saveEnd);
+  const hideSource = source.slice(hideStart, hideEnd);
+  assert.match(saveSource, /return true;/, 'save must report successful local persistence');
+  assert.match(saveSource, /return false;/, 'save must report unsuccessful or empty persistence');
+  assert.match(hideSource, /const draftWasSaved = !getEditingProductId\(\) && saveAddProductDraft\(\);/);
+  assert.match(hideSource, /if \(draftWasSaved\) toast\('Your progress has been saved on this device\.', 'success'\);/);
+});
