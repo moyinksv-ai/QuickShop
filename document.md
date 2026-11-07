@@ -192,3 +192,8 @@ The legacy c-green names are retained for compatibility but now carry brand role
 | N9 | **Copy truth.** Every claim on landing, marketplace, and metadata must be true in the code today. No sales guarantees or hardcoded scarcity counters. |
 | N10 | **One role per color.** Brand, money, warning, danger, and decorative colors each have one semantic role. Green is reserved for actual money/revenue/payment moments. |
 | N11 | **Keep token systems separate.** Do not merge landing c-tokens and app accent-tokens in this pass. Align their values and document the mapping; unification is a separate task. |
+
+
+## Global feedback must remain above modal and full-screen layers
+
+The shared `appToast` is appended to `document.body`, so its stacking level must be higher than every CSS-defined overlay, including full-screen Add/Edit workspaces. A toast that is created successfully but sits below an active workspace is functionally invisible; this hides success, validation, and upload feedback together. Keep a regression guard that compares the toast z-index with the highest CSS overlay z-index. Do not solve this by adding duplicate per-screen toast implementations.

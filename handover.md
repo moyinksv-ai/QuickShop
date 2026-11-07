@@ -1,5 +1,5 @@
 # QuickShop Engineering Handover
-**Updated:** 2026-11-06  
+**Updated:** 2026-11-07  
 **Repository:** `moyinksv-ai/QuickShop`  
 **Active working branch:** `design/quickshop-ui-refinement`  
 **Production baseline:** `main`  
@@ -223,3 +223,14 @@ Portfolio supplied by user: https://moyinks.vercel.app. A previous attempt to re
 | Production changes | None authorized |
 
 **Do not treat any item marked “previously found” as verified in the current checkout until re-fetched.**
+
+
+## Latest WP10 follow-up — product-save feedback (2026-11-07)
+
+- Current reviewed baseline before this follow-up: `design/quickshop-ui-refinement` at `c4076129ec8e0b5d82cf2aa77c267bd777e0d852`; preview deployment was READY at `https://quickshopper-12bbuz14f-moyinks-projects-5a3815db.vercel.app`.
+- User confirmed the Add Product draft save/resume flow and its Back confirmation were fixed, then reported a separate regression: pressing Save clears the form fields without visible confirmation.
+- Confirmed cause: global `appToast` used z-index `99999`, while Add Product workspace uses `1000000` and the highest CSS overlay found is `1000001`. Toasts were being generated beneath the workspace. This affected creation success, edit success, validation, and upload feedback.
+- The product creation flow mutates app state, calls `addActivityLog()` (which synchronously flushes local state through `saveState()`), then awaits IndexedDB queue insertion. Queue sync to Supabase runs asynchronously. Do not label the toast as proof of completed remote sync.
+- The follow-up raises the global toast above all CSS overlays, clarifies create/edit success copy, and adds regression guards. See the 2026-11-07 entry in `regression.md`.
+- Required preview QA: add a valid product and confirm a visible success toast; edit a product and confirm visible update feedback; submit invalid values and confirm validation feedback; trigger an image upload failure safely and confirm the error remains visible. Also recheck draft resume/Back confirmation so the shared toast layer does not obscure other workspace behaviour.
+- Automated tests and Vercel deployment status must be checked for the exact new commit. The user must confirm the preview. Main and production remain untouched.

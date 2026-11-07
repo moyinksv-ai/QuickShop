@@ -200,7 +200,7 @@ function initApp() {
           opacity: '0',
           transform: 'translateY(-24px) scale(0.97)',
           transition: 'opacity 0.28s cubic-bezier(0.34,1.56,0.64,1), transform 0.28s cubic-bezier(0.34,1.56,0.64,1)',
-          zIndex: '99999',
+          zIndex: '1000002',
           pointerEvents: 'none', // none when invisible — never blocks taps underneath
           overflow: 'hidden',
           display: 'flex',

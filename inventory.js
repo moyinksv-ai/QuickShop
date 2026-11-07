@@ -680,7 +680,7 @@
             product = Object.assign({}, _existing, patch);
             syncType = 'updateProduct';
             addActivityLog('Edit', 'Updated product: ' + name);
-            toast('Product updated ✓');
+            toast('Product updated successfully.', 'success');
             hideAddForm();
           } else {
             product = {
@@ -692,7 +692,7 @@
             app().addProduct(product);
             syncType = 'addProduct';
             addActivityLog('Create', 'Created product: ' + name);
-            toast('Product saved! Keep adding product orTap X to cancel.', 'success');
+            toast('Product saved successfully.', 'success');
             removeAddProductDraft();
             // Persist last-used values so the next add starts pre-filled
             try { localStorage.setItem('qs_last_cost', cost > 0 ? String(cost) : ''); } catch(e) {}
