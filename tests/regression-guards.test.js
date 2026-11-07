@@ -586,6 +586,20 @@ test('Add Product refresh restores the persisted vendor panel instead of trustin
   assert.match(appSourceCurrent, /sessionStorage\.getItem\('qs_active_view'\)/);
 });
 
+test('Add Product opener checks for a persisted draft before clearing the form', () => {
+  const source = fs.readFileSync(path.join(root, 'inventory.js'), 'utf8');
+  const start = source.indexOf('function initToggleAddFormHandler()');
+  const end = source.indexOf('// ══════════════════════════════════════════════════════════════════════════', start);
+  const handler = source.slice(start, end);
+  assert.match(handler, /const existingDraft = readAddProductDraft\(\);/);
+  assert.match(handler, /if \(!existingDraft\) clearAddForm\(\);/);
+  assert.ok(
+    handler.indexOf('readAddProductDraft()') < handler.indexOf('clearAddForm()'),
+    'the Add Product opener must inspect the vendor draft before resetting form state'
+  );
+  assert.match(handler, /clearAddForm\(\);\s*\n\s*showAddForm\(\);/);
+});
+
 test('Add Product draft recovery is vendor-scoped, local-only, and never queues an unsaved product', () => {
   assert.match(indexHtml, /id="addProductDraftPrompt"/);
   assert.match(indexHtml, /id="resumeAddProductDraftBtn"/);
