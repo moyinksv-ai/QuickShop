@@ -579,3 +579,15 @@ test('Add Product draft recovery is vendor-scoped, local-only, and never queues 
   assert.match(source, /scheduleAddProductDraftSave\(\)/);
   assert.match(styleSource, /\.add-product-draft-prompt/);
 });
+
+test('Add Product workspace title reads edit state through the inventory bridge', () => {
+  const source = fs.readFileSync(path.join(root, 'inventory.js'), 'utf8');
+  const start = source.indexOf('  function showAddForm() {');
+  const end = source.indexOf('  function hideAddForm() {', start);
+  assert.ok(start >= 0 && end > start, 'showAddForm must remain a distinct function');
+  const showAddFormSource = source.slice(start, end);
+  assert.match(showAddFormSource, /getEditingProductId\(\)/,
+    'workspace title and draft visibility must use the inventory bridge getter');
+  assert.doesNotMatch(showAddFormSource, /\beditingProductId\b/,
+    'inventory.js must not reference appss.js private editingProductId state');
+});
