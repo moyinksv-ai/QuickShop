@@ -600,6 +600,16 @@ test('Add Product opener checks for a persisted draft before clearing the form',
   assert.match(handler, /clearAddForm\(\);\s*\n\s*showAddForm\(\);/);
 });
 
+test('Add Product draft reads use the same authenticated vendor owner as the opener', () => {
+  const source = fs.readFileSync(path.join(root, 'inventory.js'), 'utf8');
+  assert.match(source, /function readAddProductDraft\(ownerId = null\)/);
+  assert.match(source, /readAddProductDraft\(ownerId\)/);
+  assert.match(source, /const draftOwnerId = activeUser && activeUser\.id \? activeUser\.id : null;/);
+  assert.match(source, /readAddProductDraft\(draftOwnerId\)/);
+  assert.match(source, /const draft = readAddProductDraft\(activeUser\.id\);/);
+});
+
+
 test('Add Product draft recovery is vendor-scoped, local-only, and never queues an unsaved product', () => {
   assert.match(indexHtml, /id="addProductDraftPrompt"/);
   assert.match(indexHtml, /id="resumeAddProductDraftBtn"/);
