@@ -603,7 +603,7 @@
 
     if (_addProductDraftTimer) { clearTimeout(_addProductDraftTimer); _addProductDraftTimer = null; }
     const isEditing = !!getEditingProductId();
-    const hasDraftContent = !isEditing && hasAddProductDraftContent();
+    const hasDraftContent = !isEditing && _addProductFormTouched && hasAddProductDraftContent();
     const draftSaved = !hasDraftContent || saveAddProductDraft();
     if (!draftSaved) {
       // Keep the workspace and its values intact when auth is not ready or
