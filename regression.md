@@ -292,3 +292,10 @@ No cache/schema/realtime/Storage optimization has been approved or implemented f
 - API log sample: production `qs_get_store` POST 46 calls; `public_catalog_products` GET 12 calls; production `qs_market_products_v2` GET 2 calls. These are request counts only; response byte headers were not available for many API rows.
 - Preserve: image correctness/fallbacks, product ordering, category/search filters, dual-image swipe interaction, lightbox, stock states, cart behavior, vendor product visibility, and storefront realtime stock updates.
 - Any proposed fix must be narrowly scoped, tested on a preview using production-like catalogue sizes, checked for Android mobile behavior and low-bandwidth conditions, and compared with main. No main merge or production deployment without explicit user approval.
+
+
+### 2026-11-08 — Existing image pipeline guard
+
+- Product uploads already pass through `compressImage(file)`: default max width 1024 px, JPEG quality 0.7, then upload to public `user_images`.
+- Storefront `safeImgSrc()` returns the original HTTPS Storage URL unchanged; no storefront thumbnail transformation is currently applied.
+- The measured 68-image group is about 12.9 MB for one copy of its files but about 351.6 MB across 1,980 CDN HIT responses in the sample. Prioritize testing when/how catalogue card images are requested before changing upload compression. Protect image clarity and vendor originals.
