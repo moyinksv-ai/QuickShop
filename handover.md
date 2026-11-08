@@ -354,3 +354,32 @@ Portfolio supplied by user: https://moyinks.vercel.app. A previous attempt to re
 
 ### Next read-only measurement step
 Use a browser Network capture against a protected preview or controlled test session and record per journey: request URL/RPC, initiator, status, transfer/encoded bytes, decoded size when available, and Storage image count/bytes. Specifically compare a cold marketplace load, refresh, Back/Forward return, product detail, cold public storefront, storefront Back/Forward, and a controlled product update that triggers the storefront realtime listener. Do not change caching, schema, Storage URLs, or realtime behavior until those measurements identify the dominant request/byte path.
+
+
+### 2026-11-08 — Cached egress attribution materially improved (read-only)
+
+**Window:** 2026-11-07 07:00:00Z → 2026-11-08 07:00:00Z (24 hours). Project: `wicpvvypqpaljuexmczi`.
+
+Supabase's unified `edge_logs` contain `request.path`, `request.headers.referer`, `response.headers.content_length`, `response.headers.cf_cache_status`, `response.status_code`, and user-agent fields. This is more useful for cached Storage egress than `storage_logs` alone, because CDN cache hits are visible at the gateway while not necessarily reaching the Storage origin log.
+
+- Production referer `https://quickshopper.vercel.app/`: **2,188 public Storage image requests**, **275 distinct image URLs**, **399,071,202 gateway response-content bytes (~380 MiB)** with `cf_cache_status=HIT`.
+- Same production referer: **70 image MISS requests**, **15,545,377 response-content bytes (~14.8 MiB)**.
+- One anonymized `user_images/<owner-folder>/` group: **68 distinct image URLs**, **1,980 HIT requests**, **351,585,456 bytes (~335 MiB)**. Do not put the owner-folder ID in user-facing summaries or docs.
+- Across all observed referers in this window, public Storage image HITs total **2,305 requests / 445,396,711 bytes (~424.8 MiB)**; image MISSes total **81 requests / 16,400,147 bytes (~15.6 MiB)**.
+- One preview deployment referer contributed **187 HIT requests / 159 unique image URLs / 38,368,607 bytes (~36.6 MiB)**. Other previews contributed smaller amounts. Preview traffic is real Supabase usage when previews point to production Supabase.
+- Production API paths: `POST /rest/v1/rpc/qs_get_store` appeared 46 times (plus 35 OPTIONS preflights); `GET /rest/v1/public_catalog_products` appeared 12 times. `GET /rest/v1/qs_market_products_v2` appeared twice from production referer and five times from one preview referer; `qs_market_offers_v2` appeared twice from that preview. This window therefore points much more strongly to public storefront image delivery than marketplace listing reads, but does not prove marketplace was not responsible for the earlier Nov 1 spike.
+- Production cached image requests include Android Chrome and iPhone Safari user agents. This is not only a preview/developer artifact.
+- Across the 275 distinct production image URLs, one copy of each response totals **60,399,763 bytes (~57.6 MiB)**; mean file size ~219.6 KB, largest ~455 KB. The 399 MB total is repeated CDN-hit delivery across requests/visits, not 275 unique files alone.
+
+**Billing interpretation:** Supabase's current Egress documentation defines Cached Egress as egress served from its CDN via cache hits and says it typically applies to Storage Smart CDN; the Billing FAQ says cached egress applies only to Storage. This makes the `cf_cache_status=HIT` public Storage image traffic a strong direct explanation for cached-egress consumption. Gateway `content_length` sums are still observational log bytes, not an invoice-meter reconciliation; do not report them as exact billed usage or savings. References: https://supabase.com/docs/guides/platform/manage-your-usage/egress and https://supabase.com/docs/guides/platform/billing-faq.
+
+**Source-level mechanism confirmed in main (`catalog.js`, SHA `a25727ec67ca3de27403716f2c977c4da8f72d6f`):**
+- `qs_get_store` is the fast path and returns profile + products in one call; fallback fetches the full `public_catalog_products` list.
+- `renderGrid()` builds a card for every filtered product in `allProducts`; the public storefront has no product-page pagination at this render stage.
+- In `buildCard()`, single-image cards use `loading='lazy'`; dual-image cards set the first image's `src` immediately and `loading='eager'`, while only the second image is lazy. This means every dual-image product card can eagerly request its first original image when the full grid is rendered, even when far below the initial viewport.
+- `sw.js` uses cache-first for public Storage image URLs, which can avoid repeat downloads on the same browser after a successful cache fill. It cannot prevent each new visitor/browser from making its first request for each image.
+- The observed 68-image/1,980-hit concentration is consistent with many mobile visits to a large public catalogue. It is not yet proven that all 68 correspond to first images of dual-image cards; avoid stating that as fact until safely mapped.
+
+**Current strongest conclusion:** public storefront catalogue images, particularly the 68-image high-repeat group, are the dominant observed cached-egress path in this 24-hour sample. This is a substantially stronger attribution than the earlier Storage-origin-only sample, which missed most CDN cache-hit traffic. It still does not prove the exact cause of the Nov 1 historical 2.984 GB daily spike.
+
+**Next read-only step:** quantify the distribution of product image sizes at upload/source and verify whether the high-repeat 68-image group maps to first images of dual-image catalogue cards, without exposing owner IDs or modifying vendor records. Then prepare a minimal, reversible image-loading/size proposal. Do not change runtime behavior until scope and regression tests are reviewed.
