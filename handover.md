@@ -383,3 +383,12 @@ Supabase's unified `edge_logs` contain `request.path`, `request.headers.referer`
 **Current strongest conclusion:** public storefront catalogue images, particularly the 68-image high-repeat group, are the dominant observed cached-egress path in this 24-hour sample. This is a substantially stronger attribution than the earlier Storage-origin-only sample, which missed most CDN cache-hit traffic. It still does not prove the exact cause of the Nov 1 historical 2.984 GB daily spike.
 
 **Next read-only step:** quantify the distribution of product image sizes at upload/source and verify whether the high-repeat 68-image group maps to first images of dual-image catalogue cards, without exposing owner IDs or modifying vendor records. Then prepare a minimal, reversible image-loading/size proposal. Do not change runtime behavior until scope and regression tests are reviewed.
+
+
+### 2026-11-08 — Image upload pipeline cross-check
+
+- `inventory.js` calls the shared `compressImage(file)` before upload, then stores the result as JPEG in `user_images`.
+- Main `appss.js` defines `compressImage(file, maxWidth = 1024, quality = 0.7)`; it downsizes only when width exceeds 1024 px and encodes JPEG at quality 0.7.
+- Main `catalog.js` `safeImgSrc()` returns a valid HTTPS URL unchanged; public storefront cards therefore use the stored original uploaded JPEG URL, not a resized thumbnail/transform URL.
+- The 68-image high-repeat group has **12,914,017 bytes (~12.3 MiB)** across one copy of its 68 files, but gateway logs observed **351,585,456 bytes (~335.2 MiB)** delivered across 1,980 CDN HIT requests — a 27.23× delivery multiple for this window.
+- Existing upload compression means the immediate, lower-risk investigation target is card image request timing/visibility and repeated visitor loads, not blindly changing upload quality or replacing stored originals. Do not reduce upload dimensions/quality without image-quality review and vendor-facing regression checks.
