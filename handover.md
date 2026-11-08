@@ -392,3 +392,11 @@ Supabase's unified `edge_logs` contain `request.path`, `request.headers.referer`
 - Main `catalog.js` `safeImgSrc()` returns a valid HTTPS URL unchanged; public storefront cards therefore use the stored original uploaded JPEG URL, not a resized thumbnail/transform URL.
 - The 68-image high-repeat group has **12,914,017 bytes (~12.3 MiB)** across one copy of its 68 files, but gateway logs observed **351,585,456 bytes (~335.2 MiB)** delivered across 1,980 CDN HIT requests — a 27.23× delivery multiple for this window.
 - Existing upload compression means the immediate, lower-risk investigation target is card image request timing/visibility and repeated visitor loads, not blindly changing upload quality or replacing stored originals. Do not reduce upload dimensions/quality without image-quality review and vendor-facing regression checks.
+
+
+### 2026-11-08 — Read-only cross-check of the high-repeat image folder
+
+- A read-only aggregate query against `storage.objects` and `public.products` for the anonymized owner folder visible in the highest-repeat edge-log image paths returned **230 stored Storage objects**, **108 product rows whose primary `image_url` points into that folder**, and **1 product row whose secondary `image_url2` points into it**.
+- The 68 distinct image URLs seen in the 24-hour edge-log sample are therefore a subset of a larger product-image collection, not proof that the catalogue has exactly 68 products or that all 68 were dual-image/eager cards.
+- Since single-image storefront cards are marked `loading='lazy'`, a plausible explanation is that visitors load a subset of the larger catalogue as they browse/scroll, and many separate visitors request the same popular images. The edge logs do not identify individual browser sessions, so this remains an interpretation rather than a proven per-session journey.
+- This cross-check reinforces that the high-repeat group is product-image traffic, but it does **not** isolate eager loading as the cause. Keep the dual-image eager behavior as a separate code-level concern; do not attribute the 351.6 MB group to it without a controlled capture.
