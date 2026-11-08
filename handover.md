@@ -1,7 +1,7 @@
 # QuickShop Engineering Handover
-**Updated:** 2026-11-07  
+**Updated:** 2026-11-08  
 **Repository:** `moyinksv-ai/QuickShop`  
-**Active working branch:** `main` (next workstream: create a dedicated branch for the Supabase egress/catalogue investigation)  
+**Active working branch:** `investigate/supabase-egress-catalogue-2026-11-07` (read-only Supabase egress/catalogue investigation)  
 **Production baseline:** `main`  
 **Release rule:** No merge to `main`, production deployment, schema change, or destructive data operation without explicit user approval.
 
@@ -28,7 +28,7 @@
 ## 0. Immediate priorities (in order)
 
 1. **Post-merge production smoke check:** PR #8 is merged and Vercel production deployment `dpl_E3Q1dbczVXkQ9eWic7oonKPXoGas` is READY for merge SHA `e1b25695af50c6ee390eb15f9c4a0a9a1f45f6a9`. Perform a safe production smoke check using read-only paths or an authorized test vendor/account: sign-in/session restoration, Inventory list, Add Product open/close/draft resume/discard, existing product edit, sell/restock, and public storefront/catalogue visibility. Never create or mutate sample records on a paying vendor's account.
-2. **Next engineering workstream: Supabase egress, marketplace and catalogue caching (§3).** Start with read-only measurement and root-cause investigation. Retrieve the official Supabase daily Usage breakdown for the historical >2 GB day (likely Nov 3–4; verify date/timezone), distinguish cached/uncached Storage and database egress, and capture a current request/byte baseline for marketplace and storefront journeys. Do not implement cache/schema changes until measurements and exact source paths are verified.
+2. **Current engineering workstream: Supabase egress, marketplace and catalogue caching (§3).** Continue the already-created dedicated investigation branch with read-only measurement and root-cause tracing. The Supabase Usage screenshot supplied on 2026-11-08 shows `Cached Egress 6.803 / 5 GB (136%)`, `Egress 0.356 / 5 GB (7%)`, and a ~2.984 GB cached-egress spike on **Nov 1**. The exact per-service breakdown for that spike is not available from the UI shown. Do not claim the marketplace is proven as the sole cause yet. Trace marketplace/catalogue/image request paths and measure them. No cache/schema/Supabase production change is authorized until the cause and safe fix are verified.
 3. Re-fetch current main and relevant source before starting; create one dedicated branch for this egress/caching workstream. Keep it separate from the completed Add Product hotfix.
 4. Preserve rollback: backup branch `backup/main-before-pr8-2026-11-07` points to pre-PR8 SHA `3d68545d507da9b8d1466edda9d8b8d5a565daaa`; Vercel rollback deployment is `dpl_6WmW9mzGsyJcYgMLFGH49nayG87q`. No database rollback is required for PR #8.
 5. Keep the public engineering evidence log updated with verified outcomes only.
@@ -136,6 +136,32 @@ The user is exploring a simpler bulk-friendly flow:
 - WP10-D: form redesign.
 - WP10-E: inventory header hierarchy.
 - R5: save path reportedly contains an awaited pending-change operation without an outer catch. Re-inspect current code and decide whether this is still present and how to handle safely.
+
+## 3A. Egress investigation status — 2026-11-08
+
+### Supabase Usage evidence supplied by the user
+- Current billing cycle shown: **22 Oct 2026 → 22 Nov 2026** on the Free Plan.
+- Supabase Usage Summary shows **Cached Egress: 6.803 / 5 GB (136%)**, with **1.80 GB overage**.
+- Normal **Egress: 0.356 / 5 GB (7%)**.
+- The Egress daily chart shows a large **29 Oct** total-traffic spike and a particularly large **1 Nov** cached-egress spike.
+- Cached Egress daily tooltip showed **2.984 GB on 1 Nov 2026**.
+- The visible Egress chart tooltip on 29 Oct showed Storage Egress 40.077 MB (61.6%), PostgREST Egress 22.476 MB (34.5%), Auth 168.787 KB (0.3%), and Realtime 2.359 MB (3.6%). This tooltip is for total egress on 29 Oct, not the 1 Nov cached-egress spike.
+- The user reports that the Usage UI does not expose a further per-service breakdown for the 1 Nov cached-egress spike from the available chart.
+- This proves the organization has exceeded the Free Plan cached-egress allowance and that cached egress is the dominant usage category in the current billing cycle. It does **not** by itself prove which QuickShop route/resource caused the spike.
+
+### Operational interpretation
+- The immediate objective is to reduce **future** egress before the Supabase restriction warning date of **14 Nov 2026**, not to recover already-consumed bandwidth.
+- Do not delete vendor/product data, images, or database records merely to reduce egress.
+- Treat preview traffic as real Supabase traffic when previews point at the production Supabase project. A new Vercel preview deployment itself is not inherently the problem; the requests made by that preview are what matter.
+- Marketplace remains a high-priority hypothesis because it repeatedly fetches public catalogue data/images and has previously observed reload/invalidation behaviour. It is not yet a proven root cause.
+- The Free Plan warning does not mean QuickShop is permanently ended on 14 Nov. If usage is corrected, the restriction risk can be reassessed; if a restriction is applied, upgrading or waiting for the next billing reset are separate recovery paths. Do not promise uninterrupted service without checking the current Supabase account status.
+
+### Investigation branch / safety
+- Branch: `investigate/supabase-egress-catalogue-2026-11-07`
+- Branch base: `cebdac1976ce2423b386d48cd8bd2969ba01aa06`
+- This workstream has remained **read-only** so far: no source, schema, database, storage, Supabase configuration, or vendor data has been changed.
+- Next evidence target: quantify marketplace/catalogue request counts and response bytes by journey; inspect Storage image requests and image dimensions; trace duplicate catalogue fetches, realtime-triggered reloads, pageshow/visibility refreshes, service-worker behavior, and preview traffic.
+- Only after the request/byte source is established should a surgical optimization be implemented.
 
 ## 3. Urgent workstream — Supabase egress, marketplace and catalogue caching
 
