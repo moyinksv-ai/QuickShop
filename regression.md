@@ -279,3 +279,16 @@ Continue the urgent Supabase egress / marketplace / catalogue caching investigat
 
 ### Release guard
 No cache/schema/realtime/Storage optimization has been approved or implemented from this evidence alone. The next test must capture browser request initiators and transfer bytes for each named journey before any production-facing optimization is proposed.
+
+
+## 2026-11-08 — Cached egress and storefront image-load guardrails
+
+- The 2026-11-07 07:00Z → 2026-11-08 07:00Z Supabase gateway sample shows production public Storage image CDN HIT traffic of 2,188 requests / 275 unique URLs / 399,071,202 response-content bytes; 70 MISS requests / 15,545,377 bytes. This is log-observed response content, not a billing-meter reconciliation.
+- One anonymized Storage owner-folder group contains 68 distinct image URLs and accounts for 1,980 HIT requests / 351,585,456 response-content bytes. Do not expose the folder/user ID in docs intended for broad sharing.
+- Supabase documentation defines Cached Egress as CDN cache-hit egress and says Cached Egress applies only to Storage. This confirms public Storage image CDN hits are directly relevant to the billing category; gateway byte totals remain approximate observations.
+- Main `catalog.js` currently renders every filtered product card from `allProducts`. For dual-image cards, the first image is assigned a URL and marked `loading='eager'`; only the second is lazy. Single-image cards are lazy. This eager-first-image behavior is a high-priority candidate to test, not an approved change.
+- `qs_get_store` returns the complete storefront product list. Do not change its return shape or the store's product data contract as part of a first image-delivery optimization without a separate compatibility audit.
+- `sw.js` cache-first image behavior is per-client and only helps after that browser has cached an image. Do not assume it prevents first-view egress for new visitors.
+- API log sample: production `qs_get_store` POST 46 calls; `public_catalog_products` GET 12 calls; production `qs_market_products_v2` GET 2 calls. These are request counts only; response byte headers were not available for many API rows.
+- Preserve: image correctness/fallbacks, product ordering, category/search filters, dual-image swipe interaction, lightbox, stock states, cart behavior, vendor product visibility, and storefront realtime stock updates.
+- Any proposed fix must be narrowly scoped, tested on a preview using production-like catalogue sizes, checked for Android mobile behavior and low-bandwidth conditions, and compared with main. No main merge or production deployment without explicit user approval.
