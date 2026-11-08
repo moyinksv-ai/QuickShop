@@ -299,3 +299,11 @@ No cache/schema/realtime/Storage optimization has been approved or implemented f
 - Product uploads already pass through `compressImage(file)`: default max width 1024 px, JPEG quality 0.7, then upload to public `user_images`.
 - Storefront `safeImgSrc()` returns the original HTTPS Storage URL unchanged; no storefront thumbnail transformation is currently applied.
 - The measured 68-image group is about 12.9 MB for one copy of its files but about 351.6 MB across 1,980 CDN HIT responses in the sample. Prioritize testing when/how catalogue card images are requested before changing upload compression. Protect image clarity and vendor originals.
+
+
+### 2026-11-08 — Clarification: high-repeat images vs eager loading
+
+- Read-only aggregate matching of the high-repeat image owner's Storage folder to product rows found 230 stored objects, 108 primary product-image references and 1 secondary-image reference.
+- The 68 unique URLs in edge logs are only the images actually requested in the sampled window; they are not necessarily the complete catalogue. Single-image product cards are lazy-loaded, so browsing/scrolling by many separate visitors is a plausible explanation for which subset was fetched.
+- Do not claim the 68-image group was caused by dual-image eager loading. That code behavior exists and should be tested independently, but the current data does not establish it as the cause of these specific 68 URLs.
+- Preserve the distinction between per-visitor first-view image delivery and repeated requests across different visitors. Edge logs do not provide session IDs that let us distinguish those journeys.
