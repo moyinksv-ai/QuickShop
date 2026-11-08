@@ -257,10 +257,13 @@ Continue the urgent Supabase egress / marketplace / catalogue caching investigat
 
 ### Repository and scope
 - Investigation branch `investigate/supabase-egress-catalogue-2026-11-07` was re-fetched and compared with `main` before this tracing pass.
-- Current comparison: 3 commits ahead / 0 behind; only `handover.md` and `regression.md` differ from `main`. No runtime code or Supabase state was changed.
+- Current comparison: 5 commits ahead / 0 behind; only `handover.md` and `regression.md` differ from `main`. No runtime code or Supabase state was changed.
 
 ### Proven source invariants to guard during any future optimization
 - Marketplace first-page product cards render original `image_url` values directly because `_IMG_TRANSFORM = false`; product-card images do not set `loading="lazy"`.
+- Marketplace product-card `touchstart` prefetches matching vendor offers from `qs_market_offers_v2`; the promise is reused for detail opening only while the in-memory prefetch cache survives. A marketplace freshness invalidation clears that cache. Direct slug navigation performs a separate `qs_market_products_v2` lookup.
+- Marketplace card images set `src` immediately without native lazy loading; storefront product-card images do set lazy loading (first dual-image eager, second lazy). Browser transfer counts/bytes remain unmeasured.
+- The sampled PostgREST logs (233 rows) expose only `path=/` in the available attributes, and realtime logs do not expose a reliable application-level products-change event count. They cannot supply per-RPC byte attribution or identify the client journey.
 - Marketplace freshness is not a cheap freshness check: products realtime events call `scheduleMarketRefresh()`, which clears the in-memory catalogue/offer caches and routes back through the current URL, causing a fresh catalogue request when online and visible.
 - `pageshow` and `visibilitychange` can invoke the same refresh path, subject to the current 5-second lifecycle throttle. Any optimization must preserve correct Back/Forward restoration while avoiding duplicate authoritative downloads.
 - Marketplace category pages use explicit `range()` pagination and Load More; do not silently replace that user-controlled boundary with an all-products fetch.
