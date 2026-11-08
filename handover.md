@@ -400,3 +400,14 @@ Supabase's unified `edge_logs` contain `request.path`, `request.headers.referer`
 - The 68 distinct image URLs seen in the 24-hour edge-log sample are therefore a subset of a larger product-image collection, not proof that the catalogue has exactly 68 products or that all 68 were dual-image/eager cards.
 - Since single-image storefront cards are marked `loading='lazy'`, a plausible explanation is that visitors load a subset of the larger catalogue as they browse/scroll, and many separate visitors request the same popular images. The edge logs do not identify individual browser sessions, so this remains an interpretation rather than a proven per-session journey.
 - This cross-check reinforces that the high-repeat group is product-image traffic, but it does **not** isolate eager loading as the cause. Keep the dual-image eager behavior as a separate code-level concern; do not attribute the 351.6 MB group to it without a controlled capture.
+
+
+### 2026-11-08 — Preview experiment: lazy-load both storefront swipe-card images
+
+- New isolated branch: `experiment/storefront-image-lazyload-2026-11-08`, created from the read-only egress investigation branch.
+- Single-file runtime change in `catalog.js`: inside public storefront `buildCard()`, dual-image swipe cards now set both images to `loading='lazy'` and `decoding='async'` before assigning their source. Previously the first image was eager and the second lazy.
+- Product detail hero image code was deliberately not changed; it remains eager. Single-image card loading was not changed. No API, data shape, upload compression, Storage URL, Service Worker, cache policy, realtime, product ordering, cart, stock, or vendor logic changed.
+- Purpose: test whether avoiding eager requests for off-screen dual-image catalogue cards reduces first-load Storage image requests without affecting visible product presentation.
+- This is a controlled hypothesis test, not a proven fix for the measured 68-image repeat group. The edge logs did not establish that group was caused by eager loading.
+- Preview deployment only. Test cold first load, long scroll, category/search filtering, swipe second image, lightbox, product detail image, and slow mobile network. Compare Storage image request counts/bytes for equivalent catalogue journeys. Check that near-viewport images appear promptly and no blank thumbnails persist.
+- Do not merge to main unless the user tests Android preview and measurements show a meaningful reduction without visual or interaction regressions. Rollback is one-file revert of `catalog.js` to the parent commit.
