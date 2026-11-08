@@ -1935,9 +1935,12 @@
         var slide = document.createElement('div');
         slide.className = 'cat-swipe-slide';
         var img = document.createElement('img');
-        img.src     = safeImgSrc(src);
+        // Keep both catalogue swipe images lazy; the detail hero remains eager.
+        // This avoids fetching the first image for every off-screen dual-image card.
+        img.loading = 'lazy';
+        img.decoding = 'async';
         img.alt     = p.name || '';
-        img.loading = i === 0 ? 'eager' : 'lazy';
+        img.src     = safeImgSrc(src);
         slide.appendChild(img);
         track.appendChild(slide);
       });
