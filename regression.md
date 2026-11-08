@@ -257,7 +257,7 @@ Continue the urgent Supabase egress / marketplace / catalogue caching investigat
 
 ### Repository and scope
 - Investigation branch `investigate/supabase-egress-catalogue-2026-11-07` was re-fetched and compared with `main` before this tracing pass.
-- Current comparison: 5 commits ahead / 0 behind; only `handover.md` and `regression.md` differ from `main`. No runtime code or Supabase state was changed.
+- Pre-update comparison: 5 commits ahead / 0 behind; only `handover.md` and `regression.md` differed from `main`. Re-fetch the current comparison after this documentation update. No runtime code or Supabase state was changed.
 
 ### Proven source invariants to guard during any future optimization
 - Marketplace first-page product cards render original `image_url` values directly because `_IMG_TRANSFORM = false`; product-card images do not set `loading="lazy"`.
