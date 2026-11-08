@@ -251,3 +251,28 @@ Continue the urgent Supabase egress / marketplace / catalogue caching investigat
 ### Supabase restriction-risk note
 - The dashboard warns that the organization exceeded quota in the previous billing period and may be restricted from **14 Nov 2026** if it remains over quota.
 - This is a usage/restriction warning, not evidence that QuickShop will permanently terminate on 14 Nov. Keep the app protected by reducing future usage and monitor the organization's actual status. Do not promise that waiting until 22 Nov is the only recovery path; if Supabase applies a restriction, the team should follow the current Supabase account guidance or upgrade if necessary.
+
+
+## 2026-11-08 — Supabase egress tracing evidence
+
+### Repository and scope
+- Investigation branch `investigate/supabase-egress-catalogue-2026-11-07` was re-fetched and compared with `main` before this tracing pass.
+- Current comparison: 3 commits ahead / 0 behind; only `handover.md` and `regression.md` differ from `main`. No runtime code or Supabase state was changed.
+
+### Proven source invariants to guard during any future optimization
+- Marketplace first-page product cards render original `image_url` values directly because `_IMG_TRANSFORM = false`; product-card images do not set `loading="lazy"`.
+- Marketplace freshness is not a cheap freshness check: products realtime events call `scheduleMarketRefresh()`, which clears the in-memory catalogue/offer caches and routes back through the current URL, causing a fresh catalogue request when online and visible.
+- `pageshow` and `visibilitychange` can invoke the same refresh path, subject to the current 5-second lifecycle throttle. Any optimization must preserve correct Back/Forward restoration while avoiding duplicate authoritative downloads.
+- Marketplace category pages use explicit `range()` pagination and Load More; do not silently replace that user-controlled boundary with an all-products fetch.
+- Public storefront initialization can receive the entire product list through `qs_get_store`; the fallback path also fetches the entire list. Storefront product realtime events re-fetch that full list.
+- Supabase public Storage images must remain public-cache-safe and must never be replaced with URLs that leak private/authenticated vendor data.
+
+### Read-only measurement recorded
+- Supabase Storage logs for 2026-11-07 00:00Z → 2026-11-08 00:00Z: 525 successful GETs, 29,941,524 logged response-content bytes.
+- Production root referer `https://quickshopper.vercel.app/`: 133 GETs, 28,309,399 bytes.
+- No Storage GET with a `search.html` referer appeared in that sampled window.
+- These are log observations only; they are **not** the Supabase billed Cached Egress number and must not be reported as measured savings/cost reduction.
+- The largest sampled original images are hundreds of KB each, with multiple same-file 200 responses appearing twice. This supports the image-transfer hypothesis for public storefront traffic but does not establish the historical Nov 1 billing spike's sole cause.
+
+### Release guard
+No cache/schema/realtime/Storage optimization has been approved or implemented from this evidence alone. The next test must capture browser request initiators and transfer bytes for each named journey before any production-facing optimization is proposed.
