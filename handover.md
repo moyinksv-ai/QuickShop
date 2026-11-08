@@ -21,7 +21,7 @@
 - PR #8 merged successfully. Production deployment `dpl_E3Q1dbczVXkQ9eWic7oonKPXoGas` is `READY` for exact `main` merge commit `e1b25695af50c6ee390eb15f9c4a0a9a1f45f6a9`, with production aliases including `quickshopper.vercel.app`.
 - A rollback branch `backup/main-before-pr8-2026-11-07` preserves the exact pre-PR8 main SHA `3d68545d507da9b8d1466edda9d8b8d5a565daaa`. Previous production deployment `dpl_6WmW9mzGsyJcYgMLFGH49nayG87q` is `READY` for that same SHA. For fast recovery, roll back Vercel to that deployment; source-control recovery is to revert merge commit `e1b25695af50c6ee390eb15f9c4a0a9a1f45f6a9`.
 - PR #8 changed only `inventory.js`, regression tests, `handover.md`, and `regression.md`; no schema/Supabase/product/stock/sales/auth/referral/vendor-account data mutations. No database rollback is required.
-- The user confirmed all preview checks passed. Production deployment is verified `READY`, but the post-deploy authenticated vendor smoke check is still outstanding; do not claim production runtime QA beyond deployment readiness.
+- The user confirmed all preview checks passed **and subsequently confirmed the post-merge production smoke test passed**. Do not treat production smoke as outstanding unless a new regression is reported.
 - Device-local recovery note: already-created phantom drafts may remain in a vendor's localStorage. The new meaningful-content validation prevents cost/quantity-only records from prompting; do not bulk-delete vendor storage or touch server data.
 - Rollback: revert the hotfix commit; no database rollback required.
 
