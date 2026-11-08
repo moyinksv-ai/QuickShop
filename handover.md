@@ -320,7 +320,7 @@ Portfolio supplied by user: https://moyinks.vercel.app. A previous attempt to re
 ### Repository state verified
 - Current investigation branch HEAD at the start of this checkpoint: `7ce9fd91d53114951a94a4e4c4a4a443f29129bd`.
 - Current `main` HEAD: `4e1026766a84553b454bc6e9ca3353d2b966656d`.
-- The branch is currently 5 commits ahead / 0 behind `main`; the complete GitHub comparison reports only `handover.md` and `regression.md` changed. All investigation-branch changes remain documentation-only. Merge base remains `cebdac1976ce2423b386d48cd8bd2969ba01aa06`.
+- Immediately before this documentation update, GitHub comparison showed 5 commits ahead / 0 behind `main`; only `handover.md` and `regression.md` differed. The current comparison must be re-fetched after this update. Merge base remains `cebdac1976ce2423b386d48cd8bd2969ba01aa06`.
 - No application code, SQL, schema, storage object, Supabase configuration, or vendor-data changes were made in this tracing pass.
 
 ### Static request-lifecycle findings — proven from current source
