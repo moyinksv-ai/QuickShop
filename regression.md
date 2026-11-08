@@ -307,3 +307,14 @@ No cache/schema/realtime/Storage optimization has been approved or implemented f
 - The 68 unique URLs in edge logs are only the images actually requested in the sampled window; they are not necessarily the complete catalogue. Single-image product cards are lazy-loaded, so browsing/scrolling by many separate visitors is a plausible explanation for which subset was fetched.
 - Do not claim the 68-image group was caused by dual-image eager loading. That code behavior exists and should be tested independently, but the current data does not establish it as the cause of these specific 68 URLs.
 - Preserve the distinction between per-visitor first-view image delivery and repeated requests across different visitors. Edge logs do not provide session IDs that let us distinguish those journeys.
+
+
+### 2026-11-08 — Preview-only lazy-load experiment for storefront swipe cards
+
+- Branch: `experiment/storefront-image-lazyload-2026-11-08`.
+- Change is limited to `catalog.js` public storefront `buildCard()`: both images in dual-image swipe cards now use `loading='lazy'` and `decoding='async'`; the detail hero remains eager and single-image cards retain existing behavior.
+- Must test on Android: first viewport image appearance; scroll through long catalogue; category/search re-render; dual-image swipe when card is near viewport; lightbox; product detail hero; back/forward navigation; slow network and reload.
+- Verify the first image in every visible card is loaded promptly, swipe second image loads when needed, and no blank/broken image placeholders remain.
+- Compare equivalent before/after preview journeys using Supabase edge logs: public Storage image GET counts, unique URLs, HIT/MISS and response-content bytes. Treat those as observed gateway metrics, not invoice totals. Avoid testing against production vendor edits.
+- Rollback: revert only the `catalog.js` experiment commit. No data/schema/storage mutation was made.
+- Not approved for main or production. Require explicit user approval after preview results and regression review.
