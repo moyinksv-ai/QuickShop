@@ -307,3 +307,27 @@ No cache/schema/realtime/Storage optimization has been approved or implemented f
 - The 68 unique URLs in edge logs are only the images actually requested in the sampled window; they are not necessarily the complete catalogue. Single-image product cards are lazy-loaded, so browsing/scrolling by many separate visitors is a plausible explanation for which subset was fetched.
 - Do not claim the 68-image group was caused by dual-image eager loading. That code behavior exists and should be tested independently, but the current data does not establish it as the cause of these specific 68 URLs.
 - Preserve the distinction between per-visitor first-view image delivery and repeated requests across different visitors. Edge logs do not provide session IDs that let us distinguish those journeys.
+
+
+## 2026-11-12 — Egress trigger audit regression coverage
+
+### Fetch-trigger invariants
+Before implementing freshness/caching changes, verify that the following remain true:
+- Marketplace first load performs the expected initial product fetch and does not duplicate it through a second initialization path.
+- Marketplace lifecycle resume/visibility/online events are coalesced according to the implemented freshness policy and do not create refresh storms.
+- A marketplace realtime event does not cause multiple full catalogue fetches for one logical change unless explicitly justified.
+- Marketplace search, category pagination, Load More, Stores lazy loading, and product-detail offer loading remain functionally separate.
+- Storefront initial load uses the fast `qs_get_store` path when available and does not accidentally add duplicate fallback product fetches.
+- A current-vendor product realtime event updates the storefront correctly; unrelated vendor events must not rebuild the current catalogue.
+- API response-byte measurements and Storage image response-byte measurements are recorded separately; neither is treated as a billing reconciliation without supporting evidence.
+
+### Marketplace → storefront handoff regression
+- Marketplace product detail → vendor card → storefront opens the intended vendor.
+- `pid` correctly opens the originating product on the initial handoff.
+- Back/Keep Shopping behavior remains correct.
+- WhatsApp/order handoff remains correct.
+- Refreshing the vendor storefront after the handoff must stay at the vendor catalogue/current screen rather than reopening the originating product detail.
+- Direct vendor links with a legitimate `pid` must retain their intended product-opening behavior.
+
+### Baseline test protocol
+Run the eight named journeys on the unchanged baseline and record request count + response bytes before any freshness change. Repeat each journey sufficiently to separate cold/first-view from warm/repeat behavior. Do not mutate paying vendors' inventory to create realtime events; use existing read-only traffic, an authorized test vendor, or controlled non-production test data where available.
