@@ -400,3 +400,50 @@ Supabase's unified `edge_logs` contain `request.path`, `request.headers.referer`
 - The 68 distinct image URLs seen in the 24-hour edge-log sample are therefore a subset of a larger product-image collection, not proof that the catalogue has exactly 68 products or that all 68 were dual-image/eager cards.
 - Since single-image storefront cards are marked `loading='lazy'`, a plausible explanation is that visitors load a subset of the larger catalogue as they browse/scroll, and many separate visitors request the same popular images. The edge logs do not identify individual browser sessions, so this remains an interpretation rather than a proven per-session journey.
 - This cross-check reinforces that the high-repeat group is product-image traffic, but it does **not** isolate eager loading as the cause. Keep the dual-image eager behavior as a separate code-level concern; do not attribute the 351.6 MB group to it without a controlled capture.
+
+
+## 2026-11-12 — Fetch-trigger audit and baseline plan
+
+### Current status
+- No runtime code was changed during this audit. The work remains read-only on `investigate/supabase-egress-catalogue-2026-11-07`.
+- The audited marketplace surface is `search.html`; the audited public vendor storefront is `catalog.js`.
+- Before any TTL, realtime, incremental-update, or cache implementation, the next step is to establish a repeatable request/response-size baseline for eight named journeys. Do not claim savings until before/after measurements exist.
+
+### Marketplace trigger audit — verified
+1. **Marketplace first load:** route initialization enters `loadHome()` and `loadRecent(false)`, fetching the recent marketplace product page. Home page size is currently 60 records.
+2. **Marketplace return/resume:** lifecycle handlers including `pageshow`, `visibilitychange`, and reconnect handling can enter the marketplace freshness path. The current design can invalidate in-memory memo/prefetch state and route through the current URL, causing a fresh authoritative marketplace request rather than a cheap freshness check.
+3. **Marketplace realtime:** the marketplace products subscription listens broadly to `products` changes and can call `scheduleMarketRefresh()`, which invalidates client caches and re-routes the current marketplace URL. This can produce another full route-level data fetch.
+4. **Marketplace product detail:** opening a product uses cached/prefetched `qs_market_offers_v2` when available; touchstart can prefetch the same offer set before the click. Direct product-slug navigation can first query `qs_market_products_v2` to resolve the slug.
+5. **Marketplace search:** `qs_find_canonical_v2` RPC is used for search results.
+6. **Marketplace category:** `qs_market_products_by_category_v2` is paginated with `range()`, currently 16 records per page. Load More is user-controlled and must not be silently converted into an all-products fetch.
+7. **Marketplace stores:** the Stores tab is lazy-loaded. All stores use `qs_active_stores_v2`; category stores use `qs_market_stores_by_category_v2`, limited to 50.
+
+### Public storefront trigger audit — verified
+- **Initial fast path:** `qs_get_store` can return store/profile data and the complete available product list in one RPC response.
+- **Fallback initialization:** profile resolution can query public profile/share-link data and then fetch the complete product list from the public catalogue/products path. A phone lookup may run concurrently when needed.
+- **Vendor realtime:** `catalog.js` subscribes to `products` INSERT/UPDATE/DELETE events filtered by the current vendor `user_id`. Every matching event currently calls `fetchProducts()`, replacing the complete local product list and re-rendering the catalogue. This is a confirmed full-list refetch trigger.
+- **Storefront lifecycle:** unlike the marketplace, the audited storefront does not currently use the same `pageshow`/`visibilitychange`/online full-refresh machinery. Do not apply a generic lifecycle TTL to storefront without proving a redundant trigger first.
+
+### Confirmed navigation regression to preserve during this work
+Marketplace vendor handoff creates storefront URLs containing `store`, `pid`, `from=market`, and `market_product`. The storefront intentionally opens the product detail when `pid` is present. The URL remains capable of carrying that `pid`, so refreshing the storefront after a Marketplace → vendor product → WhatsApp handoff can reopen the originating product detail instead of leaving the user at the vendor catalogue. This is a URL/state lifecycle defect, not a Supabase freshness issue. It must be fixed separately and covered by regression tests.
+
+### Baseline measurement rule
+The next investigation step is a request → response-size baseline for eight journeys: (1) marketplace first load, (2) marketplace return/resume, (3) marketplace realtime-triggered refresh, (4) marketplace product detail, (5) storefront first load, (6) storefront realtime-triggered catalogue refresh, (7) Marketplace → storefront handoff, and (8) storefront refresh after that handoff.
+
+Capture, where available: request count, HTTP method, URL/path or RPC identity, response status, response Content-Length/encoded transfer bytes, decoded response size if available, timing, cache status, initiating browser event/function, payload row/item count, and repeated-request count. Separate PostgREST/API bytes from Supabase Storage image bytes. For Storage, record URL/object identity where safe, HIT/MISS status, response bytes, and image request count. Do not use log-observed response-content bytes as a billing-meter reconciliation.
+
+For each journey run a clean baseline against the same current production-like catalogue and viewport. Repeat enough times to distinguish first-load from warm-cache behavior. Record median and total request bytes, not only one run. Compare preview candidate vs the same journey on the unchanged baseline branch/main. Also compare Storage image bytes independently from API bytes. Do not interpret a lower request count as a win if response bytes or correctness regress.
+
+### Comparison and acceptance principles
+- **Primary:** total Supabase response bytes per journey, split into API/PostgREST, RPC, Realtime and Storage/CDN where measurable.
+- **Secondary:** request count, duplicate/refetch count, time to usable catalogue, and cache HIT/MISS behavior.
+- **Correctness gates:** new/edited/deleted products still appear appropriately; filters/search/pagination remain correct; vendor-scoped realtime still updates stock/product state; cart and product detail state remain intact; Marketplace → storefront Back/Keep Shopping/WhatsApp flows remain intact; refresh after Marketplace handoff does not reopen the old product.
+- Do not merge a cost optimization merely because a single synthetic run is smaller. Require repeatable before/after evidence and no regression in authoritative stock/checkout behavior.
+
+### Explicit non-goals for the first baseline/experiment
+- Do not change database schema/RPC contracts.
+- Do not introduce Redis or another external cache as a first response.
+- Do not redesign marketplace pagination.
+- Do not remove realtime merely to reduce traffic.
+- Do not change image upload quality based only on current egress evidence.
+- Do not combine the first TTL experiment with incremental realtime updates or the separate lazy-image experiment. Keep experiments isolated so causality remains measurable.
