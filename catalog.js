@@ -1477,6 +1477,14 @@
       }
 
       var nextMeta = buildCatalogMeta(metaResult.data);
+      // A bootstrap catalogue already contains the complete product payload.
+      // On its first metadata pass, record fingerprints only; do not turn the
+      // initial load into a second full product fetch.
+      if (!Array.isArray(cachedMeta) || cachedMeta.length === 0) {
+        writeCatalogCache(cacheInput, storeId, null, allProducts, nextMeta);
+        return { ok: true, changed: false };
+      }
+
       var previous = {};
       (Array.isArray(cachedMeta) ? cachedMeta : []).forEach(function (m) {
         if (m && m.id) previous[m.id] = String(m.updatedAt || '') + '|' + String(m.qty == null ? '' : m.qty);
@@ -3335,7 +3343,7 @@
               renderCatalogProductState(storeName);
               writeCatalogCache(_catalogCacheInput, storeId, profile, allProducts);
             }
-          }          }
+          }
         )
         .subscribe(function(status) {
           if (!IS_PROD) console.log('[Catalog] Realtime status:', status);
