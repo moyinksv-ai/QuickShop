@@ -479,3 +479,21 @@ For each journey run a clean baseline against the same current production-like c
 
 ### Engineering decision
 The egress investigation now moves from measurement-only mode to targeted cost optimization. The primary target is no longer "prove every byte first"; it is "stop unnecessary complete catalogue transfers while preserving server-authoritative freshness." The next meaningful work should be QA and measurement of this implementation, not another open-ended audit.
+
+## Next-batch investigation — vendor stock/cost visibility and storefront absence
+
+User raised a product-operability risk: hiding stock and cost from the vendor workflow may cause vendors to forget to maintain them. A product with missing/invalid stock or cost can consequently fail storefront eligibility or appear absent, even though the vendor believes the product exists.
+
+Treat this as a **next-batch investigation**, not an assumption that the current root cause is confirmed.
+
+### Required investigation
+- Trace the exact storefront eligibility predicate from vendor save → database/RPC → public catalogue query → storefront rendering.
+- Identify whether missing stock, zero stock, missing price/cost, invalid values, unpublished/listing state, image requirements, or another field can suppress a product.
+- Compare the vendor's visible product state with the server-authoritative storefront eligibility state.
+- Determine whether the vendor UI currently makes required storefront-driving fields sufficiently obvious.
+- Prefer a product-state/status explanation over silently hiding a product. If a product is excluded, the vendor should be able to understand why.
+- Consider a clear vendor-side readiness indicator such as "Ready for storefront", "Out of stock", or "Needs price/stock" rather than relying on hidden fields.
+- Preserve the storefront's cost/egress optimization; do not solve this by restoring unnecessary full catalogue downloads.
+
+### Safety requirement
+Do not change storefront eligibility or vendor product semantics until the existing save/listing logic and public query predicate have been traced. Paying vendor data must not be mutated merely to test this hypothesis.
