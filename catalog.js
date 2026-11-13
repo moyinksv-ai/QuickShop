@@ -1363,6 +1363,184 @@
   var allProducts    = [];
   var searchQuery    = '';
 
+  // ── Incremental storefront freshness cache ───────────────────────────────
+  // The public storefront is standalone and does not use the logged-in
+  // vendor IndexedDB. Keep its buyer-facing cache deliberately separate.
+  // Cached catalogue data is rendered immediately, then a tiny metadata
+  // request checks product updated_at values. Only changed/new products are
+  // fetched; products that disappeared from the sellable set are removed
+  // locally. Full catalogue loading remains the bootstrap/recovery path.
+  var CATALOG_CACHE_PREFIX = 'qs_catalog_cache_v1:';
+  var CATALOG_FRESHNESS_TTL = 15000;
+  var CATALOG_CACHE_MAX_AGE = 30 * 60 * 1000;
+
+  function catalogCacheKey(input) {
+    return CATALOG_CACHE_PREFIX + encodeURIComponent(String(input || '').slice(0, 160));
+  }
+
+  function readCatalogCache(input) {
+    try {
+      var raw = localStorage.getItem(catalogCacheKey(input));
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || parsed.version !== 1 || !parsed.storeId ||
+          !Array.isArray(parsed.products) || !Array.isArray(parsed.meta)) return null;
+      if (Date.now() - Number(parsed.savedAt || 0) > CATALOG_CACHE_MAX_AGE) return null;
+      return parsed;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function buildCatalogMeta(products) {
+    return (Array.isArray(products) ? products : []).map(function (p) {
+      return {
+        id: String(p.id || ''),
+        updatedAt: p.updated_at || p.updatedAt || null,
+        qty: typeof p.qty === 'number' ? p.qty : null
+      };
+    }).filter(function (m) { return m.id; });
+  }
+
+  function writeCatalogCache(input, storeId, profile, products, meta) {
+    try {
+      localStorage.setItem(catalogCacheKey(input), JSON.stringify({
+        version: 1,
+        savedAt: Date.now(),
+        storeId: String(storeId),
+        profile: profile || null,
+        products: Array.isArray(products) ? products : [],
+        meta: Array.isArray(meta) ? meta : buildCatalogMeta(products)
+      }));
+    } catch (_) {}
+  }
+
+  function catalogProductSelect() {
+    return 'id, user_id, name, price, qty, category, image_url, image_url2, icon, description, created_at, updated_at';
+  }
+
+  async function fetchCatalogProductMeta(client, storeId) {
+    return client
+      .from('products')
+      .select('id, updated_at, qty')
+      .eq('user_id', storeId)
+      .gt('qty', 0);
+  }
+
+  async function fetchCatalogProductsByIds(client, storeId, ids) {
+    if (!ids || !ids.length) return { data: [], error: null };
+    return client
+      .from('products')
+      .select(catalogProductSelect())
+      .eq('user_id', storeId)
+      .in('id', ids.slice(0, 100))
+      .gt('qty', 0);
+  }
+
+  function catalogProductForCache(row) {
+    if (!row) return null;
+    return {
+      id: row.id,
+      user_id: row.user_id,
+      name: row.name,
+      price: row.price,
+      qty: row.qty,
+      category: row.category,
+      image_url: row.image_url,
+      image_url2: row.image_url2,
+      icon: row.icon,
+      description: row.description
+    };
+  }
+
+  function renderCatalogProductState(storeName) {
+    var catSet = {};
+    allProducts.forEach(function (p) { if (p.category) catSet[p.category] = true; });
+    var categories = Object.keys(catSet).sort();
+    renderChips(categories);
+    renderGrid();
+
+    var ssub = document.getElementById('cat-store-sub');
+    if (ssub) {
+      ssub.textContent = allProducts.length + ' product' + (allProducts.length !== 1 ? 's' : '') +
+        (MARKET_ORIGIN ? ' · this store only · WhatsApp checkout' : ' · WhatsApp orders');
+    }
+
+    refreshCartUI();
+  }
+
+  async function refreshCatalogIncrementally(client, storeId, cacheInput, cachedMeta, storeName) {
+    try {
+      var metaResult = await fetchCatalogProductMeta(client, storeId);
+      if (metaResult.error || !Array.isArray(metaResult.data)) {
+        return { ok: false, changed: false };
+      }
+
+      var nextMeta = buildCatalogMeta(metaResult.data);
+      var previous = {};
+      (Array.isArray(cachedMeta) ? cachedMeta : []).forEach(function (m) {
+        if (m && m.id) previous[m.id] = String(m.updatedAt || '') + '|' + String(m.qty == null ? '' : m.qty);
+      });
+
+      var currentIds = {};
+      var changedIds = [];
+      nextMeta.forEach(function (m) {
+        currentIds[m.id] = true;
+        var fingerprint = String(m.updatedAt || '') + '|' + String(m.qty == null ? '' : m.qty);
+        if (previous[m.id] !== fingerprint) changedIds.push(m.id);
+      });
+
+      var removedIds = Object.keys(previous).filter(function (id) { return !currentIds[id]; });
+
+      if (changedIds.length) {
+        var fetched = await fetchCatalogProductsByIds(client, storeId, changedIds);
+        if (fetched.error) return { ok: false, changed: false };
+
+        var fetchedById = {};
+        (fetched.data || []).forEach(function (row) {
+          fetchedById[String(row.id)] = catalogProductForCache(row);
+        });
+
+        var productMap = {};
+        allProducts.forEach(function (p) { productMap[String(p.id)] = p; });
+
+        changedIds.forEach(function (id) {
+          if (fetchedById[id]) productMap[id] = fetchedById[id];
+          else delete productMap[id];
+        });
+        removedIds.forEach(function (id) { delete productMap[id]; });
+
+        allProducts = Object.keys(productMap).map(function (id) { return productMap[id]; });
+        allProducts.sort(function (a, b) {
+          return String(a.name || '').localeCompare(String(b.name || ''));
+        });
+
+        renderCatalogProductState(storeName);
+      } else if (removedIds.length) {
+        var productMap2 = {};
+        allProducts.forEach(function (p) { productMap2[String(p.id)] = p; });
+        removedIds.forEach(function (id) { delete productMap2[id]; });
+        allProducts = Object.keys(productMap2).map(function (id) { return productMap2[id]; });
+        allProducts.sort(function (a, b) {
+          return String(a.name || '').localeCompare(String(b.name || ''));
+        });
+        renderCatalogProductState(storeName);
+      }
+
+      var cacheProfile = null;
+      try {
+        var raw = localStorage.getItem(catalogCacheKey(cacheInput));
+        cacheProfile = raw ? (JSON.parse(raw).profile || null) : null;
+      } catch (_) {}
+
+      writeCatalogCache(cacheInput, storeId, cacheProfile, allProducts, nextMeta);
+      return { ok: true, changed: changedIds.length > 0 || removedIds.length > 0 };
+    } catch (e) {
+      if (!IS_PROD) console.warn('[Catalog] Incremental freshness check failed:', e);
+      return { ok: false, changed: false };
+    }
+  }
+
   /* ── PRODUCT DETAIL OVERLAY ─────────────────────────────────────────────
    * Full-screen slide-up overlay. z-index 400 (above cart drawer 300,
    * below lightbox 500). Owns its own swipe strip for hero images.
@@ -2789,8 +2967,17 @@
     var profile;
     var _productsPayload;
     var _rpcDone = false;
+    var _catalogCacheInput = STORE_ID || TOKEN;
+    var _cachedCatalog = readCatalogCache(_catalogCacheInput);
 
-    if (STORE_ID && _validStoreId) {
+    if (_cachedCatalog) {
+      storeId = _cachedCatalog.storeId;
+      profile = _cachedCatalog.profile;
+      _productsPayload = _cachedCatalog.products;
+      _rpcDone = true;
+    }
+
+    if (!_rpcDone && STORE_ID && _validStoreId) {
       try {
         var _rpc = await client.rpc('qs_get_store', { p_slug_or_id: STORE_ID });
         if (seq !== _navSeq) return;
@@ -3035,9 +3222,14 @@
     var skels = document.getElementById('cat-skeletons');
     if (skels) skels.style.display = 'none';
 
-    // Load product data
-    allProducts = _productsPayload;
-    _restoreCart(allProducts); // re-hydrate cart from sessionStorage if present
+    // Load product data. A cache hit is used for immediate rendering;
+    // the incremental freshness check below is authoritative once complete.
+    allProducts = Array.isArray(_productsPayload) ? _productsPayload : [];
+    _restoreCart(allProducts);
+
+    writeCatalogCache(_catalogCacheInput, storeId, profile, allProducts,
+      _cachedCatalog ? (_cachedCatalog.meta || buildCatalogMeta(allProducts)) : []);
+
     var _ssub = document.getElementById('cat-store-sub');
     if (_ssub) {
       _ssub.textContent = allProducts.length + ' product' + (allProducts.length !== 1 ? 's' : '') +
@@ -3073,9 +3265,19 @@
       }
     })();
 
+    // ── Background freshness check ───────────────────────────────────────
+    // Cached storefronts render immediately. After the short freshness TTL,
+    // compare only product id/updated_at/qty metadata and fetch changed rows.
+    // No full catalogue response is downloaded for a one-product change.
+    var _cacheFreshnessCheckedAt = _cachedCatalog ? Number(_cachedCatalog.savedAt || 0) : 0;
+    if (!_cachedCatalog || (Date.now() - _cacheFreshnessCheckedAt >= CATALOG_FRESHNESS_TTL)) {
+      refreshCatalogIncrementally(client, storeId, _catalogCacheInput,
+        _cachedCatalog ? _cachedCatalog.meta : [], storeName);
+    }
+
     // ── Realtime subscription — live inventory updates ──
-    // Supabase pushes a notification any time the vendor's products table changes.
-    // We re-fetch the full product list and re-render — no page refresh needed.
+    // Realtime is an optional fast path. Apply the changed row directly when
+    // available; only fall back to a single-product fetch when incomplete.
     try {
       var realtimeChannel = client
         .channel('catalog-products-' + storeId)
@@ -3088,84 +3290,52 @@
             filter: 'user_id=eq.' + storeId
           },
           function(payload) {
-            // Re-fetch and re-render silently
-            fetchProducts().then(function(result) {
-              if (result.error || !result.data) return;
-              allProducts = result.data;
+            var eventType = payload && payload.eventType;
+            var row = payload && payload.new;
+            var oldRow = payload && payload.old;
+            var changedProduct = row ? catalogProductForCache(row) : null;
+            var changedId = changedProduct && changedProduct.id
+              ? String(changedProduct.id)
+              : String((row && row.id) || (oldRow && oldRow.id) || '');
 
-              // Rebuild category chips
-              var catSet = {};
-              allProducts.forEach(function(p) { if (p.category) catSet[p.category] = true; });
-              var categories = Object.keys(catSet).sort();
-              renderChips(categories);
-
-              // Re-render grid — preserves active category + search query
-              renderGrid();
-
-              // Update product count in header
-              var ssub2 = document.getElementById('cat-store-sub');
-              if (ssub2) {
-                ssub2.textContent = allProducts.length + ' product' + (allProducts.length !== 1 ? 's' : '') +
-                  (MARKET_ORIGIN ? ' · this store only · WhatsApp checkout' : ' · WhatsApp orders');
-              }
-
-              // Sync cart — remove items no longer in stock or deleted
-              var validIds = new Set(allProducts.map(function(p) { return p.id; }));
-              cart.forEach(function(entry, pid) {
-                if (!validIds.has(pid)) {
-                  cart.delete(pid);
-                } else {
-                  // Cap qty at new stock level
-                  var updated = allProducts.find(function(p) { return p.id === pid; });
-                  if (updated && typeof updated.qty === 'number' && entry.qty > updated.qty) {
-                    if (updated.qty <= 0) {
-                      cart.delete(pid);
-                    } else {
-                      entry.qty = updated.qty;
-                      entry.product = updated;
-                    }
-                  } else if (updated) {
-                    entry.product = updated; // refresh price/name in case vendor edited
-                  }
-                }
+            if (changedId) {
+              var foundIndex = allProducts.findIndex(function(p) {
+                return String(p.id) === changedId;
               });
-              refreshCartUI();
 
-              // If the product detail overlay is open, refresh it with
-              // updated data so stock badge, qty cap, and add button are live.
-              if (_detailProduct) {
-                var freshProduct = allProducts.find(function(p) { return p.id === _detailProduct.id; });
-                if (freshProduct) {
-                  // Update the reference and re-render info fields
-                  _detailProduct = freshProduct;
-                  // Re-render stock badge
-                  var stockEl = document.getElementById('cat-detail-stock');
-                  if (stockEl) {
-                    var qty = freshProduct.qty;
-                    if (typeof qty !== 'number') {
-                      stockEl.textContent = 'In stock'; stockEl.className = '';
-                    } else if (qty <= 0) {
-                      stockEl.textContent = 'Out of stock'; stockEl.className = 'oos';
-                    } else if (qty <= 3) {
-                      stockEl.textContent = 'Only ' + qty + ' left'; stockEl.className = 'low';
-                    } else {
-                      stockEl.textContent = qty + ' in stock'; stockEl.className = '';
-                    }
-                    stockEl.id = 'cat-detail-stock'; // preserve id after className reset
+              if (eventType === 'DELETE' || (changedProduct && Number(changedProduct.qty) <= 0)) {
+                if (foundIndex >= 0) allProducts.splice(foundIndex, 1);
+              } else if (changedProduct) {
+                if (foundIndex >= 0) allProducts[foundIndex] = changedProduct;
+                else allProducts.push(changedProduct);
+                allProducts.sort(function(a, b) {
+                  return String(a.name || '').localeCompare(String(b.name || ''));
+                });
+              } else {
+                fetchCatalogProductsByIds(client, storeId, [changedId]).then(function(result) {
+                  if (result.error) return;
+                  var product = result.data && result.data[0];
+                  var idx = allProducts.findIndex(function(p) { return String(p.id) === changedId; });
+                  if (product) {
+                    var mapped = catalogProductForCache(product);
+                    if (idx >= 0) allProducts[idx] = mapped;
+                    else allProducts.push(mapped);
+                  } else if (idx >= 0) {
+                    allProducts.splice(idx, 1);
                   }
-                  // Cap _detailQty to new stock
-                  if (typeof freshProduct.qty === 'number') {
-                    _detailQty = Math.min(_detailQty, Math.max(1, freshProduct.qty));
-                  }
-                  updateDetailQtyUI();
-                  updateDetailAddBtnUI();
-                } else {
-                  // Product removed entirely — close detail and show message
-                  closeDetailOverlay();
-                }
+                  allProducts.sort(function(a, b) {
+                    return String(a.name || '').localeCompare(String(b.name || ''));
+                  });
+                  renderCatalogProductState(storeName);
+                  writeCatalogCache(_catalogCacheInput, storeId, profile, allProducts);
+                });
+                return;
               }
-            });
-          }
+
+              renderCatalogProductState(storeName);
+              writeCatalogCache(_catalogCacheInput, storeId, profile, allProducts);
+            }
+          }          }
         )
         .subscribe(function(status) {
           if (!IS_PROD) console.log('[Catalog] Realtime status:', status);
