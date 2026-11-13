@@ -1,7 +1,7 @@
 # QuickShop Engineering Handover
-**Updated:** 2026-11-07  
+**Updated:** 2026-11-08  
 **Repository:** `moyinksv-ai/QuickShop`  
-**Active working branch:** `main` (next workstream: create a dedicated branch for the Supabase egress/catalogue investigation)  
+**Active working branch:** `investigate/supabase-egress-catalogue-2026-11-07` (read-only Supabase egress/catalogue investigation)  
 **Production baseline:** `main`  
 **Release rule:** No merge to `main`, production deployment, schema change, or destructive data operation without explicit user approval.
 
@@ -21,14 +21,14 @@
 - PR #8 merged successfully. Production deployment `dpl_E3Q1dbczVXkQ9eWic7oonKPXoGas` is `READY` for exact `main` merge commit `e1b25695af50c6ee390eb15f9c4a0a9a1f45f6a9`, with production aliases including `quickshopper.vercel.app`.
 - A rollback branch `backup/main-before-pr8-2026-11-07` preserves the exact pre-PR8 main SHA `3d68545d507da9b8d1466edda9d8b8d5a565daaa`. Previous production deployment `dpl_6WmW9mzGsyJcYgMLFGH49nayG87q` is `READY` for that same SHA. For fast recovery, roll back Vercel to that deployment; source-control recovery is to revert merge commit `e1b25695af50c6ee390eb15f9c4a0a9a1f45f6a9`.
 - PR #8 changed only `inventory.js`, regression tests, `handover.md`, and `regression.md`; no schema/Supabase/product/stock/sales/auth/referral/vendor-account data mutations. No database rollback is required.
-- The user confirmed all preview checks passed. Production deployment is verified `READY`, but the post-deploy authenticated vendor smoke check is still outstanding; do not claim production runtime QA beyond deployment readiness.
+- The user confirmed all preview checks passed **and subsequently confirmed the post-merge production smoke test passed**. Do not treat production smoke as outstanding unless a new regression is reported.
 - Device-local recovery note: already-created phantom drafts may remain in a vendor's localStorage. The new meaningful-content validation prevents cost/quantity-only records from prompting; do not bulk-delete vendor storage or touch server data.
 - Rollback: revert the hotfix commit; no database rollback required.
 
 ## 0. Immediate priorities (in order)
 
 1. **Post-merge production smoke check:** PR #8 is merged and Vercel production deployment `dpl_E3Q1dbczVXkQ9eWic7oonKPXoGas` is READY for merge SHA `e1b25695af50c6ee390eb15f9c4a0a9a1f45f6a9`. Perform a safe production smoke check using read-only paths or an authorized test vendor/account: sign-in/session restoration, Inventory list, Add Product open/close/draft resume/discard, existing product edit, sell/restock, and public storefront/catalogue visibility. Never create or mutate sample records on a paying vendor's account.
-2. **Next engineering workstream: Supabase egress, marketplace and catalogue caching (§3).** Start with read-only measurement and root-cause investigation. Retrieve the official Supabase daily Usage breakdown for the historical >2 GB day (likely Nov 3–4; verify date/timezone), distinguish cached/uncached Storage and database egress, and capture a current request/byte baseline for marketplace and storefront journeys. Do not implement cache/schema changes until measurements and exact source paths are verified.
+2. **Current engineering workstream: Supabase egress, marketplace and catalogue caching (§3).** Continue the already-created dedicated investigation branch with read-only measurement and root-cause tracing. The Supabase Usage screenshot supplied on 2026-11-08 shows `Cached Egress 6.803 / 5 GB (136%)`, `Egress 0.356 / 5 GB (7%)`, and a ~2.984 GB cached-egress spike on **Nov 1**. The exact per-service breakdown for that spike is not available from the UI shown. Do not claim the marketplace is proven as the sole cause yet. Trace marketplace/catalogue/image request paths and measure them. No cache/schema/Supabase production change is authorized until the cause and safe fix are verified.
 3. Re-fetch current main and relevant source before starting; create one dedicated branch for this egress/caching workstream. Keep it separate from the completed Add Product hotfix.
 4. Preserve rollback: backup branch `backup/main-before-pr8-2026-11-07` points to pre-PR8 SHA `3d68545d507da9b8d1466edda9d8b8d5a565daaa`; Vercel rollback deployment is `dpl_6WmW9mzGsyJcYgMLFGH49nayG87q`. No database rollback is required for PR #8.
 5. Keep the public engineering evidence log updated with verified outcomes only.
@@ -136,6 +136,32 @@ The user is exploring a simpler bulk-friendly flow:
 - WP10-D: form redesign.
 - WP10-E: inventory header hierarchy.
 - R5: save path reportedly contains an awaited pending-change operation without an outer catch. Re-inspect current code and decide whether this is still present and how to handle safely.
+
+## 3A. Egress investigation status — 2026-11-08
+
+### Supabase Usage evidence supplied by the user
+- Current billing cycle shown: **22 Oct 2026 → 22 Nov 2026** on the Free Plan.
+- Supabase Usage Summary shows **Cached Egress: 6.803 / 5 GB (136%)**, with **1.80 GB overage**.
+- Normal **Egress: 0.356 / 5 GB (7%)**.
+- The Egress daily chart shows a large **29 Oct** total-traffic spike and a particularly large **1 Nov** cached-egress spike.
+- Cached Egress daily tooltip showed **2.984 GB on 1 Nov 2026**.
+- The visible Egress chart tooltip on 29 Oct showed Storage Egress 40.077 MB (61.6%), PostgREST Egress 22.476 MB (34.5%), Auth 168.787 KB (0.3%), and Realtime 2.359 MB (3.6%). This tooltip is for total egress on 29 Oct, not the 1 Nov cached-egress spike.
+- The user reports that the Usage UI does not expose a further per-service breakdown for the 1 Nov cached-egress spike from the available chart.
+- This proves the organization has exceeded the Free Plan cached-egress allowance and that cached egress is the dominant usage category in the current billing cycle. It does **not** by itself prove which QuickShop route/resource caused the spike.
+
+### Operational interpretation
+- The immediate objective is to reduce **future** egress before the Supabase restriction warning date of **14 Nov 2026**, not to recover already-consumed bandwidth.
+- Do not delete vendor/product data, images, or database records merely to reduce egress.
+- Treat preview traffic as real Supabase traffic when previews point at the production Supabase project. A new Vercel preview deployment itself is not inherently the problem; the requests made by that preview are what matter.
+- Marketplace remains a high-priority hypothesis because it repeatedly fetches public catalogue data/images and has previously observed reload/invalidation behaviour. It is not yet a proven root cause.
+- The Free Plan warning does not mean QuickShop is permanently ended on 14 Nov. If usage is corrected, the restriction risk can be reassessed; if a restriction is applied, upgrading or waiting for the next billing reset are separate recovery paths. Do not promise uninterrupted service without checking the current Supabase account status.
+
+### Investigation branch / safety
+- Branch: `investigate/supabase-egress-catalogue-2026-11-07`
+- Branch base: `cebdac1976ce2423b386d48cd8bd2969ba01aa06`
+- This workstream has remained **read-only** so far: no source, schema, database, storage, Supabase configuration, or vendor data has been changed.
+- Next evidence target: quantify marketplace/catalogue request counts and response bytes by journey; inspect Storage image requests and image dimensions; trace duplicate catalogue fetches, realtime-triggered reloads, pageshow/visibility refreshes, service-worker behavior, and preview traffic.
+- Only after the request/byte source is established should a surgical optimization be implemented.
 
 ## 3. Urgent workstream — Supabase egress, marketplace and catalogue caching
 
@@ -287,3 +313,196 @@ Portfolio supplied by user: https://moyinks.vercel.app. A previous attempt to re
 - Preview for `a78fab9` reached Vercel READY: `https://quickshopper-hweok8clw-moyinks-projects-5a3815db.vercel.app`.
 - CI run #277 exposed one stale pre-existing draft test assertion (it expected an old inline save call); 37/38 tests passed, with the only failure at the outdated assertion. The current source saves via `hideAddForm()` before clearing; update the assertion to this actual contract and verify a new CI run.
 - No physical-device or authenticated runtime QA has yet been performed for the toast fix. User confirmation is still required. Main and production remain untouched.
+
+
+## 2026-11-08 — Read-only egress tracing checkpoint
+
+### Repository state verified
+- Current investigation branch HEAD at the start of this checkpoint: `7ce9fd91d53114951a94a4e4c4a4a443f29129bd`.
+- Current `main` HEAD: `4e1026766a84553b454bc6e9ca3353d2b966656d`.
+- Immediately before this documentation update, GitHub comparison showed 5 commits ahead / 0 behind `main`; only `handover.md` and `regression.md` differed. The current comparison must be re-fetched after this update. Merge base remains `cebdac1976ce2423b386d48cd8bd2969ba01aa06`.
+- No application code, SQL, schema, storage object, Supabase configuration, or vendor-data changes were made in this tracing pass.
+
+### Static request-lifecycle findings — proven from current source
+- **Marketplace initial product load:** `search.html` calls `qs_market_products_v2` once for the first page (`range(0, ...)`) and renders the returned product images. Product-card images do **not** set a native `loading="lazy"` attribute, so the current source does not intentionally defer those image requests.
+- **Marketplace detail prefetch:** `renderProductCard()` starts `_prefetchProduct(item)` on `touchstart`, which queries all matching `qs_market_offers_v2` rows for that canonical product and caches the promise in `_prefetchCache` (bounded to 60 entries). Opening the detail view reuses that promise in-session; `invalidateMarketCaches()` clears it, so a qualifying freshness/lifecycle refresh can make a later tap fetch offers again. A direct `?product=<slug>` route separately looks up the product row from `qs_market_products_v2` before opening detail. These are source-confirmed request paths; their response sizes and actual user frequency remain unmeasured.
+- **Marketplace image loading:** product-card images are assigned `src` immediately and do not set native lazy loading. This differs from the public storefront product cards, which set the first image eager and subsequent images lazy (or lazy for a single image). Do not infer image bytes from card count; actual browser transfer and cache behavior still need measurement.
+- **Request attribution limitation:** the 2026-11-07 Supabase log sample contained 233 PostgREST log rows, but the available PostgREST attributes only exposed `path=/` rather than the individual REST/RPC path or response bytes. Realtime logs likewise exposed service-internal connection/replication events, not a reliable count of application `products` change events. Those logs cannot identify which QuickShop client journey issued a request or quantify per-RPC payload bytes.
+- **Marketplace category:** `qs_market_products_by_category_v2` is paginated with `range`; Load More is the explicit append path. The first category page is memoized only in memory and is lost on refresh.
+- **Marketplace product detail:** a card touch can prefetch `qs_market_offers_v2`; opening detail reuses that promise. The detail path therefore adds an offers request when it was not already prefetched, in addition to the listing-page request that supplied the card.
+- **Marketplace freshness:** the page subscribes to every `public.products` INSERT/UPDATE/DELETE through `qs-market-products-live-v2`. Any event invalidates both in-memory product/offer caches and schedules `routeFromURL()` after 220 ms. `pageshow`, `visibilitychange` and `online` can also schedule the same refresh (with a 5-second lifecycle throttle). This is a confirmed full catalogue re-fetch mechanism, not yet a measured egress total.
+- **Marketplace ordering:** the first-page result is fetched by `created_at` but then shuffled with `Math.random()`. This makes the visual order unstable between independently fetched pages/refreshes and complicates any future cache/pagination design.
+- **Public storefront/catalogue:** `catalog.js` uses `qs_get_store` as a fast path and receives the store profile plus an array of products in one RPC response. If that RPC is unavailable it falls back to a full `public_catalog_products` query (or the `products` table) ordered by name. The storefront therefore has a single full-product-list download on normal initialization rather than explicit product pagination.
+- **Storefront realtime:** each public storefront subscribes to `products` filtered by its vendor ID; every product change causes `fetchProducts()` and re-renders the **entire** product list. This is a separate potential amplification path from marketplace freshness.
+- **Storefront images:** current storefront product/detail images use the original public Storage URLs. The source does not apply the marketplace `imgTransform()` helper; the marketplace helper is also disabled on the Free plan. The storefront sets `loading="lazy"` for secondary/detail images in several places, but the initial product card/list rendering must still be treated as image-heavy until measured in a real browser.
+- **Service worker:** `sw.js` treats Supabase API calls as network-only, except marketplace REST views which are network-first with cached response fallback. Supabase public Storage image GETs use cache-first handling. This means the SW can reduce repeat image transfers on a controlled client after an image is cached, but it does not prevent the initial Storage request and does not cache authoritative catalogue API responses while online.
+
+### Read-only Supabase log evidence — 2026-11-07 00:00Z through 2026-11-08 00:00Z
+- Storage logs recorded **525 successful GET requests** with **29,941,524 bytes** of response content length in the sampled 24-hour window. This is a log sample, not the Supabase billed Cached Egress total.
+- Of those Storage GETs, **133 requests / 28,309,399 bytes** had referer `https://quickshopper.vercel.app/`. The root URL is also the public storefront route when `?store=...` is present, so this is strong evidence that public storefront/catalogue image delivery is a major current source of Storage traffic. It is not sufficient to attribute every byte under that referer exclusively to product images.
+- The same sampled window contained **no Storage GETs with a `search.html` referer**. This does not prove marketplace traffic is absent historically; it only means the marketplace was not represented in this particular 24-hour Storage-log sample.
+- The root-referer sample includes repeated successful 200 responses for the same large original images. Several individual files were fetched twice; examples include roughly 390 KB, 328 KB, 317 KB and 300 KB files, each with two logged GETs. The duplicate 200s are evidence of repeated origin/CDN-facing requests in the log stream, but are not by themselves proof of billed egress because the log does not expose Supabase billing/cache-hit attribution.
+- Storage responses advertise `cache-control: max-age=3600`, and the sampled GETs were all HTTP 200; the available Storage log fields do not expose a definitive billed-cache-hit flag. Do not equate these log bytes with the 2.984 GB cached-egress billing bar.
+- PostgREST logs in the sampled window expose only `path=/` for the observed entries, so the available log stream cannot currently provide reliable per-RPC/REST response-byte attribution for the marketplace/storefront catalogue queries. The source trace therefore remains the reliable evidence for request multiplicity, while browser Network capture is still required for actual response-byte measurements per journey.
+
+### Revised evidence ranking
+1. **Confirmed:** Cached Egress is the cost problem (6.803 GB / 5 GB for the current billing cycle; 2.984 GB on Nov 1).
+2. **Confirmed:** Public storefront/catalogue Storage traffic is substantial in the sampled 24-hour log window (28.3 MB under the production root referer, within 29.94 MB total logged Storage GET response bytes).
+3. **Confirmed:** Storefront realtime can re-download the full vendor catalogue after every matching product mutation.
+4. **Confirmed:** Marketplace freshness can invalidate and re-fetch the catalogue on products realtime events, pageshow, visibility changes and online transitions.
+5. **Not proven:** The exact cause of the 2.984 GB Nov 1 billing spike, and the exact proportion attributable to marketplace versus public storefront/catalogue versus other Supabase resources.
+
+### Next read-only measurement step
+Use a browser Network capture against a protected preview or controlled test session and record per journey: request URL/RPC, initiator, status, transfer/encoded bytes, decoded size when available, and Storage image count/bytes. Specifically compare a cold marketplace load, refresh, Back/Forward return, product detail, cold public storefront, storefront Back/Forward, and a controlled product update that triggers the storefront realtime listener. Do not change caching, schema, Storage URLs, or realtime behavior until those measurements identify the dominant request/byte path.
+
+
+### 2026-11-08 — Cached egress attribution materially improved (read-only)
+
+**Window:** 2026-11-07 07:00:00Z → 2026-11-08 07:00:00Z (24 hours). Project: `wicpvvypqpaljuexmczi`.
+
+Supabase's unified `edge_logs` contain `request.path`, `request.headers.referer`, `response.headers.content_length`, `response.headers.cf_cache_status`, `response.status_code`, and user-agent fields. This is more useful for cached Storage egress than `storage_logs` alone, because CDN cache hits are visible at the gateway while not necessarily reaching the Storage origin log.
+
+- Production referer `https://quickshopper.vercel.app/`: **2,188 public Storage image requests**, **275 distinct image URLs**, **399,071,202 gateway response-content bytes (~380 MiB)** with `cf_cache_status=HIT`.
+- Same production referer: **70 image MISS requests**, **15,545,377 response-content bytes (~14.8 MiB)**.
+- One anonymized `user_images/<owner-folder>/` group: **68 distinct image URLs**, **1,980 HIT requests**, **351,585,456 bytes (~335 MiB)**. Do not put the owner-folder ID in user-facing summaries or docs.
+- Across all observed referers in this window, public Storage image HITs total **2,305 requests / 445,396,711 bytes (~424.8 MiB)**; image MISSes total **81 requests / 16,400,147 bytes (~15.6 MiB)**.
+- One preview deployment referer contributed **187 HIT requests / 159 unique image URLs / 38,368,607 bytes (~36.6 MiB)**. Other previews contributed smaller amounts. Preview traffic is real Supabase usage when previews point to production Supabase.
+- Production API paths: `POST /rest/v1/rpc/qs_get_store` appeared 46 times (plus 35 OPTIONS preflights); `GET /rest/v1/public_catalog_products` appeared 12 times. `GET /rest/v1/qs_market_products_v2` appeared twice from production referer and five times from one preview referer; `qs_market_offers_v2` appeared twice from that preview. This window therefore points much more strongly to public storefront image delivery than marketplace listing reads, but does not prove marketplace was not responsible for the earlier Nov 1 spike.
+- Production cached image requests include Android Chrome and iPhone Safari user agents. This is not only a preview/developer artifact.
+- Across the 275 distinct production image URLs, one copy of each response totals **60,399,763 bytes (~57.6 MiB)**; mean file size ~219.6 KB, largest ~455 KB. The 399 MB total is repeated CDN-hit delivery across requests/visits, not 275 unique files alone.
+
+**Billing interpretation:** Supabase's current Egress documentation defines Cached Egress as egress served from its CDN via cache hits and says it typically applies to Storage Smart CDN; the Billing FAQ says cached egress applies only to Storage. This makes the `cf_cache_status=HIT` public Storage image traffic a strong direct explanation for cached-egress consumption. Gateway `content_length` sums are still observational log bytes, not an invoice-meter reconciliation; do not report them as exact billed usage or savings. References: https://supabase.com/docs/guides/platform/manage-your-usage/egress and https://supabase.com/docs/guides/platform/billing-faq.
+
+**Source-level mechanism confirmed in main (`catalog.js`, SHA `a25727ec67ca3de27403716f2c977c4da8f72d6f`):**
+- `qs_get_store` is the fast path and returns profile + products in one call; fallback fetches the full `public_catalog_products` list.
+- `renderGrid()` builds a card for every filtered product in `allProducts`; the public storefront has no product-page pagination at this render stage.
+- In `buildCard()`, single-image cards use `loading='lazy'`; dual-image cards set the first image's `src` immediately and `loading='eager'`, while only the second image is lazy. This means every dual-image product card can eagerly request its first original image when the full grid is rendered, even when far below the initial viewport.
+- `sw.js` uses cache-first for public Storage image URLs, which can avoid repeat downloads on the same browser after a successful cache fill. It cannot prevent each new visitor/browser from making its first request for each image.
+- The observed 68-image/1,980-hit concentration is consistent with many mobile visits to a large public catalogue. It is not yet proven that all 68 correspond to first images of dual-image cards; avoid stating that as fact until safely mapped.
+
+**Current strongest conclusion:** public storefront catalogue images, particularly the 68-image high-repeat group, are the dominant observed cached-egress path in this 24-hour sample. This is a substantially stronger attribution than the earlier Storage-origin-only sample, which missed most CDN cache-hit traffic. It still does not prove the exact cause of the Nov 1 historical 2.984 GB daily spike.
+
+**Next read-only step:** quantify the distribution of product image sizes at upload/source and verify whether the high-repeat 68-image group maps to first images of dual-image catalogue cards, without exposing owner IDs or modifying vendor records. Then prepare a minimal, reversible image-loading/size proposal. Do not change runtime behavior until scope and regression tests are reviewed.
+
+
+### 2026-11-08 — Image upload pipeline cross-check
+
+- `inventory.js` calls the shared `compressImage(file)` before upload, then stores the result as JPEG in `user_images`.
+- Main `appss.js` defines `compressImage(file, maxWidth = 1024, quality = 0.7)`; it downsizes only when width exceeds 1024 px and encodes JPEG at quality 0.7.
+- Main `catalog.js` `safeImgSrc()` returns a valid HTTPS URL unchanged; public storefront cards therefore use the stored original uploaded JPEG URL, not a resized thumbnail/transform URL.
+- The 68-image high-repeat group has **12,914,017 bytes (~12.3 MiB)** across one copy of its 68 files, but gateway logs observed **351,585,456 bytes (~335.2 MiB)** delivered across 1,980 CDN HIT requests — a 27.23× delivery multiple for this window.
+- Existing upload compression means the immediate, lower-risk investigation target is card image request timing/visibility and repeated visitor loads, not blindly changing upload quality or replacing stored originals. Do not reduce upload dimensions/quality without image-quality review and vendor-facing regression checks.
+
+
+### 2026-11-08 — Read-only cross-check of the high-repeat image folder
+
+- A read-only aggregate query against `storage.objects` and `public.products` for the anonymized owner folder visible in the highest-repeat edge-log image paths returned **230 stored Storage objects**, **108 product rows whose primary `image_url` points into that folder**, and **1 product row whose secondary `image_url2` points into it**.
+- The 68 distinct image URLs seen in the 24-hour edge-log sample are therefore a subset of a larger product-image collection, not proof that the catalogue has exactly 68 products or that all 68 were dual-image/eager cards.
+- Since single-image storefront cards are marked `loading='lazy'`, a plausible explanation is that visitors load a subset of the larger catalogue as they browse/scroll, and many separate visitors request the same popular images. The edge logs do not identify individual browser sessions, so this remains an interpretation rather than a proven per-session journey.
+- This cross-check reinforces that the high-repeat group is product-image traffic, but it does **not** isolate eager loading as the cause. Keep the dual-image eager behavior as a separate code-level concern; do not attribute the 351.6 MB group to it without a controlled capture.
+
+
+## 2026-11-12 — Fetch-trigger audit and baseline plan
+
+### Current status
+- No runtime code was changed during this audit. The work remains read-only on `investigate/supabase-egress-catalogue-2026-11-07`.
+- The audited marketplace surface is `search.html`; the audited public vendor storefront is `catalog.js`.
+- Before any TTL, realtime, incremental-update, or cache implementation, the next step is to establish a repeatable request/response-size baseline for eight named journeys. Do not claim savings until before/after measurements exist.
+
+### Marketplace trigger audit — verified
+1. **Marketplace first load:** route initialization enters `loadHome()` and `loadRecent(false)`, fetching the recent marketplace product page. Home page size is currently 60 records.
+2. **Marketplace return/resume:** lifecycle handlers including `pageshow`, `visibilitychange`, and reconnect handling can enter the marketplace freshness path. The current design can invalidate in-memory memo/prefetch state and route through the current URL, causing a fresh authoritative marketplace request rather than a cheap freshness check.
+3. **Marketplace realtime:** the marketplace products subscription listens broadly to `products` changes and can call `scheduleMarketRefresh()`, which invalidates client caches and re-routes the current marketplace URL. This can produce another full route-level data fetch.
+4. **Marketplace product detail:** opening a product uses cached/prefetched `qs_market_offers_v2` when available; touchstart can prefetch the same offer set before the click. Direct product-slug navigation can first query `qs_market_products_v2` to resolve the slug.
+5. **Marketplace search:** `qs_find_canonical_v2` RPC is used for search results.
+6. **Marketplace category:** `qs_market_products_by_category_v2` is paginated with `range()`, currently 16 records per page. Load More is user-controlled and must not be silently converted into an all-products fetch.
+7. **Marketplace stores:** the Stores tab is lazy-loaded. All stores use `qs_active_stores_v2`; category stores use `qs_market_stores_by_category_v2`, limited to 50.
+
+### Public storefront trigger audit — verified
+- **Initial fast path:** `qs_get_store` can return store/profile data and the complete available product list in one RPC response.
+- **Fallback initialization:** profile resolution can query public profile/share-link data and then fetch the complete product list from the public catalogue/products path. A phone lookup may run concurrently when needed.
+- **Vendor realtime:** `catalog.js` subscribes to `products` INSERT/UPDATE/DELETE events filtered by the current vendor `user_id`. Every matching event currently calls `fetchProducts()`, replacing the complete local product list and re-rendering the catalogue. This is a confirmed full-list refetch trigger.
+- **Storefront lifecycle:** unlike the marketplace, the audited storefront does not currently use the same `pageshow`/`visibilitychange`/online full-refresh machinery. Do not apply a generic lifecycle TTL to storefront without proving a redundant trigger first.
+
+### Confirmed navigation regression to preserve during this work
+Marketplace vendor handoff creates storefront URLs containing `store`, `pid`, `from=market`, and `market_product`. The storefront intentionally opens the product detail when `pid` is present. The URL remains capable of carrying that `pid`, so refreshing the storefront after a Marketplace → vendor product → WhatsApp handoff can reopen the originating product detail instead of leaving the user at the vendor catalogue. This is a URL/state lifecycle defect, not a Supabase freshness issue. It must be fixed separately and covered by regression tests.
+
+### Baseline measurement rule
+The next investigation step is a request → response-size baseline for eight journeys: (1) marketplace first load, (2) marketplace return/resume, (3) marketplace realtime-triggered refresh, (4) marketplace product detail, (5) storefront first load, (6) storefront realtime-triggered catalogue refresh, (7) Marketplace → storefront handoff, and (8) storefront refresh after that handoff.
+
+Capture, where available: request count, HTTP method, URL/path or RPC identity, response status, response Content-Length/encoded transfer bytes, decoded response size if available, timing, cache status, initiating browser event/function, payload row/item count, and repeated-request count. Separate PostgREST/API bytes from Supabase Storage image bytes. For Storage, record URL/object identity where safe, HIT/MISS status, response bytes, and image request count. Do not use log-observed response-content bytes as a billing-meter reconciliation.
+
+For each journey run a clean baseline against the same current production-like catalogue and viewport. Repeat enough times to distinguish first-load from warm-cache behavior. Record median and total request bytes, not only one run. Compare preview candidate vs the same journey on the unchanged baseline branch/main. Also compare Storage image bytes independently from API bytes. Do not interpret a lower request count as a win if response bytes or correctness regress.
+
+### Comparison and acceptance principles
+- **Primary:** total Supabase response bytes per journey, split into API/PostgREST, RPC, Realtime and Storage/CDN where measurable.
+- **Secondary:** request count, duplicate/refetch count, time to usable catalogue, and cache HIT/MISS behavior.
+- **Correctness gates:** new/edited/deleted products still appear appropriately; filters/search/pagination remain correct; vendor-scoped realtime still updates stock/product state; cart and product detail state remain intact; Marketplace → storefront Back/Keep Shopping/WhatsApp flows remain intact; refresh after Marketplace handoff does not reopen the old product.
+- Do not merge a cost optimization merely because a single synthetic run is smaller. Require repeatable before/after evidence and no regression in authoritative stock/checkout behavior.
+
+### Explicit non-goals for the first baseline/experiment
+- Do not change database schema/RPC contracts.
+- Do not introduce Redis or another external cache as a first response.
+- Do not redesign marketplace pagination.
+- Do not remove realtime merely to reduce traffic.
+- Do not change image upload quality based only on current egress evidence.
+- Do not combine the first TTL experiment with incremental realtime updates or the separate lazy-image experiment. Keep experiments isolated so causality remains measurable.
+
+## 2026-11-13 — Storefront incremental freshness implementation
+
+### Implemented on investigation branch
+- Runtime change is limited to catalog.js plus the regression guard test and these documentation updates. No Supabase schema, RPC, RLS, Storage, product, stock, sales, auth, referral, or vendor-account data was changed.
+- The public storefront now keeps a scoped, versioned browser catalogue cache (qs_catalog_cache_v1:<store/token>). Cached product data is rendered immediately on repeat opens instead of always downloading the complete catalogue first.
+- Freshness is checked with a lightweight products query returning only id, updated_at, and qty. This is deliberately separate from the logged-in vendor IndexedDB/offline sync path; the existing IndexedDB schema and pending-sync semantics were not modified.
+- When freshness metadata detects changes, only changed/new product IDs are fetched. Products that disappear from the sellable qty > 0 set are removed locally. The full catalogue remains the bootstrap/recovery path.
+- Existing storefront Realtime remains optional as a fast path. A Realtime INSERT/UPDATE row is applied directly to the local catalogue; DELETE removes by ID. Only an incomplete event payload falls back to a single-product fetch. The old event handler's full fetchProducts() + full-grid replacement path was removed.
+- Cached storefront state is written back after incremental reconciliation and after direct Realtime updates.
+- The initial bootstrap avoids a duplicate full product fetch: its first metadata pass seeds updated_at/qty fingerprints without re-downloading product rows.
+- No attempt was made to make the storefront fully offline-write capable. Offline product-image creation remains a separate future workstream.
+
+### Verification
+- Investigation branch remains 21 commits ahead / 0 behind main after the PR/docs/runtime work. Re-check the exact comparison before any merge.
+- Draft PR #9: https://github.com/moyinksv-ai/QuickShop/pull/9.
+- Latest commit: fb404835867f24fcd5baa8d88bb4e6883ec47bf3.
+- GitHub Actions regression run #331 / ID 43361409456: success; regression-guard job completed successfully.
+- Vercel preview for the exact latest commit: https://quickshopper-k1ypcjwf4-moyinks-projects-5a3815db.vercel.app, deployment dpl_8dW3n3ESUcYXWD2MJi759PnxCpGK, READY.
+- This deployment readiness plus CI success establishes build/test status, but browser-level mobile QA is still required before merge. No main merge is authorized.
+
+### Remaining preview acceptance focus
+1. Open a vendor storefront normally and verify first-load catalogue/checkout behaviour is unchanged.
+2. Reload/reopen the same storefront and confirm cached products appear immediately; DevTools Network should show the lightweight metadata request rather than another complete qs_get_store product payload when the cache is warm.
+3. Change one product on an authorized test vendor, keep the storefront open, and verify only that product changes in the UI. Do not mutate a paying vendor's live inventory merely for this test.
+4. Set a product to zero stock/remove it and verify it disappears and any cart quantity is reconciled.
+5. Add a product and verify it appears without a full catalogue refresh.
+6. Test Marketplace → Storefront handoff, Back/Keep Shopping, product detail and WhatsApp checkout.
+7. Test Android browser refresh/offline read behaviour. The service worker remains network-first for Supabase data; the new storefront cache is an application-level fast-start/freshness cache, not an authority override.
+
+### Engineering decision
+The egress investigation now moves from measurement-only mode to targeted cost optimization. The primary target is no longer "prove every byte first"; it is "stop unnecessary complete catalogue transfers while preserving server-authoritative freshness." The next meaningful work should be QA and measurement of this implementation, not another open-ended audit.
+
+## Next-batch investigation — vendor stock/cost visibility and storefront absence
+
+User raised a product-operability risk: hiding stock and cost from the vendor workflow may cause vendors to forget to maintain them. A product with missing/invalid stock or cost can consequently fail storefront eligibility or appear absent, even though the vendor believes the product exists.
+
+Treat this as a **next-batch investigation**, not an assumption that the current root cause is confirmed.
+
+### Required investigation
+- Trace the exact storefront eligibility predicate from vendor save → database/RPC → public catalogue query → storefront rendering.
+- Identify whether missing stock, zero stock, missing price/cost, invalid values, unpublished/listing state, image requirements, or another field can suppress a product.
+- Compare the vendor's visible product state with the server-authoritative storefront eligibility state.
+- Determine whether the vendor UI currently makes required storefront-driving fields sufficiently obvious.
+- Prefer a product-state/status explanation over silently hiding a product. If a product is excluded, the vendor should be able to understand why.
+- Consider a clear vendor-side readiness indicator such as "Ready for storefront", "Out of stock", or "Needs price/stock" rather than relying on hidden fields.
+- Preserve the storefront's cost/egress optimization; do not solve this by restoring unnecessary full catalogue downloads.
+
+### Safety requirement
+Do not change storefront eligibility or vendor product semantics until the existing save/listing logic and public query predicate have been traced. Paying vendor data must not be mutated merely to test this hypothesis.
+
+
+## Vendor sync traffic investigation — 2026-11-13
+
+Findings: Supabase edge logs showed repeated get_my_products pulls and qs_upsert_products_and_listings_v2 calls within the same short activity windows. Code tracing identified two independent causes: IndexedDB queue writes scheduled an immediate sync on every transaction completion, while indexeddb_sync.js also scheduled syncs from online, auth, pageshow, and visibilitychange. The isSyncing flag only prevents overlap; it does not coalesce a trigger that arrives immediately after a prior sync finishes. syncCloudData() also has multiple callers, and its existing 5-minute freshness guard existed only in the visibility handler, so other automatic callers could still start a full vendor pull.
+
+Safe fix implemented on branch investigate/supabase-egress-catalogue-2026-11-07: queue/lifecycle triggers now share a 750 ms debounce scheduler, coalescing rapid IndexedDB writes and lifecycle events without changing the queued payload or RPC batching. Automatic syncCloudData() pulls now have a 15-second cooldown; explicit user-driven refresh, manual sync, and initial authenticated reconciliation remain forced. No product fields, save semantics, RPC/database functions, IndexedDB data model, or vendor behavior were changed.
+
+Regression guard added to verify the scheduler/cooldown and preserve forced manual sync. Next QA: exercise rapid product save/restock/delete, app switch/resume, reconnect, and manual refresh; compare edge-log request counts before/after. Pay particular attention to whether one logical product action produces one qs_upsert_products_and_listings_v2 call and whether automatic lifecycle events stop producing duplicate get_my_products calls within 15 seconds.
