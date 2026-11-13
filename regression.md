@@ -360,3 +360,12 @@ The future guard should verify:
 - Zero stock is distinguished from missing stock and from an unpublished/invalid product.
 - Price/cost visibility requirements are verified against the actual current storefront eligibility predicate before changing UI.
 - Fixes must not reintroduce full catalogue refetches or bypass server-authoritative stock validation.
+
+
+## Vendor sync traffic investigation — 2026-11-13
+
+Findings: Supabase edge logs showed repeated get_my_products pulls and qs_upsert_products_and_listings_v2 calls within the same short activity windows. Code tracing identified two independent causes: IndexedDB queue writes scheduled an immediate sync on every transaction completion, while indexeddb_sync.js also scheduled syncs from online, auth, pageshow, and visibilitychange. The isSyncing flag only prevents overlap; it does not coalesce a trigger that arrives immediately after a prior sync finishes. syncCloudData() also has multiple callers, and its existing 5-minute freshness guard existed only in the visibility handler, so other automatic callers could still start a full vendor pull.
+
+Safe fix implemented on branch investigate/supabase-egress-catalogue-2026-11-07: queue/lifecycle triggers now share a 750 ms debounce scheduler, coalescing rapid IndexedDB writes and lifecycle events without changing the queued payload or RPC batching. Automatic syncCloudData() pulls now have a 15-second cooldown; explicit user-driven refresh, manual sync, and initial authenticated reconciliation remain forced. No product fields, save semantics, RPC/database functions, IndexedDB data model, or vendor behavior were changed.
+
+Regression guard added to verify the scheduler/cooldown and preserve forced manual sync. Next QA: exercise rapid product save/restock/delete, app switch/resume, reconnect, and manual refresh; compare edge-log request counts before/after. Pay particular attention to whether one logical product action produces one qs_upsert_products_and_listings_v2 call and whether automatic lifecycle events stop producing duplicate get_my_products calls within 15 seconds.
