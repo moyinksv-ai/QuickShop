@@ -447,3 +447,35 @@ For each journey run a clean baseline against the same current production-like c
 - Do not remove realtime merely to reduce traffic.
 - Do not change image upload quality based only on current egress evidence.
 - Do not combine the first TTL experiment with incremental realtime updates or the separate lazy-image experiment. Keep experiments isolated so causality remains measurable.
+
+## 2026-11-13 — Storefront incremental freshness implementation
+
+### Implemented on investigation branch
+- Runtime change is limited to catalog.js plus the regression guard test and these documentation updates. No Supabase schema, RPC, RLS, Storage, product, stock, sales, auth, referral, or vendor-account data was changed.
+- The public storefront now keeps a scoped, versioned browser catalogue cache (qs_catalog_cache_v1:<store/token>). Cached product data is rendered immediately on repeat opens instead of always downloading the complete catalogue first.
+- Freshness is checked with a lightweight products query returning only id, updated_at, and qty. This is deliberately separate from the logged-in vendor IndexedDB/offline sync path; the existing IndexedDB schema and pending-sync semantics were not modified.
+- When freshness metadata detects changes, only changed/new product IDs are fetched. Products that disappear from the sellable qty > 0 set are removed locally. The full catalogue remains the bootstrap/recovery path.
+- Existing storefront Realtime remains optional as a fast path. A Realtime INSERT/UPDATE row is applied directly to the local catalogue; DELETE removes by ID. Only an incomplete event payload falls back to a single-product fetch. The old event handler's full fetchProducts() + full-grid replacement path was removed.
+- Cached storefront state is written back after incremental reconciliation and after direct Realtime updates.
+- The initial bootstrap avoids a duplicate full product fetch: its first metadata pass seeds updated_at/qty fingerprints without re-downloading product rows.
+- No attempt was made to make the storefront fully offline-write capable. Offline product-image creation remains a separate future workstream.
+
+### Verification
+- Investigation branch remains 21 commits ahead / 0 behind main after the PR/docs/runtime work. Re-check the exact comparison before any merge.
+- Draft PR #9: https://github.com/moyinksv-ai/QuickShop/pull/9.
+- Latest commit: fb404835867f24fcd5baa8d88bb4e6883ec47bf3.
+- GitHub Actions regression run #331 / ID 43361409456: success; regression-guard job completed successfully.
+- Vercel preview for the exact latest commit: https://quickshopper-k1ypcjwf4-moyinks-projects-5a3815db.vercel.app, deployment dpl_8dW3n3ESUcYXWD2MJi759PnxCpGK, READY.
+- This deployment readiness plus CI success establishes build/test status, but browser-level mobile QA is still required before merge. No main merge is authorized.
+
+### Remaining preview acceptance focus
+1. Open a vendor storefront normally and verify first-load catalogue/checkout behaviour is unchanged.
+2. Reload/reopen the same storefront and confirm cached products appear immediately; DevTools Network should show the lightweight metadata request rather than another complete qs_get_store product payload when the cache is warm.
+3. Change one product on an authorized test vendor, keep the storefront open, and verify only that product changes in the UI. Do not mutate a paying vendor's live inventory merely for this test.
+4. Set a product to zero stock/remove it and verify it disappears and any cart quantity is reconciled.
+5. Add a product and verify it appears without a full catalogue refresh.
+6. Test Marketplace → Storefront handoff, Back/Keep Shopping, product detail and WhatsApp checkout.
+7. Test Android browser refresh/offline read behaviour. The service worker remains network-first for Supabase data; the new storefront cache is an application-level fast-start/freshness cache, not an authority override.
+
+### Engineering decision
+The egress investigation now moves from measurement-only mode to targeted cost optimization. The primary target is no longer "prove every byte first"; it is "stop unnecessary complete catalogue transfers while preserving server-authoritative freshness." The next meaningful work should be QA and measurement of this implementation, not another open-ended audit.
