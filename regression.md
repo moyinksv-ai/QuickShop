@@ -348,3 +348,15 @@ Run the eight named journeys on the unchanged baseline and record request count 
 - PR #9 remains draft; do not merge to main until preview QA passes.
 - Latest CI regression run #331 / ID 43361409456 succeeded.
 - Latest preview deployment is READY for commit fb404835867f24fcd5baa8d88bb4e6883ec47bf3.
+
+## Next-batch regression coverage — product storefront eligibility
+
+Add explicit regression coverage for the risk that vendor-facing stock/cost fields being visually hidden or easy to forget can make a valid product disappear from the public storefront.
+
+The future guard should verify:
+- A product with all required storefront fields is visible.
+- A product missing/invalid storefront-driving fields is classified predictably.
+- The vendor can see the reason/status when a product is not storefront-ready.
+- Zero stock is distinguished from missing stock and from an unpublished/invalid product.
+- Price/cost visibility requirements are verified against the actual current storefront eligibility predicate before changing UI.
+- Fixes must not reintroduce full catalogue refetches or bypass server-authoritative stock validation.
