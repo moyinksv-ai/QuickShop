@@ -331,3 +331,20 @@ Before implementing freshness/caching changes, verify that the following remain 
 
 ### Baseline test protocol
 Run the eight named journeys on the unchanged baseline and record request count + response bytes before any freshness change. Repeat each journey sufficiently to separate cold/first-view from warm/repeat behavior. Do not mutate paying vendors' inventory to create realtime events; use existing read-only traffic, an authorized test vendor, or controlled non-production test data where available.
+
+## 2026-11-13 — Storefront incremental freshness regression coverage
+
+### New guardrails
+- Storefront cache is versioned and scoped by store/token input.
+- Freshness metadata requests only id, updated_at, and qty.
+- Changed products are fetched by bounded ID batches rather than re-fetching the complete catalogue.
+- Initial bootstrap metadata seeds fingerprints without causing a second full product download.
+- Realtime product changes must not call the old full fetchProducts() path.
+- Realtime payloads are applied directly when available; incomplete payloads may fetch only the affected product.
+- Incremental changes/deletions update the rendered catalogue and persist the new cache state.
+- Existing Marketplace/Storefront handoff, cart, detail, stock, ordering, and image-loading invariants remain in the existing guard suite.
+
+### Verification
+- PR #9 remains draft; do not merge to main until preview QA passes.
+- Latest CI regression run #331 / ID 43361409456 succeeded.
+- Latest preview deployment is READY for commit fb404835867f24fcd5baa8d88bb4e6883ec47bf3.
