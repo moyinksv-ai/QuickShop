@@ -1481,7 +1481,12 @@
       // On its first metadata pass, record fingerprints only; do not turn the
       // initial load into a second full product fetch.
       if (!Array.isArray(cachedMeta) || cachedMeta.length === 0) {
-        writeCatalogCache(cacheInput, storeId, null, allProducts, nextMeta);
+        var bootstrapProfile = null;
+        try {
+          var bootstrapRaw = localStorage.getItem(catalogCacheKey(cacheInput));
+          bootstrapProfile = bootstrapRaw ? (JSON.parse(bootstrapRaw).profile || null) : null;
+        } catch (_) {}
+        writeCatalogCache(cacheInput, storeId, bootstrapProfile, allProducts, nextMeta);
         return { ok: true, changed: false };
       }
 
