@@ -647,3 +647,28 @@ test('Add Product creation and edit paths provide explicit success feedback', ()
   assert.match(inventorySource, /toast\('Product saved successfully\.', 'success'\)/);
   assert.match(inventorySource, /toast\('Product updated successfully\.', 'success'\)/);
 });
+
+
+test('storefront freshness uses cache metadata and incremental product fetches instead of full catalogue refreshes', () => {
+  assert.match(catalogSource, /CATALOG_CACHE_PREFIX = 'qs_catalog_cache_v1:'/, 'storefront cache must be versioned and scoped');
+  assert.match(catalogSource, /from\('products'\)\s*\n\s*\.select\('id, updated_at, qty'\)/,
+    'freshness check must request only lightweight product metadata');
+  assert.match(catalogSource, /\.in\('id', ids\.slice\(0, 100\)\)/,
+    'changed products must be fetched by bounded id batches');
+  assert.match(catalogSource, /if \(!Array\.isArray\(cachedMeta\) \|\| cachedMeta\.length === 0\)/,
+    'bootstrap must seed freshness metadata without downloading the catalogue twice');
+  assert.match(catalogSource, /refreshCatalogIncrementally\(client, storeId, _catalogCacheInput/,
+    'cached storefronts must use the incremental freshness path');
+  const realtimeStart = catalogSource.indexOf("// ── Realtime subscription — live inventory updates ──");
+  const realtimeEnd = catalogSource.indexOf(".subscribe(function(status)", realtimeStart);
+  assert.ok(realtimeStart >= 0 && realtimeEnd > realtimeStart, 'storefront realtime block must remain intact');
+  const realtimeBlock = catalogSource.slice(realtimeStart, realtimeEnd);
+  assert.doesNotMatch(realtimeBlock, /fetchProducts\(\)\.then/,
+    'one realtime product change must not trigger a full catalogue fetch');
+  assert.match(realtimeBlock, /payload && payload\.new/,
+    'realtime updates should apply the changed row directly when available');
+  assert.match(realtimeBlock, /fetchCatalogProductsByIds\(client, storeId, \[changedId\]\)/,
+    'incomplete realtime payloads may fall back to a single-product fetch only');
+  assert.match(catalogSource, /writeCatalogCache\(_catalogCacheInput, storeId, profile, allProducts/,
+    'updated storefront state must be persisted back to the scoped cache');
+});
