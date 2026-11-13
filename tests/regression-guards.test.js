@@ -672,3 +672,20 @@ test('storefront freshness uses cache metadata and incremental product fetches i
   assert.match(catalogSource, /writeCatalogCache\(_catalogCacheInput, storeId, profile, allProducts/,
     'updated storefront state must be persisted back to the scoped cache');
 });
+
+
+test('vendor sync coalesces rapid IndexedDB queue triggers and throttles automatic cloud pulls', () => {
+  const idbSource = fs.readFileSync(path.join(root, 'indexeddb_sync.js'), 'utf8');
+  const appSourceLocal = fs.readFileSync(path.join(root, 'appss.js'), 'utf8');
+  assert.match(idbSource, /SYNC_SCHEDULE_DELAY_MS = 750/);
+  assert.match(idbSource, /function schedulePendingSync\(\)/);
+  assert.match(idbSource, /if \(syncScheduleTimer\) clearTimeout\(syncScheduleTimer\)/);
+  assert.match(idbSource, /if \(navigator\.onLine\) schedulePendingSync\(\)/);
+  assert.match(idbSource, /window\.addEventListener\('online',[\s\S]*?schedulePendingSync\(\)/);
+  assert.match(idbSource, /document\.addEventListener\('visibilitychange',[\s\S]*?schedulePendingSync\(\)/);
+  assert.doesNotMatch(idbSource, /setTimeout\(function \(\) \{ syncPendingToSupabase\(\); \}, 0\)/);
+  assert.match(appSourceLocal, /AUTO_SYNC_COOLDOWN_MS = 15000/);
+  assert.match(appSourceLocal, /if \(!forceSync && Date\.now\(\) - _lastSyncAt < AUTO_SYNC_COOLDOWN_MS\)/);
+  assert.match(appSourceLocal, /syncCloudData\(currentUser, \{ force: true \}\)/);
+  assert.match(appSourceLocal, /syncCloudData\(user, \{ force: true \}\)/);
+});
