@@ -689,3 +689,19 @@ test('vendor sync coalesces rapid IndexedDB queue triggers and throttles automat
   assert.match(appSourceLocal, /syncCloudData\(currentUser, \{ force: true \}\)/);
   assert.match(appSourceLocal, /syncCloudData\(user, \{ force: true \}\)/);
 });
+
+
+test('marketplace product-card images use native lazy loading without changing the existing fallback path', () => {
+  assert.match(marketHtml, /img\.loading = ['"]lazy['"]/,
+    'marketplace product-card images must defer offscreen image loading');
+  assert.match(marketHtml, /img\.decoding = ['"]async['"]/,
+    'marketplace product-card images must opt into asynchronous decoding');
+  const cardStart = marketHtml.indexOf('function renderProductCard(item) {');
+  const cardEnd = marketHtml.indexOf('  // ── Render vendor card', cardStart);
+  assert.ok(cardStart >= 0 && cardEnd > cardStart, 'marketplace product-card renderer must remain identifiable');
+  const cardSource = marketHtml.slice(cardStart, cardEnd);
+  assert.match(cardSource, /img\.onerror = function \(\) \{/,
+    'marketplace image fallback handler must remain present');
+  assert.match(cardSource, /img\.src = imgUrl;/,
+    'marketplace image fallback must still retry the original public Storage URL');
+});

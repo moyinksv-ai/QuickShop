@@ -506,3 +506,17 @@ Findings: Supabase edge logs showed repeated get_my_products pulls and qs_upsert
 Safe fix implemented on branch investigate/supabase-egress-catalogue-2026-11-07: queue/lifecycle triggers now share a 750 ms debounce scheduler, coalescing rapid IndexedDB writes and lifecycle events without changing the queued payload or RPC batching. Automatic syncCloudData() pulls now have a 15-second cooldown; explicit user-driven refresh, manual sync, and initial authenticated reconciliation remain forced. No product fields, save semantics, RPC/database functions, IndexedDB data model, or vendor behavior were changed.
 
 Regression guard added to verify the scheduler/cooldown and preserve forced manual sync. Next QA: exercise rapid product save/restock/delete, app switch/resume, reconnect, and manual refresh; compare edge-log request counts before/after. Pay particular attention to whether one logical product action produces one qs_upsert_products_and_listings_v2 call and whether automatic lifecycle events stop producing duplicate get_my_products calls within 15 seconds.
+
+
+## 2026-11-17 — Marketplace image-transfer optimization: safe first step
+
+- Confirmed current marketplace product-card images are assigned original public Storage URLs because `_IMG_TRANSFORM = false`; server-side Storage resizing is therefore not enabled.
+- Implemented one deliberately narrow browser-side optimization on `investigate/supabase-egress-catalogue-2026-11-07`: marketplace product-card images now use native `loading="lazy"` and `decoding="async"`.
+- Existing shimmer, `onload`, error handling, original-URL fallback, card sizing, object-fit styling, and image URL resolution are unchanged.
+- This is an image-request reduction measure, not an image-compression change. It does not alter uploaded vendor originals or storefront visual quality.
+- Do **not** change the current upload compression quality from JPEG 0.7 to 0.5 merely to reduce egress. File quality, pixel dimensions, and transfer size are separate levers. The next image experiment should compare representative display variants at controlled dimensions and qualities (for example 0.80 / 0.75 / 0.65 / 0.55), using actual browser transfer bytes and visual inspection before selecting a production value.
+- Preferred future image architecture: retain the vendor original and generate purpose-sized display variants (card, detail, larger view) rather than serving one compressed asset everywhere. Do not enable Supabase Storage image transforms until plan availability and expected byte savings are verified.
+- Supabase remains unavailable for live egress validation at this checkpoint. Therefore no claim of measured savings is made from this change.
+- Regression guard now verifies marketplace card lazy loading/async decoding and preservation of the original-image fallback.
+- Main remains untouched; this branch must be preview-tested before any merge.
+

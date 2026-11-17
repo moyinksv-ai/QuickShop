@@ -962,6 +962,8 @@
       imgZone.appendChild(shimmer);
       var img = document.createElement('img');
       img.alt = name;
+      img.loading = 'lazy';
+      img.decoding = 'async';
       img.setAttribute('data-loading', '1');
       img.src = imgTransform(imgUrl, 400, 75);
       img.onload = function () {

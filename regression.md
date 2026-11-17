@@ -369,3 +369,24 @@ Findings: Supabase edge logs showed repeated get_my_products pulls and qs_upsert
 Safe fix implemented on branch investigate/supabase-egress-catalogue-2026-11-07: queue/lifecycle triggers now share a 750 ms debounce scheduler, coalescing rapid IndexedDB writes and lifecycle events without changing the queued payload or RPC batching. Automatic syncCloudData() pulls now have a 15-second cooldown; explicit user-driven refresh, manual sync, and initial authenticated reconciliation remain forced. No product fields, save semantics, RPC/database functions, IndexedDB data model, or vendor behavior were changed.
 
 Regression guard added to verify the scheduler/cooldown and preserve forced manual sync. Next QA: exercise rapid product save/restock/delete, app switch/resume, reconnect, and manual refresh; compare edge-log request counts before/after. Pay particular attention to whether one logical product action produces one qs_upsert_products_and_listings_v2 call and whether automatic lifecycle events stop producing duplicate get_my_products calls within 15 seconds.
+
+
+## 2026-11-17 — Marketplace image-loading optimization guard
+
+The marketplace product grid now uses native lazy loading and asynchronous image decoding for product-card images.
+
+### Protected behavior
+- Product-card image URLs remain unchanged.
+- Existing shimmer/loading state remains intact.
+- Existing `onload` cleanup remains intact.
+- Existing error fallback to the original public Storage URL remains intact.
+- Existing final placeholder behavior remains intact.
+- Card dimensions, `object-fit: cover`, and visual styling remain unchanged.
+- No vendor-uploaded originals, image compression settings, Supabase Storage configuration, or database schema were changed.
+
+### Why this is intentionally narrow
+Lazy loading can reduce unnecessary first-view image requests when users do not scroll far enough to expose every card. It is therefore a safer first image-egress experiment than changing JPEG quality or resizing uploaded originals.
+
+### Next image experiment
+Do not assume quality `0.5` is better than `0.7`. Compare representative images at controlled display dimensions and several quality levels, recording actual browser transfer bytes and visual acceptability. Prefer purpose-sized display variants while retaining originals if a measurable reduction is justified.
+
