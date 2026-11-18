@@ -178,6 +178,7 @@ test('marketplace detail Back pops its existing history entry and invalidates st
   const routerScript = inlineScripts.find(script => script.includes('function navigate(params, replace)'));
   assert.ok(routerScript, 'marketplace router script should be discoverable');
   const digest = crypto.createHash('sha256').update(routerScript).digest('base64');
+  console.error('CSP_ROUTER_HASH=' + digest);
   assert.ok(marketHtml.includes("'sha256-" + digest + "'"),
     'CSP must allow the exact marketplace router script hash');
 });
