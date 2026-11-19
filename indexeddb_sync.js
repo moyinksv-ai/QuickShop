@@ -56,6 +56,21 @@
 
   // ── Concurrency guard ────────────────────────────────────────────────
   var isSyncing = false;
+  // Coalesce lifecycle/queue sync triggers that arrive within the same
+  // short window. The existing isSyncing guard only prevents overlap; it
+  // does not prevent a second trigger from starting immediately after the
+  // first run completes.
+  var syncScheduleTimer = null;
+  var SYNC_SCHEDULE_DELAY_MS = 750;
+
+  function schedulePendingSync() {
+    if (!navigator.onLine) return;
+    if (syncScheduleTimer) clearTimeout(syncScheduleTimer);
+    syncScheduleTimer = setTimeout(function () {
+      syncScheduleTimer = null;
+      syncPendingToSupabase();
+    }, SYNC_SCHEDULE_DELAY_MS);
+  }
 
   // ── IndexedDB ────────────────────────────────────────────────────────
   var dbPromise = null;
@@ -180,9 +195,7 @@
           reject(ev.target.error);
         };
         tx.oncomplete = function () {
-          if (navigator.onLine) {
-            setTimeout(function () { syncPendingToSupabase(); }, 0);
-          }
+          if (navigator.onLine) schedulePendingSync();
         };
       });
     },
@@ -552,14 +565,14 @@
 
   // ── Sync triggers ────────────────────────────────────────────────────
   window.addEventListener('online', function () {
-    log('Network restored — syncing.'); syncPendingToSupabase();
+    log('Network restored — scheduling sync.'); schedulePendingSync();
   });
-  document.addEventListener('qs:user:auth', function () { syncPendingToSupabase(); });
+  document.addEventListener('qs:user:auth', function () { schedulePendingSync(); });
   window.addEventListener('pageshow', function () {
-    if (navigator.onLine) syncPendingToSupabase();
+    if (navigator.onLine) schedulePendingSync();
   });
   document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'visible' && navigator.onLine) syncPendingToSupabase();
+    if (document.visibilityState === 'visible' && navigator.onLine) schedulePendingSync();
   });
   // Only attempt on load if a session is already present — avoids wasted
   // round-trip + 3-second delay on unauthenticated / first-ever loads.
@@ -571,7 +584,7 @@
       || (window.__QS_SUPABASE && window.__QS_SUPABASE.user)
       || localStorage.getItem('qs_session_active') === 'true';
     if (hasUser) {
-      setTimeout(syncPendingToSupabase, 1500);
+      setTimeout(schedulePendingSync, 1500);
     }
   });
 

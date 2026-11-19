@@ -447,7 +447,7 @@ function handleTouchEnd() {
       pullToRefresh.spinner.style.animation = 'spin 0.8s linear infinite';
     }
     if (currentUser && navigator.onLine) {
-      const refreshResult = await syncCloudData(currentUser);
+      const refreshResult = await syncCloudData(currentUser, { force: true });
       setTimeout(() => { 
         resetPullToRefresh(); 
         // Only claim "Refreshed" if it actually succeeded — syncCloudData
@@ -980,10 +980,15 @@ function handleTouchEnd() {
     return all;
   }
 
-  async function syncCloudData(user) {
+  async function syncCloudData(user, options = {}) {
     if (!user || !getClient() || !navigator.onLine) {
       if (!navigator.onLine) log('Offline, skipping cloud sync.');
       return { ok: true, skipped: true, reason: !navigator.onLine ? 'offline' : 'not-ready' };
+    }
+    const forceSync = options.force === true;
+    const AUTO_SYNC_COOLDOWN_MS = 15000;
+    if (!forceSync && Date.now() - _lastSyncAt < AUTO_SYNC_COOLDOWN_MS) {
+      return { ok: true, skipped: true, reason: 'recent-sync' };
     }
     if (isSyncInProgress) return { ok: true, skipped: true, reason: 'already-syncing' };
     isSyncInProgress = true;
@@ -1628,7 +1633,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       userDisplayNameEl.textContent = displayName ? `Name: ${displayName}` : '';
     }
     loadLocalData(user.id);
-    await syncCloudData(user);
+    await syncCloudData(user, { force: true });
 
     // ── Durable referral attribution ─────────────────────────────────────
     // Pending click survives navigation, refresh, PWA restarts, and OTP delay.
@@ -2794,7 +2799,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
           let pushResult = null;
           if (window.qsdb && window.qsdb.syncPendingToSupabase) pushResult = await window.qsdb.syncPendingToSupabase();
           // Pull from cloud
-          const pullResult = await syncCloudData(currentUser);
+          const pullResult = await syncCloudData(currentUser, { force: true });
 
           const pushOk = !pushResult || pushResult.ok !== false;
           const pullOk = !pullResult || pullResult.ok !== false;

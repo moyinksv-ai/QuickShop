@@ -647,3 +647,61 @@ test('Add Product creation and edit paths provide explicit success feedback', ()
   assert.match(inventorySource, /toast\('Product saved successfully\.', 'success'\)/);
   assert.match(inventorySource, /toast\('Product updated successfully\.', 'success'\)/);
 });
+
+
+test('storefront freshness uses cache metadata and incremental product fetches instead of full catalogue refreshes', () => {
+  assert.match(catalogSource, /CATALOG_CACHE_PREFIX = 'qs_catalog_cache_v1:'/, 'storefront cache must be versioned and scoped');
+  assert.match(catalogSource, /from\('products'\)\s*\n\s*\.select\('id, updated_at, qty'\)/,
+    'freshness check must request only lightweight product metadata');
+  assert.match(catalogSource, /\.in\('id', ids\.slice\(0, 100\)\)/,
+    'changed products must be fetched by bounded id batches');
+  assert.match(catalogSource, /if \(!Array\.isArray\(cachedMeta\) \|\| cachedMeta\.length === 0\)/,
+    'bootstrap must seed freshness metadata without downloading the catalogue twice');
+  assert.match(catalogSource, /refreshCatalogIncrementally\(client, storeId, _catalogCacheInput/,
+    'cached storefronts must use the incremental freshness path');
+  const realtimeStart = catalogSource.indexOf("// ── Realtime subscription — live inventory updates ──");
+  const realtimeEnd = catalogSource.indexOf(".subscribe(function(status)", realtimeStart);
+  assert.ok(realtimeStart >= 0 && realtimeEnd > realtimeStart, 'storefront realtime block must remain intact');
+  const realtimeBlock = catalogSource.slice(realtimeStart, realtimeEnd);
+  assert.doesNotMatch(realtimeBlock, /fetchProducts\(\)\.then/,
+    'one realtime product change must not trigger a full catalogue fetch');
+  assert.match(realtimeBlock, /payload && payload\.new/,
+    'realtime updates should apply the changed row directly when available');
+  assert.match(realtimeBlock, /fetchCatalogProductsByIds\(client, storeId, \[changedId\]\)/,
+    'incomplete realtime payloads may fall back to a single-product fetch only');
+  assert.match(catalogSource, /writeCatalogCache\(_catalogCacheInput, storeId, profile, allProducts/,
+    'updated storefront state must be persisted back to the scoped cache');
+});
+
+
+test('vendor sync coalesces rapid IndexedDB queue triggers and throttles automatic cloud pulls', () => {
+  const idbSource = fs.readFileSync(path.join(root, 'indexeddb_sync.js'), 'utf8');
+  const appSourceLocal = fs.readFileSync(path.join(root, 'appss.js'), 'utf8');
+  assert.match(idbSource, /SYNC_SCHEDULE_DELAY_MS = 750/);
+  assert.match(idbSource, /function schedulePendingSync\(\)/);
+  assert.match(idbSource, /if \(syncScheduleTimer\) clearTimeout\(syncScheduleTimer\)/);
+  assert.match(idbSource, /if \(navigator\.onLine\) schedulePendingSync\(\)/);
+  assert.match(idbSource, /window\.addEventListener\('online',[\s\S]*?schedulePendingSync\(\)/);
+  assert.match(idbSource, /document\.addEventListener\('visibilitychange',[\s\S]*?schedulePendingSync\(\)/);
+  assert.doesNotMatch(idbSource, /setTimeout\(function \(\) \{ syncPendingToSupabase\(\); \}, 0\)/);
+  assert.match(appSourceLocal, /AUTO_SYNC_COOLDOWN_MS = 15000/);
+  assert.match(appSourceLocal, /if \(!forceSync && Date\.now\(\) - _lastSyncAt < AUTO_SYNC_COOLDOWN_MS\)/);
+  assert.match(appSourceLocal, /syncCloudData\(currentUser, \{ force: true \}\)/);
+  assert.match(appSourceLocal, /syncCloudData\(user, \{ force: true \}\)/);
+});
+
+
+test('marketplace product-card images use native lazy loading without changing the existing fallback path', () => {
+  assert.match(marketHtml, /img\.loading = ['"]lazy['"]/,
+    'marketplace product-card images must defer offscreen image loading');
+  assert.match(marketHtml, /img\.decoding = ['"]async['"]/,
+    'marketplace product-card images must opt into asynchronous decoding');
+  const cardStart = marketHtml.indexOf('function renderProductCard(item) {');
+  const cardEnd = marketHtml.indexOf('  // ── Render vendor card', cardStart);
+  assert.ok(cardStart >= 0 && cardEnd > cardStart, 'marketplace product-card renderer must remain identifiable');
+  const cardSource = marketHtml.slice(cardStart, cardEnd);
+  assert.match(cardSource, /img\.onerror = function \(\) \{/,
+    'marketplace image fallback handler must remain present');
+  assert.match(cardSource, /img\.src = imgUrl;/,
+    'marketplace image fallback must still retry the original public Storage URL');
+});

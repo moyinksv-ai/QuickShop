@@ -5,7 +5,7 @@
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self'
-               'sha256-gskEB8COGGYA9VBzyIBZTOwZnc5Z8DyUVJmTl1JRcis='
+               'sha256-9oBNijSD1A5QhI7GFdbMumzXId6CCXq8lEcoCTNl23g='
                https://cdn.jsdelivr.net;
     connect-src 'self'
                 https://*.supabase.co
@@ -962,6 +962,8 @@
       imgZone.appendChild(shimmer);
       var img = document.createElement('img');
       img.alt = name;
+      img.loading = 'lazy';
+      img.decoding = 'async';
       img.setAttribute('data-loading', '1');
       img.src = imgTransform(imgUrl, 400, 75);
       img.onload = function () {
