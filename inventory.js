@@ -299,7 +299,7 @@
       const blob     = await compressImage(file);
       const prefix   = slot === 'img2' ? '2_' : '';
       const fileName = u.id + '/' + prefix + Date.now() + '_' + Math.random().toString(36).slice(2,6) + '.jpg';
-      const { error } = await sb.storage.from('user_images').upload(fileName, blob, { contentType: 'image/jpeg', upsert: false });
+      const { error } = await sb.storage.from('user_images').upload(fileName, blob, { contentType: 'image/jpeg', cacheControl: '31536000', upsert: false });
       if (error) throw error;
       const { data: urlData } = sb.storage.from('user_images').getPublicUrl(fileName);
       return urlData.publicUrl;
