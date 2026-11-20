@@ -1,8 +1,9 @@
 # QuickShop Engineering Handover
-**Updated:** 2026-11-08  
+**Updated:** 2026-11-20  
 **Repository:** `moyinksv-ai/QuickShop`  
-**Active working branch:** `investigate/supabase-egress-catalogue-2026-11-07` (read-only Supabase egress/catalogue investigation)  
-**Production baseline:** `main`  
+**Production baseline:** `main` at `10de99a4fba6644f4fa3d0256b33aacf0170d091`  
+**Current investigation branch:** `optimize/storage-image-cache-control-2026-11-20`  
+**Current PR:** #10 — immutable public image cache lifetime (draft)  
 **Release rule:** No merge to `main`, production deployment, schema change, or destructive data operation without explicit user approval.
 
 > This file is the first document a new engineering session must read. It supersedes conversational assumptions, not the detailed history in `document.md` and `regression.md`. Re-fetch branch heads, files, preview deployment and tests before acting; never assume a remembered SHA or preview is still current.
@@ -520,3 +521,14 @@ Regression guard added to verify the scheduler/cooldown and preserve forced manu
 - Regression guard now verifies marketplace card lazy loading/async decoding and preservation of the original-image fallback.
 - Main remains untouched; this branch must be preview-tested before any merge.
 
+
+
+## Current egress hardening pass — 2026-11-20
+
+- Production `main` is at `10de99a4fba6644f4fa3d0256b33aacf0170d091`; the corresponding Vercel production deployment is `dpl_AkCYyT5ym8vwkM3Zp8XinJN7ThHU`, READY and rollback-capable.
+- New branch `optimize/storage-image-cache-control-2026-11-20` is exactly 3 commits ahead of main, 0 behind. PR #10 is draft and must not be merged without explicit approval.
+- Safe change in this pass: newly uploaded product images and vendor avatars now set `cacheControl: '31536000'` on Supabase Storage upload metadata. QuickShop uses randomized, immutable filenames, so a one-year browser/CDN cache lifetime does not create stale replacement risk for those objects.
+- Scope is deliberately narrow: `inventory.js`, `appss.js`, and `tests/regression-guards.test.js` only. No existing Storage objects, database rows, schema, RLS, auth, marketplace queries, storefront freshness logic, or vendor data were changed.
+- This is a preventive egress optimization, **not** proof of the historical ~2.984 GB cached-egress spike cause. The spike can still require CDN/request-log correlation after Supabase service access is restored.
+- Vercel preview deployments for all three branch commits reached READY; latest preview for exact HEAD `7a5d568652843f0288d16f3f2138f6547ea1843f`: `https://quickshopper-e4nw2p903-moyinks-projects-5a3815db.vercel.app`.
+- Automated GitHub Actions did not report a workflow run for the exact commit during this pass, so do not claim the full regression suite passed from CI. The source-level guard was added and the diff remains intentionally small.

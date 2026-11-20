@@ -6413,7 +6413,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         try {
           const blob     = await compressImage(file, 400, 0.85);
           const fileName = u.id + '/avatar_' + Date.now() + '.jpg';
-          const { error: upErr } = await sb.storage.from('user_images').upload(fileName, blob, { contentType: 'image/jpeg', upsert: false });
+          const { error: upErr } = await sb.storage.from('user_images').upload(fileName, blob, { contentType: 'image/jpeg', cacheControl: '31536000', upsert: false });
           if (upErr) throw upErr;
           const { data: urlData } = sb.storage.from('user_images').getPublicUrl(fileName);
           const avatarUrl = urlData.publicUrl;
