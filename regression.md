@@ -1,3 +1,19 @@
+# QuickShop Regression Check — 2026-11-20
+
+## Egress hardening pass: immutable public image cache metadata
+
+- Base: `main` `10de99a4fba6644f4fa3d0256b33aacf0170d091`.
+- Branch: `optimize/storage-image-cache-control-2026-11-20`.
+- PR: #10, draft; no merge or production deployment.
+- Changed runtime files: `inventory.js` and `appss.js`. Both product-image and vendor-avatar uploads now specify `cacheControl: '31536000'` while retaining JPEG compression, randomized filenames, and existing upload flow.
+- Changed test file: `tests/regression-guards.test.js`; guard requires the long cache lifetime on both upload paths.
+- Rationale: uploaded object names are randomized and never overwritten, making long-lived cache metadata safe for immutable public image URLs and potentially reducing CDN revalidation/egress.
+- Not established: this change does not prove the historical 1 Nov cached-egress spike was caused by image revalidation or external hotlinking. Existing request/image-path investigation remains required after Supabase access is restored.
+- Vercel preview deployments for each branch commit reached READY; latest exact-HEAD preview is `https://quickshopper-e4nw2p903-moyinks-projects-5a3815db.vercel.app`.
+- CI limitation: no GitHub Actions workflow run was returned for exact HEAD `7a5d568652843f0288d16f3f2138f6547ea1843f` during this pass. Do not record the full regression suite as passed until CI or an equivalent complete test execution is obtained.
+
+---
+
 # QuickShop Regression Check — 2026-10-28
 
 ## Release decision
