@@ -182,6 +182,17 @@ test('marketplace detail Back pops its existing history entry and invalidates st
     'CSP must allow the exact marketplace router script hash');
 });
 
+test('market freshness does not re-route an already-open product detail', () => {
+  const start = marketHtml.indexOf('function scheduleMarketRefresh(reason) {');
+  const end = marketHtml.indexOf('function wireMarketFreshness()', start);
+  const source = marketHtml.slice(start, end);
+  assert.ok(source.includes("if (getParams().has('product'))"));
+  assert.ok(source.includes("_marketRefreshDeferred = true;"));
+  assert.ok(source.indexOf("getParams().has('product')") < source.indexOf("routeFromURL();"));
+  assert.ok(source.includes('invalidateMarketCaches();'));
+  assert.ok(source.includes('clearTimeout(_marketRefreshTimer);'));
+});
+ 
 test('signup sends at most one request and does not fake OTP success for existing accounts', () => {
   assert.match(appSource, /let signupInFlight = false;/);
   assert.match(appSource, /if \(signupInFlight\) return;/);
