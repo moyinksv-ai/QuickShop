@@ -232,6 +232,17 @@ test('admin API keeps profiles visible when payment claims are absent or unavail
 });
 
 
+test('public image uploads set a long cache lifetime on immutable filenames', () => {
+  assert.match(
+    inventorySource,
+    /storage\.from\('user_images'\)\.upload\(fileName, blob, \{ contentType: 'image\/jpeg', cacheControl: '31536000', upsert: false \}\)/
+  );
+  assert.match(
+    appSource,
+    /storage\.from\('user_images'\)\.upload\(fileName, blob, \{ contentType: 'image\/jpeg', cacheControl: '31536000', upsert: false \}\)/
+  );
+});
+
 test('application inventory module parses without syntax errors', () => {
   const vm = require('node:vm');
   assert.doesNotThrow(() => new vm.Script(inventorySource, { filename: 'inventory.js' }),
