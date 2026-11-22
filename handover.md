@@ -520,3 +520,32 @@ Regression guard added to verify the scheduler/cooldown and preserve forced manu
 - Regression guard now verifies marketplace card lazy loading/async decoding and preservation of the original-image fallback.
 - Main remains untouched; this branch must be preview-tested before any merge.
 
+
+
+## 2026-11-21 — Trigger → request → response-size baseline evidence
+
+- Current baseline branch: `optimize/market-refresh-coalescing-2026-11-20`, 2 commits ahead / 0 behind `main`. No production merge or Supabase mutation was performed.
+- Supabase project ref: `wicpvvypqpaljuexmczi`.
+- A read-only Supabase unified-log check for **2026-11-13 00:00–24:00 UTC** provides the strongest historical request/response evidence currently available. This is log-observed gateway response content, not the authoritative billing meter.
+- Production-origin public Storage image traffic for that day: **4,691 GET requests / 373 distinct image objects / 1,057,823,351 response-content bytes (~1.01 GB)**. Of these, **4,462 HIT requests / 1,010,988,925 bytes (~965 MB)** and **229 MISS requests / 46,834,426 bytes (~44.7 MB)**.
+- The same production referer generated **6** first-page `qs_market_products_v2` requests with `offset=0&limit=60`, **10** `qs_find_canonical_v2` RPC requests, **145** legacy `qs_find_canonical` RPC requests, **1** category-page request, **1** stores-page request, and **23** `qs_market_offers_v2` product-detail offer requests in that window. REST response `content_length` was not populated for these database requests in the sampled gateway logs, so their response bytes cannot be responsibly reconstructed from this field.
+- Repeated-image evidence is strong but trigger attribution is not yet complete: several individual image objects were requested **23–24 times** between approximately 08:25 and 23:22 UTC. The logs expose origin/referer and request timing, but cross-origin Storage requests often carry only the site origin as referer, so the log alone cannot prove whether each repeat came from marketplace lifecycle refresh, storefront opens, multiple visitors, or browser-level cache behavior.
+- Current source inspection confirms marketplace cards use native `loading="lazy"` and currently leave `_IMG_TRANSFORM = false`; therefore the marketplace is presently requesting original Storage object URLs rather than Supabase render/image transformations. This is an important cost/image-size finding but is **not yet an approved image-quality optimization**.
+- A current read-only log check for **2026-11-20 08:00 UTC → 2026-11-21 08:00 UTC** shows the Supabase project returning **HTTP 402** for application PostgREST requests, including `qs_get_store`, `public_catalog_profiles`, and `profiles`. This blocks a fresh live request baseline right now. OPTIONS requests still return 200. Do not interpret current absence of successful data requests as proof that the app has no traffic; it is consistent with the project restriction state.
+- Therefore the baseline is **partially established**: Storage request/response volume is measurable historically, marketplace API trigger paths are source-confirmed, but a clean eight-journey before/after byte baseline still requires successful Supabase service responses and browser-level resource timing. No TTL, realtime redesign, schema change, or image recompression should be shipped solely from the current evidence.
+
+
+## 2026-11-22 — Live Supabase trigger/request correlation after project recovery
+
+- Supabase project `wicpvvypqpaljuexmczi` is currently `ACTIVE_HEALTHY`.
+- A deliberate live test was performed after recovery: product edit attempts, marketplace browsing/scrolling, refresh, storefront browsing, and product-detail browsing. The relevant log window is approximately **08:40–09:05 UTC**.
+- The live edge-log window shows **9 GET** requests to `qs_market_products_v2` and **66 GET** requests to `qs_market_offers_v2` between 08:53–08:59 UTC, plus **3** and **45** OPTIONS respectively. These are gateway request counts; the gateway `content_length` field is blank for these database responses, so database response bytes are **not** inferred from this sample.
+- Storage logs in the same 08:53–08:59 window show **92 `storage.object.get_public` GETs / 19,140,654 logged response bytes (~18.25 MiB)** and **92 `storage.object.info_public` requests / 45,435 bytes**. These are log-observed response bytes, not a billing-meter reconciliation.
+- Product-edit attempts occurred earlier: `qs_upsert_products_and_listings_v2` returned HTTP 400 / SQL state `P0001` repeatedly at 08:43–08:50 UTC. This is a separate confirmed vendor-save error pattern and must not be attributed to marketplace egress without further causal evidence.
+- The products table is confirmed in the `supabase_realtime` publication, so the marketplace subscription can receive products-table changes. However, the available `realtime_logs` did **not** expose a reliable application-level products-change delivery event during the test window. Therefore the live data does **not** yet prove `products UPDATE → Realtime delivery → browser refresh` for the 08:53/08:57 marketplace request bursts.
+- The timing currently favors the safer interpretation that the observed marketplace request bursts are user navigation/refresh/detail activity unless browser-side initiator/resource timing or a more specific Realtime event correlation proves otherwise.
+- No Supabase schema/config/data mutation was made during this correlation pass. No freshness architecture redesign has been shipped.
+- PR #11 remains draft and unmerged. Its current branch is `optimize/market-refresh-coalescing-2026-11-20`; latest branch commit after the CSP preservation fix is `c564a187fd9718d13bfcce0780843d5aa4bb4734c`.
+
+### Current engineering decision
+Do not broaden the Realtime change yet. The strongest next measurement is browser-side resource timing/initiator capture for the same controlled journeys, especially to distinguish a lifecycle/realtime-triggered `routeFromURL()` from ordinary navigation. The surgical product-detail coalescing change remains isolated and should be validated independently.

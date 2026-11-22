@@ -5,7 +5,7 @@
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self'
-               'sha256-9oBNijSD1A5QhI7GFdbMumzXId6CCXq8lEcoCTNl23g='
+               'sha256-9oBNijSD1A5QhI7GFdbMumzXId6CCXq8lEcoCTNl23g='\n               'sha256-kl/TE7akmbE6DJmeMSdrGFwI2WejSPljY/MLwkzscnU='
                https://cdn.jsdelivr.net;
     connect-src 'self'
                 https://*.supabase.co
@@ -1910,6 +1910,10 @@
   var _marketLiveChannel = null;
   var _marketRefreshTimer = null;
   var _lastLifecycleRefresh = 0;
+  // A product-detail route is already doing its own authoritative product/offer
+  // reads. A products-table event must not tear it down and refetch the detail;
+  // the next listing navigation will fetch fresh data naturally.
+  var _marketRefreshDeferred = false;
 
   function invalidateMarketCaches() {
     _memo.clear();
@@ -1919,9 +1923,21 @@
 
   function scheduleMarketRefresh(reason) {
     invalidateMarketCaches();
+
+    // Do not re-route an already-open product detail for every products-table
+    // change. That route has its own reads and re-routing would cause another
+    // product + offers request pair while the buyer is still reading it.
+    // Leave the caches invalidated so the next listing view cannot reuse stale
+    // session data.
+    if (getParams().has('product')) {
+      _marketRefreshDeferred = true;
+      return;
+    }
+
     if (!sb || !navigator.onLine || document.hidden) return;
     clearTimeout(_marketRefreshTimer);
     _marketRefreshTimer = setTimeout(function () {
+      _marketRefreshDeferred = false;
       var restoreTab = _activeTab;
       routeFromURL();
       if (restoreTab === 'stores') {
