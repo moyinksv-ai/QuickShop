@@ -390,3 +390,12 @@ Lazy loading can reduce unnecessary first-view image requests when users do not 
 ### Next image experiment
 Do not assume quality `0.5` is better than `0.7`. Compare representative images at controlled display dimensions and several quality levels, recording actual browser transfer bytes and visual acceptability. Prefer purpose-sized display variants while retaining originals if a measurable reduction is justified.
 
+
+
+## 2026-11-22 — Marketplace live-trigger regression evidence
+
+- Controlled live Supabase correlation confirmed the marketplace request volume during the test window without establishing Realtime as the trigger.
+- Protect the distinction between **request correlation** and **trigger attribution**: 9 marketplace-product GETs and 66 marketplace-offer GETs in the 08:53–08:59 window are real gateway requests, but current Supabase Realtime logs do not identify a matching products-change delivery to the browser.
+- Storage response volume for the same window was 92 public-object GETs / 19,140,654 logged response bytes. Keep API and Storage byte measurements separate.
+- `qs_upsert_products_and_listings_v2` 400/P0001 errors occurred during the preceding vendor edit attempts and are a separate regression/investigation item.
+- Do not weaken or remove marketplace freshness solely to reduce these request counts. First obtain browser initiator/resource timing for a controlled repeat so any optimization targets the actual trigger.
