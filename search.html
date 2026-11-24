@@ -1723,6 +1723,110 @@
       .concat(shuffle(buckets[0]));
   }
 
+  // ── PERSISTED MARKETPLACE SNAPSHOT / FRESHNESS ─────────────────────────────
+  // First-page cards are persisted locally. A lightweight offer watermark
+  // check decides whether card data must be reconciled after refresh/resume.
+  var MARKET_CACHE_PREFIX = 'qs_market_snapshot_v1:';
+  var MARKET_CACHE_MAX_AGE = 30 * 60 * 1000;
+  var MARKET_FRESHNESS_TTL = 15000;
+
+  function marketCacheKey() { return MARKET_CACHE_PREFIX + 'home'; }
+
+  function readMarketSnapshot() {
+    try {
+      var raw = localStorage.getItem(marketCacheKey());
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.items) ||
+          !parsed.savedAt || Date.now() - Number(parsed.savedAt) > MARKET_CACHE_MAX_AGE) return null;
+      return parsed;
+    } catch (_) { return null; }
+  }
+
+  function writeMarketSnapshot(items, freshness) {
+    try {
+      localStorage.setItem(marketCacheKey(), JSON.stringify({
+        version: 1, savedAt: Date.now(), items: Array.isArray(items) ? items : [], freshness: freshness || null
+      }));
+    } catch (_) {}
+  }
+
+  function marketFreshnessEqual(a, b) {
+    return !!a && !!b && Number(a.offerCount || 0) === Number(b.offerCount || 0) &&
+      String(a.latestOfferUpdatedAt || '') === String(b.latestOfferUpdatedAt || '');
+  }
+
+  async function fetchMarketFreshness() {
+    // qs_market_products_v2 is an aggregation of vendor offers. Count + newest
+    // offer timestamp is deliberately much smaller than the first-page cards.
+    var result = await sb.from('qs_market_offers_v2')
+      .select('offer_updated_at', { count: 'exact' })
+      .order('offer_updated_at', { ascending: false, nullsFirst: false })
+      .limit(1);
+    if (result.error) throw result.error;
+    return {
+      offerCount: Number(result.count || 0),
+      latestOfferUpdatedAt: result.data && result.data[0] ? result.data[0].offer_updated_at : null
+    };
+  }
+
+  async function reconcileMarketChangedProducts(previousFreshness, cachedItems) {
+    if (!previousFreshness || !previousFreshness.latestOfferUpdatedAt) return null;
+
+    var changed = await sb.from('qs_market_offers_v2')
+      .select('canonical_id, offer_updated_at')
+      .gte('offer_updated_at', previousFreshness.latestOfferUpdatedAt)
+      .order('offer_updated_at', { ascending: true });
+    if (changed.error) throw changed.error;
+
+    var ids = {};
+    (changed.data || []).forEach(function (row) {
+      if (row && row.canonical_id) ids[String(row.canonical_id)] = true;
+    });
+    var changedIds = Object.keys(ids);
+
+    // A falling offer count can mean the last offer for a canonical product
+    // disappeared. There is no tombstone in the current view, so fall back to
+    // the authoritative page rather than risk leaving a deleted card visible.
+    var now = await fetchMarketFreshness();
+    if (Number(now.offerCount) < Number(previousFreshness.offerCount)) return null;
+    if (!changedIds.length) return { items: cachedItems, freshness: now, changed: false };
+
+    var cards = await sb.from('qs_market_products_v2')
+      .select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names, created_at')
+      .in('id', changedIds.slice(0, 100));
+    if (cards.error) throw cards.error;
+
+    var map = {};
+    (cachedItems || []).forEach(function (item) { if (item && item.id) map[String(item.id)] = item; });
+    (cards.data || []).forEach(function (item) { if (item && item.id) map[String(item.id)] = item; });
+
+    var merged = Object.keys(map).map(function (id) { return map[id]; });
+    merged.sort(function (a, b) {
+      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+    });
+    return { items: merged.slice(0, _RECENT_PAGE), freshness: now, changed: true };
+  }
+
+  async function reconcileMarketSnapshot(snapshot) {
+    if (!snapshot || !Array.isArray(snapshot.items)) return null;
+    if (snapshot.freshness && Date.now() - Number(snapshot.probedAt || 0) < MARKET_FRESHNESS_TTL) {
+      return { items: snapshot.items, freshness: snapshot.freshness, changed: false };
+    }
+    var freshness = await fetchMarketFreshness();
+    if (marketFreshnessEqual(snapshot.freshness, freshness)) {
+      snapshot.probedAt = Date.now();
+      writeMarketSnapshot(snapshot.items, freshness);
+      return { items: snapshot.items, freshness: freshness, changed: false };
+    }
+    var patched = await reconcileMarketChangedProducts(snapshot.freshness, snapshot.items);
+    if (patched) {
+      writeMarketSnapshot(patched.items, patched.freshness);
+      return patched;
+    }
+    return null;
+  }
+
   // ── LOAD RECENT PRODUCTS ──────────────────────────────────────────────────
   async function loadRecent(append) {
     if (!sb) return;
@@ -1731,27 +1835,43 @@
       var from = _recentOffset;
       var to   = from + _RECENT_PAGE - 1;
 
-      // In-session memo: first page only (append loads bypass cache)
+      // In-session memo: first page only (append loads bypass cache).
       if (!append) {
         var _memoHome = _memo.get('home');
         if (_memoHome) {
           productsGrid.innerHTML = '';
           _memoHome.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
           _recentOffset = _memoHome.length;
-          if (_memoHome.length < _RECENT_PAGE) {
-            loadMoreBtn.hidden = true;
-          } else {
-            loadMoreBtn.textContent = 'Load more products';
-            loadMoreBtn.hidden    = false;
-            loadMoreBtn.disabled  = false;
-          }
+          loadMoreBtn.hidden = _memoHome.length < _RECENT_PAGE;
+          if (!loadMoreBtn.hidden) { loadMoreBtn.textContent = 'Load more products'; loadMoreBtn.disabled = false; }
+          return;
+        }
+
+        var _snapshot = readMarketSnapshot();
+        if (_snapshot) {
+          var _cachedItems = weightedShuffle(_snapshot.items.slice());
+          productsGrid.innerHTML = '';
+          _cachedItems.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
+          _recentOffset = _cachedItems.length;
+          loadMoreBtn.hidden = _cachedItems.length < _RECENT_PAGE;
+          if (!loadMoreBtn.hidden) { loadMoreBtn.textContent = 'Load more products'; loadMoreBtn.disabled = false; }
+
+          reconcileMarketSnapshot(_snapshot).then(function (result) {
+            if (!result || !result.changed || seq !== _navSeq) return;
+            productsGrid.innerHTML = '';
+            _memo.set('home', result.items);
+            result.items.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
+            _recentOffset = result.items.length;
+            loadMoreBtn.hidden = result.items.length < _RECENT_PAGE;
+            if (!loadMoreBtn.hidden) { loadMoreBtn.textContent = 'Load more products'; loadMoreBtn.disabled = false; }
+          }).catch(function (e) { if (!IS_PROD) console.warn('[market freshness]', e); });
           return;
         }
       }
 
       var res = await sb
         .from('qs_market_products_v2')
-        .select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names')
+        .select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names, created_at')
         .order('created_at', { ascending: false })
         .range(from, to);
 
@@ -1774,6 +1894,7 @@
       if (!append) {
         productsGrid.innerHTML = '';
         _memo.set('home', ordered);
+        try { writeMarketSnapshot(ordered, await fetchMarketFreshness()); } catch (_) {}
       }
       if (append) productsGrid.querySelectorAll('.lm-skel').forEach(function (el) { el.remove(); });
       ordered.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
@@ -1923,26 +2044,27 @@
 
   function scheduleMarketRefresh(reason) {
     invalidateMarketCaches();
-
-    // Do not re-route an already-open product detail for every products-table
-    // change. That route has its own reads and re-routing would cause another
-    // product + offers request pair while the buyer is still reading it.
-    // Leave the caches invalidated so the next listing view cannot reuse stale
-    // session data.
-    if (getParams().has('product')) {
-      _marketRefreshDeferred = true;
-      return;
-    }
-
     if (!sb || !navigator.onLine || document.hidden) return;
     clearTimeout(_marketRefreshTimer);
     _marketRefreshTimer = setTimeout(function () {
       _marketRefreshDeferred = false;
+      var params = getParams();
+      if (!params.has('product') && !params.has('q') && !params.has('cat') && params.get('view') !== 'stores') {
+        var snapshot = readMarketSnapshot();
+        if (snapshot) {
+          reconcileMarketSnapshot(snapshot).then(function (result) {
+            if (!result || !result.changed) return;
+            productsGrid.innerHTML = '';
+            _memo.set('home', result.items);
+            result.items.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
+            _recentOffset = result.items.length;
+          }).catch(function () { routeFromURL(); });
+          return;
+        }
+      }
       var restoreTab = _activeTab;
       routeFromURL();
-      if (restoreTab === 'stores') {
-        setTimeout(function () { switchTab('stores'); }, 0);
-      }
+      if (restoreTab === 'stores') setTimeout(function () { switchTab('stores'); }, 0);
     }, 220);
   }
 
