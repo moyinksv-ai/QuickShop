@@ -737,7 +737,7 @@ test('marketplace incremental reconciliation fetches changed canonical products 
   assert.match(marketHtml, /.select('canonical_id, offer_updated_at')/);
   assert.match(marketHtml, /.gte('offer_updated_at', previousFreshness.latestOfferUpdatedAt)/);
   assert.match(marketHtml, /.from('qs_market_products_v2')/);
-  assert.match(marketHtml, /.in('id', changedIds.slice(0, 100))/);
+  assert.match(marketHtml, /\.in\('id', changedIds\.slice\(offset, offset \+ 100\)\)/);
   assert.match(marketHtml, /if (Number(now.offerCount) < Number(previousFreshness.offerCount)) return null/);
   assert.match(marketHtml, /merged.slice(0, _RECENT_PAGE)/);
 });
