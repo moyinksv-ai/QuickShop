@@ -716,3 +716,52 @@ test('marketplace product-card images use native lazy loading without changing t
   assert.match(cardSource, /img\.src = imgUrl;/,
     'marketplace image fallback must still retry the original public Storage URL');
 });
+
+
+test('marketplace refresh reuses a persisted first-page snapshot and probes freshness before full payload', () => {
+  assert.match(marketHtml, /MARKET_CACHE_PREFIX = 'qs_market_snapshot_v1:'/);
+  assert.match(marketHtml, /function readMarketSnapshot()/);
+  assert.match(marketHtml, /function fetchMarketFreshness()/);
+  assert.match(marketHtml, /select('offer_updated_at', { count: 'exact' })/);
+  const recentStart = marketHtml.indexOf('async function loadRecent(append) {');
+  const recentEnd = marketHtml.indexOf('// ── LOAD MORE', recentStart);
+  const recent = marketHtml.slice(recentStart, recentEnd);
+  assert.ok(recent.indexOf('readMarketSnapshot()') >= 0);
+  assert.ok(recent.indexOf('reconcileMarketSnapshot(_snapshot)') >= 0);
+  assert.ok(recent.indexOf('var res = await sb') > recent.indexOf('readMarketSnapshot()'),
+    'a valid persisted snapshot must be considered before the full marketplace page query');
+  assert.match(marketHtml, /.select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names, created_at')/);
+});
+
+test('marketplace incremental reconciliation fetches changed canonical products and protects deletions', () => {
+  assert.match(marketHtml, /.select('canonical_id, offer_updated_at')/);
+  assert.match(marketHtml, /.gte('offer_updated_at', previousFreshness.latestOfferUpdatedAt)/);
+  assert.match(marketHtml, /.from('qs_market_products_v2')/);
+  assert.match(marketHtml, /.in('id', changedIds.slice(0, 100))/);
+  assert.match(marketHtml, /if (Number(now.offerCount) < Number(previousFreshness.offerCount)) return null/);
+  assert.match(marketHtml, /merged.slice(0, _RECENT_PAGE)/);
+});
+
+test('vendor history preserves the landing/auth screen state while adding app view state', () => {
+  assert.match(appSource, /function mergeVendorHistoryState(view)/);
+  assert.match(appSource, /Object.assign({}, current)/);
+  assert.match(appSource, /next.qsView = view/);
+  assert.match(appSource, /next.qsVendorApp = true/);
+  assert.doesNotMatch(appSource, /history.replaceState({ qsView: restoredView }/);
+  assert.doesNotMatch(appSource, /history.pushState({ qsView: view }/);
+  assert.doesNotMatch(appSource, /history.pushState({ qsView: _prevViewName/);
+});
+
+test('vendor sign-out records its explicit auth destination before Supabase emits SIGNED_OUT', () => {
+  const start = appSource.indexOf("document.addEventListener('click', async function (event)");
+  const end = appSource.indexOf("
+    });", start);
+  const handler = appSource.slice(start, end);
+  const markerAt = handler.indexOf("sessionStorage.setItem('qs_show_auth_after_signout', 'true')");
+  const signOutAt = handler.indexOf("supabase.auth.signOut({ scope: 'local' })");
+  assert.ok(markerAt >= 0, 'explicit sign-out destination marker must exist');
+  assert.ok(signOutAt >= 0, 'local Supabase sign-out must remain explicit');
+  assert.ok(markerAt < signOutAt,
+    'marker must be written before signOut because local signOut fires SIGNED_OUT before server revocation completes');
+  assert.match(handler, /window.location.replace(window.location.pathname)/);
+});
