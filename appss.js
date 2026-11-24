@@ -1474,6 +1474,11 @@ function handleTouchEnd() {
 
         const supabase = getClient();
         let signOutError = null;
+        // Supabase fires SIGNED_OUT immediately for local sign-out, before the
+        // best-effort server revocation finishes. Set the post-sign-out destination
+        // before that event so the auth transition is deterministic even on slow devices.
+        try { sessionStorage.setItem('qs_show_auth_after_signout', 'true'); } catch (_) {}
+
         try {
           if (supabase) {
             const result = await supabase.auth.signOut({ scope: 'local' });
@@ -1496,9 +1501,7 @@ function handleTouchEnd() {
           document.body.classList.add('qs-show-auth');
           if (signOutError) errlog('Supabase signout returned an error; local app session cleared', signOutError);
           toast('Signed out');
-          // Preserve the explicit sign-out destination across the reload. A normal
-          // cold visit has no marker and should show the public landing page.
-          try { sessionStorage.setItem('qs_show_auth_after_signout', 'true'); } catch (_) {}
+          // Marker was written before signOut() because SIGNED_OUT fires first.
           window.location.replace(window.location.pathname);
         }
       } finally {
@@ -3058,6 +3061,14 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
   }
 
   // Tab order matches DOM nav order — used to determine slide direction.
+  function mergeVendorHistoryState(view) {
+    const current = history.state;
+    const next = current && typeof current === 'object' ? Object.assign({}, current) : {};
+    next.qsView = view;
+    next.qsVendorApp = true;
+    return next;
+  }
+
   const _TAB_ORDER = ['home', 'inventory', 'reports', 'notes', 'settings'];
   let _prevViewName = null;
 
@@ -3084,7 +3095,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     // something to pop when the vendor presses the system back button.
     // The popstate handler intercepts the pop and routes within the app.
     if (prevIdx !== -1) {
-      try { history.pushState({ qsView: view }, ''); } catch(_) {}
+      try { history.pushState(mergeVendorHistoryState(view), ''); } catch(_) {}
     }
 
     _prevViewName = view;
@@ -7356,7 +7367,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
 
         // Seed the history stack with the restored view so the back button
         // has at least one entry to pop before trying to exit.
-        try { history.replaceState({ qsView: restoredView }, ''); } catch(_) {}
+        try { history.replaceState(mergeVendorHistoryState(restoredView), ''); } catch(_) {}
       }
       showLoading(false);
       const modalBackdrop = $('modalBackdrop');
@@ -7444,7 +7455,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
                       document.querySelector('#confirmModalBackdrop[style*="flex"]');
     if (modalOpen) {
       hideModal();
-      try { history.pushState({ qsView: _prevViewName || 'home' }, ''); } catch(_) {}
+      try { history.pushState(mergeVendorHistoryState(_prevViewName || 'home'), ''); } catch(_) {}
       return;
     }
 
@@ -7475,7 +7486,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       _backPressedOnce = true;
       toast('Press back again to exit', 'info', 2000);
       // Re-push so the browser has an entry for the second back press.
-      try { history.pushState({ qsView: 'home' }, ''); } catch(_) {}
+      try { history.pushState(mergeVendorHistoryState('home'), ''); } catch(_) {}
       _backPressTimer = setTimeout(function () { _backPressedOnce = false; }, 2000);
     } else {
       // Not on Home — navigate to Home instead of exiting.
