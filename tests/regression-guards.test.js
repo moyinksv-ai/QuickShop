@@ -754,7 +754,7 @@ test('vendor history preserves the landing/auth screen state while adding app vi
 
 test('vendor sign-out records its explicit auth destination before Supabase emits SIGNED_OUT', () => {
   const start = appSource.indexOf("document.addEventListener('click', async function (event)");
-  const end = appSource.indexOf("\\n    });", start);
+  const end = appSource.indexOf("\n    });", start);
   const handler = appSource.slice(start, end);
   const markerAt = handler.indexOf("sessionStorage.setItem('qs_show_auth_after_signout', 'true')");
   const signOutAt = handler.indexOf("supabase.auth.signOut({ scope: 'local' })");
