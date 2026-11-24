@@ -2050,12 +2050,12 @@
     if (!sb || !navigator.onLine || document.hidden) return;
     clearTimeout(_marketRefreshTimer);
     _marketRefreshTimer = setTimeout(function () {
-      var params = getParams();
-      if (params.has('product')) {
+      if (getParams().has('product')) {
         _marketRefreshDeferred = true;
         return;
       }
       _marketRefreshDeferred = false;
+      var params = getParams();
       if (!params.has('product') && !params.has('q') && !params.has('cat') && params.get('view') !== 'stores') {
         var snapshot = readMarketSnapshot();
         if (snapshot) {
