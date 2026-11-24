@@ -1770,7 +1770,7 @@
     };
   }
 
-  async function reconcileMarketChangedProducts(previousFreshness, cachedItems) {
+  async function reconcileMarketChangedProducts(previousFreshness, cachedItems, currentFreshness) {
     if (!previousFreshness || !previousFreshness.latestOfferUpdatedAt) return null;
 
     var changed = await sb.from('qs_market_offers_v2')
@@ -1788,18 +1788,20 @@
     // A falling offer count can mean the last offer for a canonical product
     // disappeared. There is no tombstone in the current view, so fall back to
     // the authoritative page rather than risk leaving a deleted card visible.
-    var now = await fetchMarketFreshness();
+    var now = currentFreshness || await fetchMarketFreshness();
     if (Number(now.offerCount) < Number(previousFreshness.offerCount)) return null;
+    if (changedIds.length > 1000) return null;
     if (!changedIds.length) return { items: cachedItems, freshness: now, changed: false };
-
-    var cards = await sb.from('qs_market_products_v2')
-      .select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names, created_at')
-      .in('id', changedIds.slice(0, 100));
-    if (cards.error) throw cards.error;
 
     var map = {};
     (cachedItems || []).forEach(function (item) { if (item && item.id) map[String(item.id)] = item; });
-    (cards.data || []).forEach(function (item) { if (item && item.id) map[String(item.id)] = item; });
+    for (var offset = 0; offset < changedIds.length; offset += 100) {
+      var cards = await sb.from('qs_market_products_v2')
+        .select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names, created_at')
+        .in('id', changedIds.slice(offset, offset + 100));
+      if (cards.error) throw cards.error;
+      (cards.data || []).forEach(function (item) { if (item && item.id) map[String(item.id)] = item; });
+    }
 
     var merged = Object.keys(map).map(function (id) { return map[id]; });
     merged.sort(function (a, b) {
@@ -1819,7 +1821,7 @@
       writeMarketSnapshot(snapshot.items, freshness);
       return { items: snapshot.items, freshness: freshness, changed: false };
     }
-    var patched = await reconcileMarketChangedProducts(snapshot.freshness, snapshot.items);
+    var patched = await reconcileMarketChangedProducts(snapshot.freshness, snapshot.items, freshness);
     if (patched) {
       writeMarketSnapshot(patched.items, patched.freshness);
       return patched;
