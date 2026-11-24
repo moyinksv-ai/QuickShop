@@ -7463,7 +7463,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
                         document.getElementById('addProductWorkspace').style.display !== 'none';
     if (addFormOpen) {
       hideAddForm();
-      try { history.pushState({ qsView: _prevViewName || 'home' }, ''); } catch(_) {}
+      try { history.pushState(mergeVendorHistoryState(_prevViewName || 'home'), ''); } catch(_) {}
       return;
     }
 
@@ -7491,7 +7491,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     } else {
       // Not on Home — navigate to Home instead of exiting.
       setActiveView('home', false);
-      try { history.pushState({ qsView: 'home' }, ''); } catch(_) {}
+      try { history.pushState(mergeVendorHistoryState('home'), ''); } catch(_) {}
     }
   });
 
