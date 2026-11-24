@@ -399,3 +399,28 @@ Do not assume quality `0.5` is better than `0.7`. Compare representative images 
 - Storage response volume for the same window was 92 public-object GETs / 19,140,654 logged response bytes. Keep API and Storage byte measurements separate.
 - `qs_upsert_products_and_listings_v2` 400/P0001 errors occurred during the preceding vendor edit attempts and are a separate regression/investigation item.
 - Do not weaken or remove marketplace freshness solely to reduce these request counts. First obtain browser initiator/resource timing for a controlled repeat so any optimization targets the actual trigger.
+
+
+
+## 2026-11-25 — Next-release marketplace/auth/navigation guards
+
+### Marketplace freshness
+- Persisted first-page marketplace snapshot must exist and be scoped/versioned.
+- Valid snapshot must be considered before the full `qs_market_products_v2` first-page query.
+- Freshness probe must use only lightweight offer metadata (`offer_updated_at` + exact count).
+- Changed canonical IDs must be fetched from `qs_market_products_v2` in bounded batches.
+- Offer-count decrease must not silently leave stale/deleted cards; conservative authoritative fallback is required.
+- Marketplace cache failure must not erase a usable offline snapshot.
+- Existing product-detail freshness guard remains: a products-table event must not re-route an already-open product detail.
+
+### Vendor navigation / auth
+- Vendor history writes must merge with the existing history state rather than replacing `qsScreen` with a bare `qsView`.
+- Settings/activation/payment-related Back must remain inside the vendor app until the vendor-app history boundary is intentionally reached.
+- Sign-out destination marker must be written before local Supabase `signOut()` because `SIGNED_OUT` fires immediately for local scope.
+- Sign-out must end on a visible authenticated-out surface and must not resurrect the vendor app after refresh.
+- Do not mark either regression as verified solely from source inspection; preview behavioral testing is required.
+
+### Release gate
+- PR #12 is draft/unmerged.
+- Production remains untouched.
+- Required manual smoke paths for the next release: sign out → visible auth/landing → refresh; vendor Settings/activation Back → vendor Home; marketplace refresh unchanged → no full first-page payload; change one product/offer → only affected reconciliation; storefront refresh unchanged → cached catalogue + metadata check; offline revisit → cached state remains usable.
