@@ -549,3 +549,19 @@ Regression guard added to verify the scheduler/cooldown and preserve forced manu
 
 ### Current engineering decision
 Do not broaden the Realtime change yet. The strongest next measurement is browser-side resource timing/initiator capture for the same controlled journeys, especially to distinguish a lifecycle/realtime-triggered `routeFromURL()` from ordinary navigation. The surgical product-detail coalescing change remains isolated and should be validated independently.
+
+
+
+## 2026-11-25 — Next-release freshness + auth/navigation regression work
+
+- New branch: `next-release-freshness-regressions-2026-11-25`, based on the current marketplace optimization branch; PR #12 is draft and **must not be merged to main yet**.
+- Marketplace first-page freshness now has a persisted browser snapshot (`qs_market_snapshot_v1:home`) with a 30-minute cache age and a 15-second freshness-probe cooldown.
+- The no-change path renders the persisted first-page snapshot immediately, then checks `qs_market_offers_v2` using a lightweight exact offer count + latest `offer_updated_at` probe. If unchanged, the existing card payload is retained and the full `qs_market_products_v2` first-page payload is not downloaded.
+- Changed offers are mapped to affected canonical IDs and only those canonical cards are fetched in bounded batches. A decrease in total offer count is treated conservatively as a possible deletion/tombstone case and falls back to the authoritative first-page query rather than leaving stale cards visible.
+- The current architecture is intentionally conservative about deletions: the existing aggregation view has no durable tombstone/change-log. Do not claim mathematically perfect deletion reconciliation until a durable change feed or equivalent server-side version/change-set exists. The implemented common path eliminates the expensive full-card payload when nothing changed and limits ordinary updates to affected canonical cards.
+- Offline behavior: a valid persisted marketplace snapshot remains renderable when the freshness probe fails. Freshness failure does not erase the cached marketplace or force a network error state.
+- Storefront already has the corresponding scoped local cache + lightweight `products(id, updated_at, qty)` metadata check + bounded changed-ID fetch path. Preserve that implementation; do not replace it with the marketplace cache mechanism.
+- Vendor history regression found: `appss.js` previously replaced/pushed history states with bare `{ qsView: ... }`, discarding `qs-init.js`'s `qsScreen` landing/auth state. The next-release branch now merges vendor view state into the existing history state instead. This is intended to prevent vendor Back navigation from losing the landing/auth boundary.
+- Sign-out regression found: Supabase local sign-out fires `SIGNED_OUT` immediately before its best-effort server revocation completes. The next-release branch records `qs_show_auth_after_signout` **before** calling `signOut({ scope: 'local' })`, so the explicit signed-out destination cannot race the auth event.
+- No Supabase schema/config/data mutation was made for this work. No production deployment or merge was performed.
+- PR #12 preview is available and must be behaviorally tested before release.
