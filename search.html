@@ -5,7 +5,8 @@
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self'
-               'sha256-9oBNijSD1A5QhI7GFdbMumzXId6CCXq8lEcoCTNl23g='\n               'sha256-kl/TE7akmbE6DJmeMSdrGFwI2WejSPljY/MLwkzscnU='
+               'sha256-9oBNijSD1A5QhI7GFdbMumzXId6CCXq8lEcoCTNl23g='
+               'sha256-kl/TE7akmbE6DJmeMSdrGFwI2WejSPljY/MLwkzscnU='
                https://cdn.jsdelivr.net;
     connect-src 'self'
                 https://*.supabase.co
@@ -2049,8 +2050,12 @@
     if (!sb || !navigator.onLine || document.hidden) return;
     clearTimeout(_marketRefreshTimer);
     _marketRefreshTimer = setTimeout(function () {
-      _marketRefreshDeferred = false;
       var params = getParams();
+      if (params.has('product')) {
+        _marketRefreshDeferred = true;
+        return;
+      }
+      _marketRefreshDeferred = false;
       if (!params.has('product') && !params.has('q') && !params.has('cat') && params.get('view') !== 'stores') {
         var snapshot = readMarketSnapshot();
         if (snapshot) {
