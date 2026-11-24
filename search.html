@@ -1666,7 +1666,7 @@
     showState('loading'); loadingLabel.textContent = 'Loading…';
     try {
       var res = await sb.from('qs_market_products_v2')
-        .select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names')
+        .select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names, created_at')
         .eq('slug', slug).single();
       if (res.error || !res.data) { showState('main'); return; }
       await openProduct(res.data);
