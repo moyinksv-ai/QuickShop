@@ -581,3 +581,13 @@ Do not broaden the Realtime change yet. The strongest next measurement is browse
 - Exact-head Vercel deployment for `2d8d9467aa247b1b60cfa7f7ed45f11f16fb1bd7` is READY. Deployment ID: `dpl_9KCaTWzPqxVfvKS7AjLXvyFnXQYQ`; preview alias: `quickshopper-git-next-release-69fe11-moyinks-projects-5a3815db.vercel.app`.
 - The GitHub Actions workflow is configured for both push and pull_request, but no new workflow run is currently exposed for the connector-created commit. Therefore CI is **not yet verified** on the corrected exact head. Do not call the branch CI-green until GitHub reports a successful run for `2d8d9467aa247b1b60cfa7f7ed45f11f16fb1bd7`.
 - No production deployment, Supabase schema/config/data mutation, or merge was performed.
+
+
+## 2026-11-26 — CI guard follow-up + CSP correction
+
+- Run #405 / ID 45792464601 executed the regression suite on the PR merge ref and reached the tests successfully: **42 passed, 5 failed**.
+- All five failures were inspected. Four were brittle source-guard assertions using unescaped regex parentheses/braces for literal source text; they did not indicate application regressions. Those guards were converted to literal `includes()` checks.
+- The fifth failure was substantive: the marketplace router inline-script SHA-256 was not present in `search.html`'s CSP. The current inline scripts were hashed directly from the checked-in source; the CSP contained stale hashes. The two current hashes are now recorded in `search.html`, restoring the CSP invariant rather than weakening the guard.
+- `sw.js` remains unchanged from `main`; the image-cache finding remains the lazy-loading/opportunistic-cache interaction described in the previous entry. No speculative eager image prefetch was added.
+- Current branch head: `0c2ab8a8306423bb7f5bc0092d064ce3e6ed46cd`. PR #12 remains draft/unmerged. Production remains untouched.
+- No fresh GitHub Actions run is exposed yet for this latest connector-created head, so CI is **not declared green**. The last completed run is #405 above. Static source verification of the corrected guards and CSP has been completed.
