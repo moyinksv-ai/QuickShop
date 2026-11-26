@@ -730,16 +730,16 @@ test('marketplace refresh reuses a persisted first-page snapshot and probes fres
   assert.ok(recent.indexOf('reconcileMarketSnapshot(_snapshot)') >= 0);
   assert.ok(recent.indexOf('var res = await sb') > recent.indexOf('readMarketSnapshot()'),
     'a valid persisted snapshot must be considered before the full marketplace page query');
-  assert.match(marketHtml, /.select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names, created_at')/);
+  assert.ok(marketHtml.includes(".select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names, created_at')"));
 });
 
 test('marketplace incremental reconciliation fetches changed canonical products and protects deletions', () => {
   assert.ok(marketHtml.includes(".select('canonical_id, offer_updated_at')"));
-  assert.match(marketHtml, /.gte('offer_updated_at', previousFreshness.latestOfferUpdatedAt)/);
-  assert.match(marketHtml, /.from('qs_market_products_v2')/);
+  assert.ok(marketHtml.includes(".gte('offer_updated_at', previousFreshness.latestOfferUpdatedAt)"));
+  assert.ok(marketHtml.includes(".from('qs_market_products_v2')"));
   assert.match(marketHtml, /\.in\('id', changedIds\.slice\(offset, offset \+ 100\)\)/);
   assert.match(marketHtml, /if (Number(now.offerCount) < Number(previousFreshness.offerCount)) return null/);
-  assert.match(marketHtml, /merged.slice(0, _RECENT_PAGE)/);
+  assert.ok(marketHtml.includes('merged.slice(0, _RECENT_PAGE)'));
 });
 
 test('vendor history preserves the landing/auth screen state while adding app view state', () => {
