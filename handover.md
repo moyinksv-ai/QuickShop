@@ -565,3 +565,19 @@ Do not broaden the Realtime change yet. The strongest next measurement is browse
 - Sign-out regression found: Supabase local sign-out fires `SIGNED_OUT` immediately before its best-effort server revocation completes. The next-release branch records `qs_show_auth_after_signout` **before** calling `signOut({ scope: 'local' })`, so the explicit signed-out destination cannot race the auth event.
 - No Supabase schema/config/data mutation was made for this work. No production deployment or merge was performed.
 - PR #12 preview is available and must be behaviorally tested before release.
+
+
+## 2026-11-26 — Current continuation: CI guard fix + service-worker image review
+
+- Current branch: `next-release-freshness-regressions-2026-11-25`.
+- PR #12 remains draft and unmerged; production remains untouched.
+- Current branch head is `2d8d9467aa247b1b60cfa7f7ed45f11f16fb1bd7`, 22 commits ahead of `main` at the verified comparison point.
+- The previous failed Regression guards run (#400 / ID 45514141536) was reproduced from its logs. The failure was a **regression-guard syntax error**, not an application/runtime regression: `assert.doesNotMatch(appSource, /history.replaceState({ qsView: restoredView }/)` was parsed as an unterminated regular expression. No tests executed in that run.
+- The guard was corrected surgically to use literal `String.includes()` assertions for the three forbidden bare-history-state patterns. The underlying vendor-history invariant was preserved.
+- `sw.js` was inspected on both the current branch head and `main`; the file is byte-for-byte identical at this point. It already has a dedicated `qs-images-v4.0` cache and explicitly allows Supabase Storage object URLs through the Supabase network-only bypass so product images can reach the cache-first image handler.
+- QuickShop image uploads currently use timestamp/random filenames ending in `.jpg`, so the existing image-extension matcher does match the production upload format.
+- Marketplace product cards intentionally use native `loading="lazy"`. Therefore a persisted marketplace snapshot does **not** imply that every offscreen image has previously been downloaded and placed in the browser image cache. This is a likely explanation for offline cards whose images were never viewed online, but it is not yet proof of the exact observed main-branch offline symptom.
+- Do not solve this by eagerly downloading the entire marketplace image set: that would work against the Supabase egress objective. The safer invariant remains opportunistic cache-first delivery for images the browser has actually fetched.
+- Exact-head Vercel deployment for `2d8d9467aa247b1b60cfa7f7ed45f11f16fb1bd7` is READY. Deployment ID: `dpl_9KCaTWzPqxVfvKS7AjLXvyFnXQYQ`; preview alias: `quickshopper-git-next-release-69fe11-moyinks-projects-5a3815db.vercel.app`.
+- The GitHub Actions workflow is configured for both push and pull_request, but no new workflow run is currently exposed for the connector-created commit. Therefore CI is **not yet verified** on the corrected exact head. Do not call the branch CI-green until GitHub reports a successful run for `2d8d9467aa247b1b60cfa7f7ed45f11f16fb1bd7`.
+- No production deployment, Supabase schema/config/data mutation, or merge was performed.
