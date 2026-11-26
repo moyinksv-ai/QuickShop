@@ -178,6 +178,7 @@ test('marketplace detail Back pops its existing history entry and invalidates st
   const routerScript = inlineScripts.find(script => script.includes('function navigate(params, replace)'));
   assert.ok(routerScript, 'marketplace router script should be discoverable');
   const digest = crypto.createHash('sha256').update(routerScript).digest('base64');
+  console.log('[CSP router hash]', digest);
   assert.ok(marketHtml.includes("'sha256-" + digest + "'"),
     'CSP must allow the exact marketplace router script hash');
 });
@@ -734,7 +735,7 @@ test('marketplace refresh reuses a persisted first-page snapshot and probes fres
 });
 
 test('marketplace incremental reconciliation fetches changed canonical products and protects deletions', () => {
-  assert.match(marketHtml, /.select('canonical_id, offer_updated_at')/);
+  assert.ok(marketHtml.includes(".select('canonical_id, offer_updated_at')"));
   assert.match(marketHtml, /.gte('offer_updated_at', previousFreshness.latestOfferUpdatedAt)/);
   assert.match(marketHtml, /.from('qs_market_products_v2')/);
   assert.match(marketHtml, /\.in\('id', changedIds\.slice\(offset, offset \+ 100\)\)/);
@@ -743,7 +744,7 @@ test('marketplace incremental reconciliation fetches changed canonical products 
 });
 
 test('vendor history preserves the landing/auth screen state while adding app view state', () => {
-  assert.match(appSource, /function mergeVendorHistoryState(view)/);
+  assert.ok(appSource.includes('function mergeVendorHistoryState(view)'));
   assert.match(appSource, /Object.assign({}, current)/);
   assert.match(appSource, /next.qsView = view/);
   assert.match(appSource, /next.qsVendorApp = true/);
@@ -762,5 +763,5 @@ test('vendor sign-out records its explicit auth destination before Supabase emit
   assert.ok(signOutAt >= 0, 'local Supabase sign-out must remain explicit');
   assert.ok(markerAt < signOutAt,
     'marker must be written before signOut because local signOut fires SIGNED_OUT before server revocation completes');
-  assert.match(handler, /window.location.replace(window.location.pathname)/);
+  assert.ok(handler.includes('window.location.replace(window.location.pathname)'));
 });
