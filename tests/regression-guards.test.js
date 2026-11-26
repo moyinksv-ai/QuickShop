@@ -747,9 +747,9 @@ test('vendor history preserves the landing/auth screen state while adding app vi
   assert.match(appSource, /Object.assign({}, current)/);
   assert.match(appSource, /next.qsView = view/);
   assert.match(appSource, /next.qsVendorApp = true/);
-  assert.doesNotMatch(appSource, /history.replaceState({ qsView: restoredView }/);
-  assert.doesNotMatch(appSource, /history.pushState({ qsView: view }/);
-  assert.doesNotMatch(appSource, /history.pushState({ qsView: _prevViewName/);
+  assert.ok(!appSource.includes('history.replaceState({ qsView: restoredView }'));
+  assert.ok(!appSource.includes('history.pushState({ qsView: view }'));
+  assert.ok(!appSource.includes('history.pushState({ qsView: _prevViewName'));
 });
 
 test('vendor sign-out records its explicit auth destination before Supabase emits SIGNED_OUT', () => {
