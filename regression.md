@@ -424,3 +424,25 @@ Do not assume quality `0.5` is better than `0.7`. Compare representative images 
 - PR #12 is draft/unmerged.
 - Production remains untouched.
 - Required manual smoke paths for the next release: sign out → visible auth/landing → refresh; vendor Settings/activation Back → vendor Home; marketplace refresh unchanged → no full first-page payload; change one product/offer → only affected reconciliation; storefront refresh unchanged → cached catalogue + metadata check; offline revisit → cached state remains usable.
+
+
+## 2026-11-26 — CI guard correction + SW/image-cache review
+
+### CI
+- Run #400 / ID 45514141536 failed before executing any regression test because `tests/regression-guards.test.js` contained three malformed regular-expression literals in the vendor-history guard.
+- The malformed pattern `/history.replaceState({ qsView: restoredView }/` caused Node 20 to throw `SyntaxError: Invalid regular expression: Unterminated group` at line 750. This was a guard syntax failure, not evidence that the vendor-history code regressed.
+- Corrected the three negative assertions to literal `String.includes()` checks, preserving the intended invariant that bare history-state writes must not reappear.
+- Corrected head: `2d8d9467aa247b1b60cfa7f7ed45f11f16fb1bd7`.
+
+### Service worker / offline images
+- Current `sw.js` is identical on `main` and the next-release branch at the reviewed head; no SW regression was introduced by PR #12.
+- Supabase Storage URLs are deliberately exempted from the generic Supabase network-only rule and enter the image cache-first handler. The image handler uses `qs-images-v4.0`.
+- Production image uploads currently end in `.jpg`, so the handler's extension matcher covers QuickShop's current upload path.
+- Marketplace cards use native lazy loading. Consequently, only images actually requested by the browser have been opportunistically cached. A persisted product snapshot can therefore be available offline while some offscreen product images are not cached.
+- Do not change the SW to pre-download all marketplace images merely to make offline browsing visually complete; that would create avoidable Storage transfer and undermine the egress work. If a stronger offline-image guarantee is required, it should be designed as an explicit bounded asset-prefetch policy and measured separately.
+- A dedicated SW regression guard should be considered before the release only if the repository test harness is extended to inspect `sw.js`; no runtime SW change is justified by the current evidence.
+
+### Release evidence
+- Exact-head Vercel deployment: READY, deployment ID `dpl_9KCaTWzPqxVfvKS7AjLXvyFnXQYQ`.
+- Exact-head GitHub Actions result is still outstanding because no new workflow run is currently exposed for the connector-created commit.
+- PR #12 remains draft/unmerged. Production remains untouched.
