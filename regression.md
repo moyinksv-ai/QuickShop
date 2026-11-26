@@ -446,3 +446,14 @@ Do not assume quality `0.5` is better than `0.7`. Compare representative images 
 - Exact-head Vercel deployment: READY, deployment ID `dpl_9KCaTWzPqxVfvKS7AjLXvyFnXQYQ`.
 - Exact-head GitHub Actions result is still outstanding because no new workflow run is currently exposed for the connector-created commit.
 - PR #12 remains draft/unmerged. Production remains untouched.
+
+
+## 2026-11-26 — Regression suite follow-up: CSP + brittle guard corrections
+
+- Run #405 / ID 45792464601 executed successfully through the test runner and reported **42 passing / 5 failing**.
+- Four failures were test-implementation defects: literal source snippets containing regex metacharacters were asserted with regexes that did not escape them. These were corrected to literal `String.includes()` checks.
+- The fifth failure was a real CSP invariant failure: the SHA-256 digest of the marketplace router inline script was absent from the page CSP. The page had stale hashes after the marketplace router changed. The CSP was corrected with the hashes computed from the current checked-in inline scripts; the test remains an exact digest check.
+- No weakening of the CSP test was made.
+- No `sw.js` change was made; its behavior remains identical to `main` and still uses the existing cache-first image path for eligible public Storage images.
+- Latest branch head: `0c2ab8a8306423bb7f5bc0092d064ce3e6ed46cd`. PR #12 remains draft/unmerged and production is untouched.
+- CI has not yet produced a new run for this latest head; do not treat the branch as CI-green until the workflow reports success.
