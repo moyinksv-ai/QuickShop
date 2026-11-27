@@ -722,7 +722,7 @@ test('marketplace refresh reuses a persisted first-page snapshot and probes fres
   assert.match(marketHtml, /MARKET_CACHE_PREFIX = 'qs_market_snapshot_v1:'/);
   assert.match(marketHtml, /function readMarketSnapshot()/);
   assert.match(marketHtml, /function fetchMarketFreshness()/);
-  assert.match(marketHtml, /select('offer_updated_at', { count: 'exact' })/);
+  assert.ok(marketHtml.includes(".select('offer_updated_at', { count: 'exact' })"));
   const recentStart = marketHtml.indexOf('async function loadRecent(append) {');
   const recentEnd = marketHtml.indexOf('// ── LOAD MORE', recentStart);
   const recent = marketHtml.slice(recentStart, recentEnd);
@@ -738,13 +738,13 @@ test('marketplace incremental reconciliation fetches changed canonical products 
   assert.ok(marketHtml.includes(".gte('offer_updated_at', previousFreshness.latestOfferUpdatedAt)"));
   assert.ok(marketHtml.includes(".from('qs_market_products_v2')"));
   assert.match(marketHtml, /\.in\('id', changedIds\.slice\(offset, offset \+ 100\)\)/);
-  assert.match(marketHtml, /if (Number(now.offerCount) < Number(previousFreshness.offerCount)) return null/);
+  assert.ok(marketHtml.includes('if (Number(now.offerCount) < Number(previousFreshness.offerCount)) return null'));
   assert.ok(marketHtml.includes('merged.slice(0, _RECENT_PAGE)'));
 });
 
 test('vendor history preserves the landing/auth screen state while adding app view state', () => {
   assert.ok(appSource.includes('function mergeVendorHistoryState(view)'));
-  assert.match(appSource, /Object.assign({}, current)/);
+  assert.ok(appSource.includes('Object.assign({}, current)'));
   assert.match(appSource, /next.qsView = view/);
   assert.match(appSource, /next.qsVendorApp = true/);
   assert.ok(!appSource.includes('history.replaceState({ qsView: restoredView }'));
