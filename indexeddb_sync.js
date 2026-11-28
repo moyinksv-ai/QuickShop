@@ -285,7 +285,13 @@
         var tx = db.transaction([STORE_NAME], 'readwrite');
         var store = tx.objectStore(STORE_NAME);
         var req = store.add(storedAction);
-        req.onsuccess = function () { resolve(req.result); };
+        req.onsuccess = function () {
+          // If a vendor edits while a push is already running, the active batch
+          // may have taken its snapshot before this row existed. Request one more
+          // pass after that batch settles so the new action is not stranded.
+          if (isSyncing) syncAgainRequested = true;
+          resolve(req.result);
+        };
         req.onerror   = function (ev) {
           console.error('[qsdb] addPendingChange failed:', ev.target.error);
           reject(ev.target.error);
@@ -351,17 +357,26 @@
   // Coalesce manual and automatic callers onto the same in-flight push. A caller
   // must never interpret "another sync is running" as a successful upload.
   var syncInFlightPromise = null;
+  var syncAgainRequested = false;
 
   async function syncPendingToSupabase() {
     if (syncInFlightPromise) {
       log('Sync already running — awaiting the active result.');
       return syncInFlightPromise;
     }
-    syncInFlightPromise = syncPendingToSupabaseInternal();
+    syncInFlightPromise = (async function () {
+      var result;
+      do {
+        syncAgainRequested = false;
+        result = await syncPendingToSupabaseInternal();
+      } while (syncAgainRequested && navigator.onLine);
+      return result;
+    })();
     try {
       return await syncInFlightPromise;
     } finally {
       syncInFlightPromise = null;
+      syncAgainRequested = false;
     }
   }
 
@@ -369,7 +384,7 @@
   async function syncPendingToSupabaseInternal() {
 
     if (isSyncing) { log('Sync in progress — refusing a duplicate push.'); return { ok: false, skipped: true, reason: 'already-syncing' }; }
-    if (!navigator.onLine) { log('Offline — skipping sync.'); return { ok: true, skipped: true, reason: 'offline' }; }
+    if (!navigator.onLine) { log('Offline — push not completed; changes remain queued.'); return { ok: false, skipped: true, reason: 'offline', failedBatches: ['offline'] }; }
 
     isSyncing = true;
     log('Sync started.');
