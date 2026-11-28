@@ -852,6 +852,10 @@ test('PWA worker validates the full app shell before activating an update', () =
   assert.match(swSource, /var MARKET_CACHE\s*=\s*'qs-market-v2\.1'/);
   assert.match(swSource, /if \(!assetResponse \|\| !assetResponse\.ok \|\| assetResponse\.type === 'opaque'\)/);
   assert.match(swSource, /var refreshedAssets = \[\]/);
+  assert.match(swSource, /previousEntries/);
+  assert.match(swSource, /attemptedWrites/);
+  assert.match(swSource, /cache\.delete\(cacheWrites\[rollbackIndex\]\.request\)/,
+    'a failed cache write must attempt to restore or remove every key touched');
   assert.ok(swSource.indexOf('for (var assetUrl of assetUrls)') < swSource.indexOf('var cache = await caches.open(CACHE_NAME)'),
     'do not mutate the old app-shell cache until every network asset has passed validation');
 
@@ -933,9 +937,9 @@ test('PWA install failure leaves the old app-shell cache untouched and does not 
       self, caches, fetch: fakeFetch, URL, Request, Response, Promise, Set, console
     });
     let waitForInstall;
+    cacheEntries = entries;
     handlers.install({ waitUntil: (promise) => { waitForInstall = promise; } });
     await waitForInstall;
-    cacheEntries = entries;
     return entries;
   }
 
