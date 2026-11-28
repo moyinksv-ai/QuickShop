@@ -291,10 +291,9 @@ function initApp() {
   function compressImage(file, maxWidth = 1024, quality = 0.7) {
     return new Promise((resolve, reject) => {
       if (!file) return reject(new Error('No image file was selected.'));
-      if (file.type && !/^image\//i.test(file.type)) {
-        return reject(new Error('Choose an image file (JPG, PNG or WebP).'));
-      }
-
+      // Do not trust the picker MIME type alone: some Android content providers
+      // label valid JPEG/PNG bytes as application/octet-stream. Let Image decode
+      // the actual bytes and report a specific error only if decoding fails.
       const reader = new FileReader();
       reader.onerror = () => reject(new Error('The selected image could not be read from this device.'));
       reader.onload = (event) => {
