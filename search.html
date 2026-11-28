@@ -1600,7 +1600,7 @@
     showState('detail');   // animate in immediately — no spinner shown
 
     // ── Async: fetch precise vendor data ─────────────────────────────────
-    _prefetchProduct(item);   // no-op if already warmed by touchstart
+    _prefetchProduct(item);   // only after an actual product-card open
 
     try {
       var listRes = await _prefetchCache.get(item.id);
