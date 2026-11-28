@@ -591,3 +591,16 @@ The regression suite passed **51/51** on runtime commit `07d8c6f6eab6ea4f6391b9f
 
 - After the cloud pull/reconciliation, re-read the active vendor's pending queue. If any actions arrived during the pull, flush them before reporting completion.
 - Login recovery may bulk-queue local products only after a successful pull confirms zero cloud products and the initial pending push did not fail. A normal login with a non-empty cloud catalog must not requeue the whole local catalog.
+
+
+### Storefront atomic stock freshness and Android UI follow-up (2026-11-28)
+
+- A cached storefront must perform a compact metadata probe on every full page entry; a 15-second recent-probe TTL must not suppress a stock freshness check on explicit refresh.
+- The metadata probe reads only id, updated_at, and qty. If no fingerprints changed, keep the cached product payload. If one product changed, fetch only that product by ID. Do not re-fetch the full catalogue for a single edit.
+- After qs_upsert_products_and_listings_v2 returns success, patch same-origin storefront cache entries whose storeId matches the authenticated vendor. Replace only the matching product and metadata; remove the product from the sellable cache when qty reaches zero. Do not patch any cache on RPC error.
+- Product/listing RPC remains server-authoritative. Never optimistically update a public storefront cache before server confirmation. Preserve checkout stock validation.
+- Android image preparation should prefer Blob URLs and revoke them after decode; FileReader is only a compatibility fallback. Keep image size/format validation and existing-image preservation.
+- Auth Home must navigate through the canonical landing transition directly, without depending on history.back() after sign-out.
+- Closed product-detail overlay must be visibility-hidden and non-interactive so its heading cannot bleed into the storefront grid during scroll. Detail title and auth Home button should remain high-contrast and accessible.
+- Release gate: verify vendor edit, successful RPC, same-device cache patch, storefront refresh shows new stock without a full catalogue fetch; test zero-stock removal and another vendor cache isolation. Run CI and retest on Android preview before merge.
+
