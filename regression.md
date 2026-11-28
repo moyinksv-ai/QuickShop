@@ -655,3 +655,15 @@ The regression suite passed **51/51** on runtime commit `07d8c6f6eab6ea4f6391b9f
 - Required preview QA: update an already-installed PWA from the previous worker; confirm all same-origin JS/CSS refresh before the notice appears; confirm no forced reload; verify open Add Product/product edit/modal/focused form blocks reload; verify the user can dismiss or apply the update; verify offline operation and cached product images/marketplace remain available if refresh fails.
 - First install must not show an update notice. Offline refresh failure must not clear existing cache entries or force a reload.
 - No production release until exact-head CI and Android preview QA pass.
+
+
+---
+
+## 2026-11-28 consolidated release-candidate checks
+
+- The new queue-owner resolver accepts only window.__QS_APP.getUser() as the source of ownership; cached last-user and user-cache hints must not stamp a new action.
+- Missing app identity leaves a new action unassigned; no queue rows are rewritten, deleted, or reassigned by this change.
+- The PWA update protocol must refresh every same-origin script/stylesheet into the existing app-shell cache before displaying the Update notice. The existing app-shell, image, and marketplace cache names must remain unchanged.
+- The Update action is user initiated, confirms before reload, and is blocked while the Add Product workspace, product edit, visible modal, or focused form control is active. A worker takeover must never directly reload the page.
+- Production telemetry is documented in handover.md. REST body byte totals are unavailable; Storage image-body observations must not be conflated with object-info requests.
+- Required Android preview QA remains: existing installed PWA update, first install, offline refresh failure, Add Product/product edit/modal protection, online/offline sync, and account A/B isolation.
