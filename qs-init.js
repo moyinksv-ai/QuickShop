@@ -38,8 +38,143 @@
   var params = new URLSearchParams(window.location.search);
   var isCatalog = params.has('store') || params.has('token');
 
-  /* ── 1. Service-worker registration ───────────────────────────────────── */
+  /* ── 1. Service-worker registration + safe update propagation ─────────── */
   if ('serviceWorker' in navigator) {
+    var hadServiceWorkerController = !!navigator.serviceWorker.controller;
+    var updateRefreshPending = false;
+    var updateRefreshInFlight = false;
+    var updateBanner = null;
+
+    function isVisibleElement(el) {
+      if (!el) return false;
+      var style = window.getComputedStyle ? window.getComputedStyle(el) : null;
+      return style ? style.display !== 'none' && style.visibility !== 'hidden' :
+        el.style.display !== 'none';
+    }
+
+    function hasOpenVendorEditor() {
+      var workspace = document.getElementById('addProductWorkspace');
+      if (isVisibleElement(workspace) && workspace.getAttribute('aria-hidden') !== 'true') return true;
+
+      var app = window.__QS_APP;
+      try {
+        if (app && typeof app.getEditingProductId === 'function' && app.getEditingProductId()) return true;
+      } catch (_) {}
+
+      var modals = document.querySelectorAll('.modal');
+      for (var i = 0; i < modals.length; i++) {
+        if (isVisibleElement(modals[i])) return true;
+      }
+
+      var active = document.activeElement;
+      return !!(active && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName));
+    }
+
+    function showUpdateBanner() {
+      if (updateBanner || !document.body) return;
+      var banner = document.createElement('aside');
+      banner.id = 'qs-update-ready';
+      banner.className = 'qs-update-ready';
+      banner.setAttribute('role', 'status');
+      banner.setAttribute('aria-live', 'polite');
+
+      var message = document.createElement('span');
+      message.className = 'qs-update-ready-message';
+      message.textContent = 'A QuickShop update is ready. Save or finish any open form before reloading.';
+
+      var reloadButton = document.createElement('button');
+      reloadButton.type = 'button';
+      reloadButton.className = 'qs-update-ready-action';
+      reloadButton.textContent = 'Update';
+
+      var dismissButton = document.createElement('button');
+      dismissButton.type = 'button';
+      dismissButton.className = 'qs-update-ready-dismiss';
+      dismissButton.textContent = 'Later';
+      dismissButton.setAttribute('aria-label', 'Dismiss update notice');
+
+      reloadButton.addEventListener('click', function () {
+        if (hasOpenVendorEditor()) {
+          var app = window.__QS_APP;
+          if (app && typeof app.toast === 'function') {
+            app.toast('Finish or save the open form first, then tap Update again.', 'warning', 4500);
+          }
+          return;
+        }
+        var confirmUpdate = window.__QS_APP && window.__QS_APP.showConfirm;
+        var decision = typeof confirmUpdate === 'function'
+          ? confirmUpdate({
+              title: 'Update QuickShop',
+              message: 'Your saved and queued offline changes are retained. Make sure any open form is saved before reloading.',
+              okText: 'Reload now'
+            })
+          : Promise.resolve(window.confirm('Reload QuickShop to apply the update? Save any open form first.'));
+        Promise.resolve(decision).then(function (confirmed) {
+          if (confirmed) window.location.reload();
+        }).catch(function () {});
+      });
+
+      dismissButton.addEventListener('click', function () {
+        if (updateBanner && updateBanner.parentNode) updateBanner.parentNode.removeChild(updateBanner);
+        updateBanner = null;
+      });
+
+      banner.appendChild(message);
+      banner.appendChild(reloadButton);
+      banner.appendChild(dismissButton);
+      document.body.appendChild(banner);
+      updateBanner = banner;
+    }
+
+    function refreshUpdatedAppShell() {
+      if (!updateRefreshPending || updateRefreshInFlight || !navigator.onLine) return;
+      var controller = navigator.serviceWorker.controller;
+      if (!controller || typeof MessageChannel === 'undefined') return;
+
+      var urls = [];
+      var nodes = document.querySelectorAll('script[src], link[rel="stylesheet"][href]');
+      nodes.forEach(function (node) {
+        var raw = node.src || node.href;
+        if (!raw) return;
+        try {
+          var url = new URL(raw, window.location.href);
+          if (url.origin === window.location.origin && urls.indexOf(url.href) === -1) {
+            urls.push(url.href);
+          }
+        } catch (_) {}
+      });
+      if (!urls.length) return;
+
+      updateRefreshInFlight = true;
+      var channel = new MessageChannel();
+      channel.port1.onmessage = function (event) {
+        updateRefreshInFlight = false;
+        var result = event.data || {};
+        if (result.ok === true && result.total === urls.length) {
+          updateRefreshPending = false;
+          showUpdateBanner();
+        } else {
+          console.warn('[QS] App update assets could not all be refreshed; keeping the current page and offline cache.');
+        }
+      };
+      try {
+        controller.postMessage({ type: 'QS_REFRESH_APP_SHELL', urls: urls }, [channel.port2]);
+      } catch (_) {
+        updateRefreshInFlight = false;
+      }
+    }
+
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      // The first controller takeover is a fresh install, not an app update.
+      if (!hadServiceWorkerController) {
+        hadServiceWorkerController = true;
+        return;
+      }
+      updateRefreshPending = true;
+      refreshUpdatedAppShell();
+    });
+    window.addEventListener('online', refreshUpdatedAppShell);
+
     window.addEventListener('load', function () {
       navigator.serviceWorker.register('sw.js')
         .then(function (reg) {
@@ -48,10 +183,11 @@
             if (!installing) return;
             installing.onstatechange = function () {
               if (installing.state === 'installed' && navigator.serviceWorker.controller) {
-                console.log('[QS] New version available — reload when ready.');
+                console.log('[QS] New worker installed; waiting for app-shell refresh before offering reload.');
               }
             };
           };
+          if (updateRefreshPending) refreshUpdatedAppShell();
         })
         .catch(function (err) { console.error('[QS] SW registration failed:', err); });
     });
