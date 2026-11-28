@@ -637,7 +637,8 @@ The regression suite passed **51/51** on runtime commit `07d8c6f6eab6ea4f6391b9f
 ### Public storefront view access and incremental freshness (2026-11-28)
 
 - Anonymous storefront freshness metadata must come from `public_catalog_products`, selecting only `id, updated_at, qty`.
-- Changed storefront product rows must also come from `public_catalog_products`, filtered by the matching `user_id` and bounded ID batch (maximum 100). Do not query the protected `products` table from the public storefront.
+- Changed storefront product rows must also come from `public_catalog_products`, filtered by the matching `user_id` and fetched in complete sequential ID batches of at most 100. Never truncate reconciliation after the first 100 IDs. Do not query the protected `products` table from the public storefront.
+- Preserve `updated_at` in mapped changed-row cache entries so Realtime updates do not create a false stale fingerprint and trigger a redundant fetch on the next revisit.
 - The changed-row projection must contain only columns exposed by the public view; `created_at` is not part of that view.
 - If the public view request fails, surface/retain the failure state; do not silently fall back to a base-table request that anonymous users are intentionally not permitted to make.
 - The database permission invariant is: anon can SELECT `products.updated_at` at column scope; anon does not have table-wide SELECT on `products`; `public_catalog_products` exposes `updated_at` and retains `security_invoker=true`.
