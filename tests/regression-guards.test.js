@@ -752,15 +752,80 @@ test('vendor history preserves the landing/auth screen state while adding app vi
   assert.ok(!appSource.includes('history.pushState({ qsView: _prevViewName'));
 });
 
-test('vendor sign-out records its explicit auth destination before Supabase emits SIGNED_OUT', () => {
-  const start = appSource.indexOf("document.addEventListener('click', async function (event)");
-  const end = appSource.indexOf("\n    });", start);
-  const handler = appSource.slice(start, end);
-  const markerAt = handler.indexOf("sessionStorage.setItem('qs_show_auth_after_signout', 'true')");
-  const signOutAt = handler.indexOf("supabase.auth.signOut({ scope: 'local' })");
+test('explicit sign-out destination survives SIGNED_OUT and is consumed only on the next initial load', () => {
+  const start = appSource.indexOf('async function requestSignOut()');
+  const end = appSource.indexOf('function handleAuthLogout(options = {})', start);
+  const signOutFlow = appSource.slice(start, end);
+  const markerAt = signOutFlow.indexOf("sessionStorage.setItem('qs_show_auth_after_signout', 'true')");
+  const signOutAt = signOutFlow.indexOf("supabase.auth.signOut({ scope: 'local' })");
   assert.ok(markerAt >= 0, 'explicit sign-out destination marker must exist');
   assert.ok(signOutAt >= 0, 'local Supabase sign-out must remain explicit');
   assert.ok(markerAt < signOutAt,
     'marker must be written before signOut because local signOut fires SIGNED_OUT before server revocation completes');
-  assert.ok(handler.includes('window.location.replace(window.location.pathname)'));
+  assert.ok(signOutFlow.includes("next.qsScreen = 'auth'"));
+  assert.ok(signOutFlow.includes('window.location.replace(window.location.pathname)'));
+
+  const logoutStart = appSource.indexOf('function handleAuthLogout(options = {})');
+  const logoutEnd = appSource.indexOf('function initOnlineOfflineHandlers', logoutStart);
+  const logoutFlow = appSource.slice(logoutStart, logoutEnd);
+  assert.match(logoutFlow, /if \(options\.initialLoad\) sessionStorage\.removeItem\('qs_show_auth_after_signout'\)/,
+    'SIGNED_OUT must not consume the marker before the reload');
+  assert.match(appSource, /document\.addEventListener\('click', async function \(event\) \{[\s\S]*?await requestSignOut\(\)/,
+    'the Settings button must use the same guarded sign-out flow');
+});
+
+test('authenticated vendor Back history is handled by appss and confirms sign-out at the boundary', () => {
+  assert.match(qsInitSource, /if \(document\.body\.classList\.contains\('mode-app'\)\) return;/,
+    'landing/auth popstate handling must not intercept authenticated vendor history');
+  assert.match(appSource, /function setActiveView\(view, resetScroll = false, fromHistory = false\)/);
+  assert.match(appSource, /if \(prevIdx !== -1 && !fromHistory\)/,
+    'restoring a popped vendor view must not push a duplicate entry');
+  assert.match(appSource, /if \(targetView && _TAB_ORDER\.includes\(targetView\)\)\s*\{\s*setActiveView\(targetView, false, true\)/,
+    'Back must restore Home as well as other vendor tabs');
+  assert.match(appSource, /if \(currentUser && document\.body\.classList\.contains\('mode-app'\)\)\s*\{[\s\S]*?requestSignOut\(\)/,
+    'Back at the authenticated app boundary must ask before signing out');
+});
+
+test('marketplace product handoff opens once and does not replay after storefront refresh', () => {
+  assert.match(catalogSource, /var MARKET_HANDOFF_PID = \(_p\.get\('pid'\) \|\| ''\)/);
+  assert.match(catalogSource, /if \(MARKET_ORIGIN && MARKET_HANDOFF_PID\)[\s\S]*?searchParams\.delete\('pid'\)/,
+    'marketplace pid must be removed from the address after its one-time handoff is captured');
+  assert.match(catalogSource, /var _pidParam = MARKET_HANDOFF_PID/);
+  assert.match(catalogSource, /var MARKET_RETURN_URL = MARKET_ORIGIN[\s\S]*?MARKET_PRODUCT/,
+    'the originating marketplace product slug must remain available for the return path');
+});
+
+test('failed image replacement preserves the existing product image and reports decode errors clearly', () => {
+  const imageHandlerStart = inventorySource.indexOf('function initImageUploadHandler()');
+  const imageHandlerEnd = inventorySource.indexOf('// ADD / EDIT FORM', imageHandlerStart);
+  const imageHandler = inventorySource.slice(imageHandlerStart, imageHandlerEnd);
+  assert.match(imageHandler, /failed replacement must not erase the image already attached/);
+  assert.doesNotMatch(imageHandler, /else \{ if \(slot === 'img1'\) clearInvImage\(\)/);
+  assert.match(imageHandler, /img2Input\.value = ''/,
+    'the second image input must allow selecting the same file again');
+  assert.match(appSource, /This image format could not be opened by the browser/);
+  assert.match(appSource, /The selected image could not be read from this device/);
+});
+
+test('offline sync actions are vendor-scoped and concurrent callers share the real result', () => {
+  const idbSource = fs.readFileSync(path.join(root, 'indexeddb_sync.js'), 'utf8');
+  assert.match(idbSource, /storedAction\.userId = ownerId/);
+  assert.match(idbSource, /getAllPending: async function \(userId\)/);
+  assert.match(idbSource, /action\.userId === userId/);
+  assert.match(idbSource, /function legacyActionMatchesCurrentState/);
+  assert.match(idbSource, /claimPendingForUser: async function \(id, userId\)/);
+  assert.match(idbSource, /failedBatches\.push\('unassigned-pending'\)/);
+  assert.match(idbSource, /var syncInFlightPromise = null/);
+  assert.match(idbSource, /return syncInFlightPromise/);
+  assert.doesNotMatch(idbSource, /return \{ ok: true, skipped: true, reason: 'already-syncing' \}/,
+    'an in-flight sync must never be reported as a successful upload');
+
+  assert.match(appSource, /getAllPending\(user\.id\)/);
+  assert.match(appSource, /getAllPending\(currentUser\.id\)/);
+  const syncNowStart = appSource.indexOf('const btnSyncNow');
+  const syncNowEnd = appSource.indexOf('const btnLoadDemo', syncNowStart);
+  const syncNow = appSource.slice(syncNowStart, syncNowEnd);
+  assert.match(syncNow, /syncCloudData\(currentUser, \{ force: true \}\)/);
+  assert.doesNotMatch(syncNow, /syncPendingToSupabase\(\)/,
+    'manual Sync Now must not push the same queue twice');
 });
