@@ -305,7 +305,10 @@
       return urlData.publicUrl;
     } catch (err) {
       errlog('Image upload failed (' + slot + ')', err);
-      toast('Upload failed: ' + (err.message || 'unknown'), 'error');
+      const reason = err && typeof err.message === 'string' && err.message.trim()
+        ? err.message
+        : 'The image could not be prepared or uploaded. Choose a JPG, PNG or WebP image under 5 MB.';
+      toast('Upload failed: ' + reason, 'error');
       return null;
     } finally {
       setSlotUploading(slot, false);
