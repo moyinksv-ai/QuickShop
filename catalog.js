@@ -757,12 +757,13 @@
 
       /* --- product detail overlay --- */
       '#cat-detail{position:fixed;inset:0;z-index:400;',
-        'background:#0e0e14;',
+        'background:#0e0e14;visibility:hidden;pointer-events:none;',
         'transform:translateY(100%);',
-        'transition:transform .32s cubic-bezier(.16,1,.3,1);',
+        'transition:transform .32s cubic-bezier(.16,1,.3,1),visibility 0s linear .32s;',
         'display:flex;flex-direction:column;overflow:hidden;',
         'overscroll-behavior:none;}',
-      '#cat-detail.open{transform:translateY(0);}',
+      '#cat-detail.open{transform:translateY(0);visibility:visible;pointer-events:auto;',
+        'transition:transform .32s cubic-bezier(.16,1,.3,1),visibility 0s;}',
       '#cat-detail-hdr{display:flex;align-items:center;justify-content:space-between;gap:12px;',
         'padding:12px 16px;flex-shrink:0;',
         'border-bottom:1px solid rgba(255,255,255,0.07);}',
@@ -805,8 +806,9 @@
       '#cat-detail-info{padding:16px 16px 0;}',
       '#cat-detail-cat{font-size:10px;font-weight:700;letter-spacing:.7px;',
         'text-transform:uppercase;color:rgba(240,240,246,0.35);margin-bottom:4px;}',
-      '#cat-detail-name{font-size:20px;font-weight:900;color:#fff;',
-        'letter-spacing:-.4px;line-height:1.25;margin-bottom:8px;}',
+      '#cat-detail-name{font-size:24px;font-weight:900;color:#fff;',
+        'letter-spacing:-.7px;line-height:1.16;margin-bottom:10px;',
+        'text-shadow:0 2px 18px rgba(167,139,250,0.24);}',
       '#cat-detail-price{font-size:22px;font-weight:800;color:#a78bfa;',
         'letter-spacing:-.4px;margin-bottom:6px;}',
       '#cat-detail-stock{font-size:12px;font-weight:700;color:#10b981;margin-bottom:12px;}',
@@ -1390,7 +1392,6 @@
   // fetched; products that disappeared from the sellable set are removed
   // locally. Full catalogue loading remains the bootstrap/recovery path.
   var CATALOG_CACHE_PREFIX = 'qs_catalog_cache_v1:';
-  var CATALOG_FRESHNESS_TTL = 15000;
   var CATALOG_CACHE_MAX_AGE = 30 * 60 * 1000;
 
   function catalogCacheKey(input) {
@@ -3298,14 +3299,12 @@
     })();
 
     // ── Background freshness check ───────────────────────────────────────
-    // Cached storefronts render immediately. After the short freshness TTL,
-    // compare only product id/updated_at/qty metadata and fetch changed rows.
-    // No full catalogue response is downloaded for a one-product change.
-    var _cacheFreshnessCheckedAt = _cachedCatalog ? Number(_cachedCatalog.savedAt || 0) : 0;
-    if (!_cachedCatalog || (Date.now() - _cacheFreshnessCheckedAt >= CATALOG_FRESHNESS_TTL)) {
-      refreshCatalogIncrementally(client, storeId, _catalogCacheInput,
-        _cachedCatalog ? _cachedCatalog.meta : [], storeName);
-    }
+    // Every full page entry probes the compact product metadata, even when the
+    // snapshot was checked moments ago. A vendor may have edited stock since
+    // that check. Cached cards still render immediately; only changed product
+    // rows are fetched, never the full catalogue, when the fingerprint differs.
+    refreshCatalogIncrementally(client, storeId, _catalogCacheInput,
+      _cachedCatalog ? _cachedCatalog.meta : [], storeName);
 
     // ── Realtime subscription — live inventory updates ──
     // Realtime is an optional fast path. Apply the changed row directly when
