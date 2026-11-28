@@ -1122,6 +1122,26 @@ function handleTouchEnd() {
     initAppUI();
     await saveState();
 
+    // A product can be edited while the cloud pull is running. Re-check this
+    // vendor's queue after reconciliation and flush any actions that arrived
+    // after the initial push, so Sync Now cannot report success ahead of them.
+    if (window.qsdb && typeof window.qsdb.getAllPending === 'function' &&
+        typeof window.qsdb.syncPendingToSupabase === 'function') {
+      try {
+        const queuedAfterPull = await window.qsdb.getAllPending(user.id);
+        if (queuedAfterPull && queuedAfterPull.length > 0) {
+          pendingResult = await window.qsdb.syncPendingToSupabase();
+        }
+      } catch (queueCheckError) {
+        errlog('post-pull pending queue check failed', queueCheckError);
+        pendingResult = {
+          ok: false,
+          failedBatches: ['pending-queue-check'],
+          fatalError: queueCheckError && (queueCheckError.message || String(queueCheckError))
+        };
+      }
+    }
+
     const pendingOk = !pendingResult || pendingResult.ok !== false;
     const reasons = [];
     if (pendingResult && pendingResult.failedBatches && pendingResult.failedBatches.length) reasons.push(pendingResult.failedBatches.join(', '));
