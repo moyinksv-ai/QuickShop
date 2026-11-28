@@ -743,7 +743,7 @@ test('marketplace incremental reconciliation fetches changed canonical products 
   assert.ok(marketHtml.includes(".gte('offer_updated_at', previousFreshness.latestOfferUpdatedAt)"));
   assert.ok(marketHtml.includes(".from('qs_market_products_v2')"));
   assert.match(marketHtml, /\.in\('id', changedIds\.slice\(offset, offset \+ 100\)\)/);
-  assert.ok(marketHtml.includes('if (Number(now.offerCount) < Number(previousFreshness.offerCount)) return null'));
+  assert.match(marketHtml, /if \(Number\(now\.offerCount\) < Number\(previousFreshness\.offerCount\)\) \{\s*return fetchAuthoritativeMarketPage\(now\)/);
   assert.ok(marketHtml.includes('merged.slice(0, _RECENT_PAGE)'));
 });
 
@@ -938,6 +938,6 @@ test('marketplace offer details are fetched only after a product card is opened,
   assert.doesNotMatch(marketHtml, /addEventListener\('touchstart', function \(\) \{ _prefetchProduct\(item\);/);
   assert.match(marketHtml, /card\.addEventListener\('click', open\)/);
   assert.match(marketHtml, /\.select\('product_id, vendor_id, storefront_name, storefront_tagline, storefront_avatar_url, price'\)/);
-  assert.match(marketHtml, /_prefetchProduct\(item\);\s*\/\/ no-op if already warmed by touchstart/);
+  assert.match(marketHtml, /_prefetchProduct\(item\);\s*\/\/ only after an actual product-card open/);
 });
 
