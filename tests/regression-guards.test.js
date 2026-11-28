@@ -823,6 +823,18 @@ test('failed image replacement preserves the existing product image and reports 
   assert.match(inventorySource, /The image could not be prepared or uploaded/);
 });
 
+test('offline queue ownership uses only the authenticated app identity, never stale cached user hints', () => {
+  const idbSource = fs.readFileSync(path.join(root, 'indexeddb_sync.js'), 'utf8');
+  const ownerStart = idbSource.indexOf('function getQueueOwnerId() {');
+  const ownerEnd = idbSource.indexOf('// Old queue rows have no owner.', ownerStart);
+  assert.ok(ownerStart >= 0 && ownerEnd > ownerStart, 'queue owner resolver should remain a small isolated function');
+  const ownerResolver = idbSource.slice(ownerStart, ownerEnd);
+  assert.match(ownerResolver, /window\\.__QS_APP/);
+  assert.match(ownerResolver, /app\\.getUser\\(\\)/);
+  assert.match(ownerResolver, /return user && user\\.id \\? String\\(user\\.id\\) : null/);
+  assert.doesNotMatch(ownerResolver, /localStorage|qs_last_user_id|qs_user_cache/, 'cached identity hints must never assign ownership to a new offline write');
+});
+
 test('offline sync actions are vendor-scoped and concurrent callers share the real result', () => {
   const idbSource = fs.readFileSync(path.join(root, 'indexeddb_sync.js'), 'utf8');
   assert.match(idbSource, /storedAction\.userId = ownerId/);
