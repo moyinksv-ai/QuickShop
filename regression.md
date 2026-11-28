@@ -580,3 +580,8 @@ PR #12 remains draft and unmerged until manual preview QA is completed and revie
 - Manual Sync Now sends pending actions only; it must not enqueue every local product or force a full-catalog write when no product changed.
 - Android file-picker MIME metadata may be generic even for valid image bytes; do not reject solely by MIME. Decode the bytes and return a clear unsupported-format/read/compression/storage error.
 - Legacy delete actions are claimed only after an explicit `user_id = currentUser.id` query confirms the row belongs to the current vendor.
+
+
+### Verification snapshot — 2026-11-28
+
+The regression suite passed **51/51** on runtime commit `07d8c6f6eab6ea4f6391b9f414685b68bc3b15b6`. The exact commit's Vercel preview reached `READY` and returned HTTP 200. Authenticated Android tests remain an explicit release gate; source tests and public page reachability do not replace them.
