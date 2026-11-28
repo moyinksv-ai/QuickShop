@@ -645,3 +645,13 @@ The regression suite passed **51/51** on runtime commit `07d8c6f6eab6ea4f6391b9f
 - No full catalogue refetch for one changed product. Keep the bootstrap metadata seed, local removal of products absent from the active public view, bounded changed-row fetch, and persisted cache behavior.
 - Release verification must include a no-change revisit (metadata probe only), one-product update (one changed-row fetch), zero-stock removal, another vendor's storefront isolation, and no anonymous `/rest/v1/products` requests. Confirm IndexedDB/offline vendor sync and atomic cache patch behavior remain unchanged.
 - The live SQL was applied by the user in Supabase Dashboard. A version-controlled migration file and migration-history reconciliation remain outstanding until CLI workflow is available; do not manually fabricate migration history.
+
+
+---
+
+## 2026-11-28: safe PWA update rollout
+
+- Regression guard covers the explicit worker-to-page app-shell refresh protocol, same-origin restriction, completion gating, preservation of all three existing cache names, and user-controlled reload.
+- Required preview QA: update an already-installed PWA from the previous worker; confirm all same-origin JS/CSS refresh before the notice appears; confirm no forced reload; verify open Add Product/product edit/modal/focused form blocks reload; verify the user can dismiss or apply the update; verify offline operation and cached product images/marketplace remain available if refresh fails.
+- First install must not show an update notice. Offline refresh failure must not clear existing cache entries or force a reload.
+- No production release until exact-head CI and Android preview QA pass.
