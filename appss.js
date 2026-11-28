@@ -291,38 +291,72 @@ function initApp() {
   function compressImage(file, maxWidth = 1024, quality = 0.7) {
     return new Promise((resolve, reject) => {
       if (!file) return reject(new Error('No image file was selected.'));
-      // Do not trust the picker MIME type alone: some Android content providers
-      // label valid JPEG/PNG bytes as application/octet-stream. Let Image decode
-      // the actual bytes and report a specific error only if decoding fails.
-      const reader = new FileReader();
-      reader.onerror = () => reject(new Error('The selected image could not be read from this device.'));
-      reader.onload = (event) => {
-        const img = new Image();
-        img.onerror = () => reject(new Error(
-          'This image format could not be opened by the browser. Please choose a JPG, PNG or WebP image.'
-        ));
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          let width = img.width, height = img.height;
-          if (!width || !height) return reject(new Error('The selected image has invalid dimensions.'));
+      // Android document providers can intermittently fail while FileReader
+      // copies a picked file into a large base64 data URL. Prefer a Blob URL:
+      // it lets the browser decode the selected File directly without that copy.
+      const img = new Image();
+      let objectUrl = null;
+      let settled = false;
+      const cleanup = () => {
+        if (objectUrl) {
+          try { URL.revokeObjectURL(objectUrl); } catch (_) {}
+          objectUrl = null;
+        }
+      };
+      const fail = (message) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new Error(message));
+      };
+      img.onerror = () => fail(
+        'The selected image could not be opened. Please choose a JPG, PNG or WebP image and try again.'
+      );
+      img.onload = () => {
+        if (settled) return;
+        cleanup();
+        try {
+          let width = img.naturalWidth || img.width;
+          let height = img.naturalHeight || img.height;
+          if (!width || !height) return fail('The selected image has invalid dimensions.');
           if (width > maxWidth) {
             height = Math.round(height * (maxWidth / width));
             width = maxWidth;
           }
+          const canvas = document.createElement('canvas');
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext('2d');
-          if (!ctx) return reject(new Error('Image preparation is unavailable in this browser.'));
+          if (!ctx) return fail('Image preparation is unavailable in this browser.');
           ctx.drawImage(img, 0, 0, width, height);
           canvas.toBlob((blob) => {
-            if (blob && blob.size > 0) resolve(blob);
-            else reject(new Error('The image could not be compressed. Please try another image.'));
+            if (settled) return;
+            if (blob && blob.size > 0) {
+              settled = true;
+              resolve(blob);
+            } else {
+              fail('The image could not be compressed. Please try another image.');
+            }
           }, 'image/jpeg', quality);
-        };
-        img.src = event.target.result;
+        } catch (_) {
+          fail('The selected image could not be prepared by this browser. Please try again.');
+        }
       };
-      try { reader.readAsDataURL(file); }
-      catch (_) { reject(new Error('The selected image could not be read from this device.')); }
+
+      try {
+        if (window.URL && typeof URL.createObjectURL === 'function') {
+          objectUrl = URL.createObjectURL(file);
+          img.src = objectUrl;
+          return;
+        }
+        // Compatibility fallback for browsers without Blob URL support.
+        const reader = new FileReader();
+        reader.onerror = () => fail('The selected image could not be read from this device.');
+        reader.onload = (event) => { img.src = event.target.result; };
+        reader.readAsDataURL(file);
+      } catch (_) {
+        fail('The selected image could not be opened from this device. Please select it again.');
+      }
     });
   }
 
