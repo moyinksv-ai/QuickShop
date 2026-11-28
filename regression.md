@@ -527,3 +527,46 @@ Do not assume quality `0.5` is better than `0.7`. Compare representative images 
 
 ### Merge gate
 PR #12 remains draft and unmerged until manual preview QA is completed and reviewed. CI success and deployment READY do not establish functional correctness or measured egress savings. No production/main changes without the user's explicit approval.
+
+
+---
+
+## 2026-11-28 — regression cases added for PR #12
+
+### Authenticated navigation and sign-out
+
+- While `body.mode-app` is active, `qs-init.js` must not interpret vendor history entries as landing/auth transitions or stop the vendor popstate listener.
+- Vendor history restoration must accept Home and every valid tab, and must not push a new history entry while restoring a popped state.
+- At the authenticated app history boundary, Back must ask whether to sign out. Cancel must restore the exact current vendor view without duplicate history entries.
+- The Settings Sign Out button and Back-boundary sign-out must use the same guarded flow.
+- `qs_show_auth_after_signout` must survive the immediate Supabase `SIGNED_OUT` callback and be consumed only by the subsequent initial-load auth check. After reload, auth/login must be visible; a public landing transition must not override it.
+
+### Marketplace → storefront handoff
+
+- A marketplace-origin `pid` opens the selected product on the first storefront visit.
+- The handoff `pid` is removed from the URL after capture, while `store`, `from=market`, and `market_product` remain.
+- Refreshing the storefront must show the vendor product grid, not replay the selected product detail.
+- Direct vendor `?pid=` deep links remain persistent and continue to open the requested product.
+- Returning to marketplace must still route to the originating canonical product slug.
+
+### Offline queue ownership and sync truthfulness
+
+- New IndexedDB actions carry the creating vendor's `userId`.
+- A sync for vendor A processes only vendor A's queue actions; vendor B's actions remain queued for B.
+- Legacy unowned actions are claimed only when their entity is present in the active vendor's local snapshot. Ambiguous/destructive legacy actions remain queued and are surfaced as incomplete, never silently dropped or sent to another vendor.
+- The database error `Product id belongs to another vendor` remains enforced; no client change weakens the SQL ownership guard.
+- Concurrent sync callers await the same in-flight result. An in-flight/duplicate call cannot return a false success.
+- Manual Sync Now performs one push+pull pass, not two pushes. The UI distinguishes push failure, pull failure, and unassigned legacy actions; it must not say Sync complete when any required work failed.
+
+### Product image upload/edit
+
+- A failed replacement upload must not clear an existing product image from the edit form.
+- Image picker inputs can select the same image again, including the second image slot.
+- File read, browser decode, canvas compression, and Storage upload failures produce distinguishable messages.
+- A Storage upload success followed by product RPC failure must be reported as a product-sync failure, not mislabeled as an image binary upload failure.
+- Verify on Android preview with JPG/PNG/WebP and inspect Storage request logs. Absence of a Storage POST indicates failure before the Storage request and must be diagnosed client-side.
+
+### Release gate
+
+- All above source guards and existing marketplace/storefront freshness, offline sync, product-detail freshness, and image fallback guards must pass CI.
+- Android preview retest is mandatory. No merge or production deployment until the user explicitly approves after retest.
