@@ -60,6 +60,59 @@ self.addEventListener('activate', function (event) {
   );
 });
 
+
+/* ── Explicit app-shell refresh for safe PWA updates ─────────────────────────
+ * The active page asks the newly activated worker to fetch its current same-origin
+ * script/style URLs and replace those cache entries before it offers a reload.
+ * Keep CACHE_NAME unchanged so the previous offline shell remains available until
+ * each replacement succeeds; never purge image or marketplace caches here.
+ */
+self.addEventListener('message', function (event) {
+  var data = event.data;
+  if (!data || data.type !== 'QS_REFRESH_APP_SHELL') return;
+
+  var port = event.ports && event.ports[0];
+  var urls = Array.isArray(data.urls) ? data.urls.slice(0, 40) : [];
+  var refreshPromise = (async function () {
+    if (!urls.length) throw new Error('No app-shell assets supplied.');
+    var cache = await caches.open(CACHE_NAME);
+    var failures = 0;
+
+    await Promise.all(urls.map(async function (rawUrl) {
+      try {
+        var url = new URL(rawUrl, self.location.origin);
+        if (url.origin !== self.location.origin || !/^https?:$/.test(url.protocol)) {
+          failures += 1;
+          return;
+        }
+        var request = new Request(url.href, {
+          method: 'GET',
+          cache: 'reload',
+          credentials: 'same-origin'
+        });
+        var response = await fetch(request);
+        if (!response || !response.ok || response.type === 'opaque') {
+          failures += 1;
+          return;
+        }
+        await cache.put(new Request(url.href), response.clone());
+      } catch (_) {
+        failures += 1;
+      }
+    }));
+
+    if (port) port.postMessage({
+      ok: failures === 0,
+      failures: failures,
+      total: urls.length
+    });
+  })().catch(function () {
+    if (port) port.postMessage({ ok: false, failures: urls.length, total: urls.length });
+  });
+
+  event.waitUntil(refreshPromise);
+});
+
 /* ── Fetch ───────────────────────────────────────────────────────────────────*/
 self.addEventListener('fetch', function (event) {
   var request = event.request;
