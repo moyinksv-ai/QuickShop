@@ -1,23 +1,22 @@
 /* sw.js — QuickShop Service Worker v4.0
  *
- * ARCHITECTURE: Runtime-first caching (no precache list)
- * ─────────────────────────────────────────────────────
- * Previous versions tried to cache a list of files on install.
- * If any single file failed (network hiccup, Vercel cold start,
- * missing file), the entire SW install aborted silently — the app
- * never qualified as installable and beforeinstallprompt never fired.
+ * ARCHITECTURE: Runtime caching with a guarded worker-update preflight
+ * ────────────────────────────────────────────────────────────────────
+ * Normal app use remains runtime-cached: resources are stored when first
+ * fetched, and the app can open offline after a successful online visit.
  *
- * This version caches nothing on install. Instead, every file is
- * cached the first time it's fetched (runtime caching). The app
- * becomes fully offline-capable after the first complete page load.
- * SW install can never fail because there is nothing to pre-fetch.
+ * A worker installation/update is different: before activation, the new
+ * worker fetches the current root and marketplace documents, discovers their
+ * same-origin scripts/styles, and validates the dynamically loaded app
+ * scripts. If any required fetch fails, installation is rejected and the
+ * previous active worker remains in service. Existing app-shell cache entries
+ * are not touched until the complete network preflight succeeds.
  *
  * STRATEGIES PER RESOURCE TYPE:
  * ─────────────────────────────────────────────────────
  *  App shell (HTML, JS, CSS, icons, manifest)
- *    → Stale-while-revalidate: serve from cache instantly, update
- *      in background. User always gets fast load. New version
- *      activates on next page open.
+ *    → Stale-while-revalidate during normal fetches. Worker upgrades
+ *      additionally refresh the required HTML/JS/CSS shell before activation.
  *
  *  Product images (jpg, jpeg, png, gif, webp, avif)
  *    → Cache-first: images never change once uploaded to Supabase
@@ -34,11 +33,149 @@ var CACHE_NAME    = 'qs-v2.1.10';
 
 var IMAGE_CACHE   = 'qs-images-v4.0';
 var MARKET_CACHE  = 'qs-market-v2.1';
-/* ── Install ─────────────────────────────────────────────────────────────────
- * Nothing to pre-cache. Skip waiting so this SW activates immediately
- * without waiting for existing tabs to close. */
-self.addEventListener('install', function () {
-  self.skipWaiting();
+/* ── Install: validate and refresh the complete app shell before activation ──
+ * Existing clients may still be running an older qs-init.js that cannot take
+ * part in a page-to-worker update handshake. Therefore the installing worker
+ * owns the first-rollout safety gate: it fetches both navigable app documents,
+ * discovers their static same-origin scripts/styles, adds the admin/storefront
+ * scripts loaded dynamically by qs-init.js, and validates every response.
+ *
+ * No existing cache entry is changed until ALL required network fetches succeed.
+ * If offline or any required asset is unavailable, install rejects and the old
+ * active worker plus its offline cache remain in service. No page is reloaded.
+ */
+var UPDATE_DYNAMIC_ASSETS = [
+  'catalog.js',
+  'indexeddb_sync.js',
+  'share-catalog.js',
+  'appss.js',
+  'canonical.js',
+  'inventory.js'
+];
+
+function addSameOriginAsset(urls, rawUrl, documentUrl) {
+  try {
+    var parsed = new URL(rawUrl, documentUrl);
+    if (parsed.origin !== self.location.origin ||
+        !/^https?:$/.test(parsed.protocol)) return;
+    parsed.hash = '';
+    urls.add(parsed.href);
+  } catch (_) {}
+}
+
+function discoverDocumentAssets(html, documentUrl, urls) {
+  var scriptTags = html.match(/<script\b[^>]*>/gi) || [];
+  scriptTags.forEach(function (tag) {
+    var match = tag.match(/\bsrc\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i);
+    if (match) addSameOriginAsset(urls, match[1] || match[2] || match[3], documentUrl);
+  });
+
+  var linkTags = html.match(/<link\b[^>]*>/gi) || [];
+  linkTags.forEach(function (tag) {
+    var rel = tag.match(/\brel\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i);
+    var href = tag.match(/\bhref\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i);
+    var relValue = rel && (rel[1] || rel[2] || rel[3]) || '';
+    if (/(^|\s)stylesheet(\s|$)/i.test(relValue) && href) {
+      addSameOriginAsset(urls, href[1] || href[2] || href[3], documentUrl);
+    }
+  });
+}
+
+self.addEventListener('install', function (event) {
+  event.waitUntil((async function () {
+    var origin = self.location.origin;
+    var documentUrls = [new URL('/', origin).href, new URL('/search.html', origin).href];
+    var documents = [];
+
+    for (var i = 0; i < documentUrls.length; i++) {
+      var documentRequest = new Request(documentUrls[i], {
+        method: 'GET',
+        cache: 'reload',
+        credentials: 'same-origin'
+      });
+      var documentResponse = await fetch(documentRequest);
+      if (!documentResponse || !documentResponse.ok || documentResponse.type === 'opaque') {
+        throw new Error('Required app document could not be refreshed: ' + documentUrls[i]);
+      }
+      documents.push({
+        url: documentUrls[i],
+        response: documentResponse,
+        html: await documentResponse.clone().text()
+      });
+    }
+
+    var assetUrls = new Set();
+    documents.forEach(function (documentEntry) {
+      discoverDocumentAssets(documentEntry.html, documentEntry.url, assetUrls);
+    });
+    UPDATE_DYNAMIC_ASSETS.forEach(function (asset) {
+      addSameOriginAsset(assetUrls, asset, origin + '/');
+    });
+
+    var refreshedAssets = [];
+    for (var assetUrl of assetUrls) {
+      var assetRequest = new Request(assetUrl, {
+        method: 'GET',
+        cache: 'reload',
+        credentials: 'same-origin'
+      });
+      var assetResponse = await fetch(assetRequest);
+      if (!assetResponse || !assetResponse.ok || assetResponse.type === 'opaque') {
+        throw new Error('Required app asset could not be refreshed: ' + assetUrl);
+      }
+      refreshedAssets.push({ url: assetUrl, response: assetResponse });
+    }
+
+    // Network validation is complete. Snapshot the prior values before the
+    // first write so a Cache API write/quota failure can roll back every key
+    // touched in this install attempt. Images and marketplace caches are never
+    // opened or purged here.
+    var cache = await caches.open(CACHE_NAME);
+    var cacheWrites = refreshedAssets.map(function (entry) {
+      return { request: new Request(entry.url), response: entry.response };
+    });
+    documents.forEach(function (documentEntry) {
+      cacheWrites.push({
+        request: new Request(documentEntry.url),
+        response: documentEntry.response
+      });
+    });
+    cacheWrites.push({
+      request: new Request(new URL('/index.html', origin).href),
+      response: documents[0].response
+    });
+
+    var previousEntries = [];
+    for (var writeEntry of cacheWrites) {
+      var previous = await cache.match(writeEntry.request);
+      previousEntries.push(previous ? previous.clone() : null);
+    }
+
+    var attemptedWrites = 0;
+    try {
+      for (var writeEntry of cacheWrites) {
+        attemptedWrites += 1;
+        await cache.put(writeEntry.request, writeEntry.response.clone());
+      }
+    } catch (writeError) {
+      // Restore in reverse order. A failed install must not leave a mixed shell
+      // for the still-active previous worker if a cache write itself fails.
+      for (var rollbackIndex = attemptedWrites - 1; rollbackIndex >= 0; rollbackIndex--) {
+        try {
+          if (previousEntries[rollbackIndex]) {
+            await cache.put(cacheWrites[rollbackIndex].request, previousEntries[rollbackIndex].clone());
+          } else {
+            await cache.delete(cacheWrites[rollbackIndex].request);
+          }
+        } catch (rollbackError) {
+          console.error('[QS] App-shell cache rollback was incomplete:', rollbackError);
+        }
+      }
+      throw writeError;
+    }
+
+    await self.skipWaiting();
+  })());
 });
 
 /* ── Activate ────────────────────────────────────────────────────────────────
@@ -59,6 +196,7 @@ self.addEventListener('activate', function (event) {
     })
   );
 });
+
 
 /* ── Fetch ───────────────────────────────────────────────────────────────────*/
 self.addEventListener('fetch', function (event) {

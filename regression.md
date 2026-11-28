@@ -645,3 +645,19 @@ The regression suite passed **51/51** on runtime commit `07d8c6f6eab6ea4f6391b9f
 - No full catalogue refetch for one changed product. Keep the bootstrap metadata seed, local removal of products absent from the active public view, bounded changed-row fetch, and persisted cache behavior.
 - Release verification must include a no-change revisit (metadata probe only), one-product update (one changed-row fetch), zero-stock removal, another vendor's storefront isolation, and no anonymous `/rest/v1/products` requests. Confirm IndexedDB/offline vendor sync and atomic cache patch behavior remain unchanged.
 - The live SQL was applied by the user in Supabase Dashboard. A version-controlled migration file and migration-history reconciliation remain outstanding until CLI workflow is available; do not manually fabricate migration history.
+
+
+---
+
+## 2026-11-28: first-rollout-safe PWA update rollout
+
+- The installing worker must validate the root app document and `search.html`, discover same-origin script/stylesheet URLs, and include all dynamic scripts loaded by `qs-init.js`.
+- Every required same-origin document and asset must fetch successfully with revalidation before the worker writes to the existing app-shell cache or calls `skipWaiting()`.
+- If any required fetch fails (including offline installation), the existing app-shell cache must remain untouched and the old worker must remain active. Image and marketplace caches remain intact.
+- The first update must work when the currently open page is running the old production `qs-init.js`, which has no new update-message listener. The new worker cannot depend on that page sending a message.
+- A worker takeover must never force-reload a page. Existing first-rollout pages may not display an Update banner; they use the refreshed shell on their next normal navigation/reload. Subsequent updates may show Update/Later from the new bootstrap.
+- Automated regression coverage must simulate both complete install preflight and an asset failure, proving no cache writes and no activation on failure.
+- Android preview QA remains mandatory: update an already-installed PWA from the previous worker; test first install; simulate offline/failed asset refresh; confirm old cache and offline images/marketplace remain available; verify no forced reload while Add Product/product edit/modal/focused form is active; confirm subsequent update banner and user-controlled reload; verify online/offline sync and vendor A/B isolation.
+- Cache writes are delayed until all network requests succeed. If a write fails, the worker attempts to restore prior responses or delete newly introduced keys before rejecting installation. Cache API writes are not a transactional multi-entry commit, and rollback can itself fail under severe storage/quota errors; browser quota/write-failure behaviour remains a residual risk to test.
+- No production release until exact-head CI, preview deployment, and Android lifecycle QA pass.
+

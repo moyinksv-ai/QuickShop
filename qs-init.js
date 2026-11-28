@@ -38,8 +38,109 @@
   var params = new URLSearchParams(window.location.search);
   var isCatalog = params.has('store') || params.has('token');
 
-  /* ── 1. Service-worker registration ───────────────────────────────────── */
+  /* ── 1. Service-worker registration + safe update propagation ─────────── */
   if ('serviceWorker' in navigator) {
+    var hadServiceWorkerController = !!navigator.serviceWorker.controller;
+    var updateBanner = null;
+
+    function isVisibleElement(el) {
+      if (!el) return false;
+      var current = el;
+      while (current && current.nodeType === 1) {
+        var style = window.getComputedStyle ? window.getComputedStyle(current) : null;
+        if (current.getAttribute('aria-hidden') === 'true' ||
+            (style && (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0')) ||
+            (!style && current.style.display === 'none')) return false;
+        current = current.parentElement;
+      }
+      return true;
+    }
+
+    function hasOpenVendorEditor() {
+      var workspace = document.getElementById('addProductWorkspace');
+      if (isVisibleElement(workspace) && workspace.getAttribute('aria-hidden') !== 'true') return true;
+
+      var app = window.__QS_APP;
+      try {
+        if (app && typeof app.getEditingProductId === 'function' && app.getEditingProductId()) return true;
+      } catch (_) {}
+
+      var modals = document.querySelectorAll('.modal');
+      for (var i = 0; i < modals.length; i++) {
+        if (isVisibleElement(modals[i])) return true;
+      }
+
+      var active = document.activeElement;
+      return !!(active && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName));
+    }
+
+    function showUpdateBanner() {
+      if (updateBanner || !document.body) return;
+      var banner = document.createElement('aside');
+      banner.id = 'qs-update-ready';
+      banner.className = 'qs-update-ready';
+      banner.setAttribute('role', 'status');
+      banner.setAttribute('aria-live', 'polite');
+
+      var message = document.createElement('span');
+      message.className = 'qs-update-ready-message';
+      message.textContent = 'A QuickShop update is ready. Save or finish any open form before reloading.';
+
+      var reloadButton = document.createElement('button');
+      reloadButton.type = 'button';
+      reloadButton.className = 'qs-update-ready-action';
+      reloadButton.textContent = 'Update';
+
+      var dismissButton = document.createElement('button');
+      dismissButton.type = 'button';
+      dismissButton.className = 'qs-update-ready-dismiss';
+      dismissButton.textContent = 'Later';
+      dismissButton.setAttribute('aria-label', 'Dismiss update notice');
+
+      reloadButton.addEventListener('click', function () {
+        if (hasOpenVendorEditor()) {
+          var app = window.__QS_APP;
+          if (app && typeof app.toast === 'function') {
+            app.toast('Finish or save the open form first, then tap Update again.', 'warning', 4500);
+          }
+          return;
+        }
+        var confirmUpdate = window.__QS_APP && window.__QS_APP.showConfirm;
+        var decision = typeof confirmUpdate === 'function'
+          ? confirmUpdate({
+              title: 'Update QuickShop',
+              message: 'Your saved and queued offline changes are retained. Make sure any open form is saved before reloading.',
+              okText: 'Reload now'
+            })
+          : Promise.resolve(window.confirm('Reload QuickShop to apply the update? Save any open form first.'));
+        Promise.resolve(decision).then(function (confirmed) {
+          if (confirmed) window.location.reload();
+        }).catch(function () {});
+      });
+
+      dismissButton.addEventListener('click', function () {
+        if (updateBanner && updateBanner.parentNode) updateBanner.parentNode.removeChild(updateBanner);
+        updateBanner = null;
+      });
+
+      banner.appendChild(message);
+      banner.appendChild(reloadButton);
+      banner.appendChild(dismissButton);
+      document.body.appendChild(banner);
+      updateBanner = banner;
+    }
+
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      // The worker only activates after its install-time app-shell refresh has
+      // completed. Existing old clients may not have this listener at all, so
+      // correctness never depends on page-side participation in first rollout.
+      if (!hadServiceWorkerController) {
+        hadServiceWorkerController = true;
+        return;
+      }
+      showUpdateBanner();
+    });
+
     window.addEventListener('load', function () {
       navigator.serviceWorker.register('sw.js')
         .then(function (reg) {
@@ -48,7 +149,7 @@
             if (!installing) return;
             installing.onstatechange = function () {
               if (installing.state === 'installed' && navigator.serviceWorker.controller) {
-                console.log('[QS] New version available — reload when ready.');
+                console.log('[QS] New worker installed after validating and refreshing the app shell.');
               }
             };
           };

@@ -1640,3 +1640,42 @@ body.customer-mode .btn-sell:hover, #catalogList .btn-sell:hover { background: v
   .bottom-nav { padding-bottom: env(safe-area-inset-bottom); }
   input, textarea, select { font-size: 16px; }
 }
+
+/* ── Safe PWA update notice ─────────────────────────────────────── */
+/* Stay above app overlays but below the global toast (1000002). */
+.qs-update-ready {
+  position: fixed;
+  z-index: 1000001;
+  left: max(12px, env(safe-area-inset-left));
+  right: max(12px, env(safe-area-inset-right));
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 82px);
+  max-width: 560px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-glass);
+  border-radius: 14px;
+  background: var(--bg-glass, #171923);
+  color: var(--text-primary, #fff);
+  box-shadow: 0 8px 30px rgba(0,0,0,.28);
+  font-size: 13px;
+}
+.qs-update-ready-message { flex: 1; line-height: 1.4; }
+.qs-update-ready-action,
+.qs-update-ready-dismiss {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 9px;
+  padding: 9px 11px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.qs-update-ready-action { background: var(--brand, #5b6ee1); color: #fff; }
+.qs-update-ready-dismiss { background: transparent; color: var(--text-secondary, #bbb); }
+@media (max-width: 420px) {
+  .qs-update-ready { gap: 7px; padding: 10px; font-size: 12px; }
+  .qs-update-ready-action, .qs-update-ready-dismiss { padding: 8px 9px; }
+}

@@ -179,20 +179,18 @@
   }
 
   function getQueueOwnerId() {
+    // Queue ownership must come only from the authenticated app identity.
+    // Cached last-user hints are display/bootstrap aids, not authorization
+    // context: after an account switch they can attribute a new offline write
+    // to the previous vendor. If auth is not ready, leave the row unassigned;
+    // the guarded legacy-claim path can adopt it only after local-state checks.
     try {
       var app = window.__QS_APP;
       var user = app && typeof app.getUser === 'function' ? app.getUser() : null;
-      if (user && user.id) return String(user.id);
-    } catch (_) {}
-    try {
-      var lastUserId = localStorage.getItem('qs_last_user_id');
-      if (lastUserId) return String(lastUserId);
-    } catch (_) {}
-    try {
-      var cached = JSON.parse(localStorage.getItem('qs_user_cache') || 'null');
-      if (cached && cached.id) return String(cached.id);
-    } catch (_) {}
-    return null;
+      return user && user.id ? String(user.id) : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   // Old queue rows have no owner. Claim non-destructive actions only when their
