@@ -612,3 +612,15 @@ The regression suite passed **51/51** on runtime commit `07d8c6f6eab6ea4f6391b9f
 - Android acceptance tests remain required: immediate stock update on storefront revisit, zero-stock removal, no full catalogue refetch for one changed product, image selection, auth Home, and no closed-detail overlay bleed.
 - This is not a production release approval. PR #12 remains draft/open/unmerged.
 
+
+### Marketplace deletion, request-volume and storefront permission guards (2026-11-28)
+
+- When active-offer count falls, the delta view cannot expose the removed row because `qs_market_offers_v2` filters `qty > 0`. The client must fetch the authoritative visible first page from `qs_market_products_v2` and replace the persisted snapshot; returning null and retaining stale cards is forbidden.
+- Persist `probedAt` in `qs_market_snapshot_v1:home`; a 15-second freshness TTL that is not serialized does not throttle re-reads from localStorage.
+- Coalesce overlapping `reconcileMarketSnapshot` calls. Initial non-persisted `pageshow` must not trigger a second first-page request immediately after `routeFromURL()`.
+- Do not prefetch vendor offers on card `touchstart`: touchstart fires for scroll gestures. Fetch vendor-offer rows only after an actual card click. Keep the detail query projection to fields used by vendor cards: product_id, vendor_id, storefront_name, storefront_tagline, storefront_avatar_url, price.
+- Storefront freshness must not query the base `products` table as anon. Existing `public_catalog_products` is anon-readable but omits `updated_at`; add that safe timestamp to the view in a reviewed Supabase migration, then query the view for both metadata and changed product rows. Never solve this by granting anon SELECT on `products`.
+- Release blocker: four preview `GET /products` metadata requests returned 401 during 15:23–15:34 UTC on 2026-11-28. Do not merge until the view migration and client query are verified.
+- Request sample in that preview window: 5 `qs_market_products_v2` GETs (including two duplicate first-page and two duplicate changed-ID reads), 17 watermark GETs, 10 delta GETs, and 104 canonical offer GETs for 53 distinct canonical IDs. This is a short test window, not a general production traffic baseline.
+- Sync signal: 3 product/listing upsert RPC calls returned 204 in the same window. Earlier 400/P0001 cross-vendor ownership errors remain in the broader day log and should continue to be monitored.
+
