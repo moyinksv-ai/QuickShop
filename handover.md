@@ -802,3 +802,38 @@ Important verification boundary: these are source-level corrections committed to
 - Authenticated Android verification of the new atomic stock patch, Blob URL image path, auth Home action, and detail-overlay bleed remains outstanding.
 - PR #12 remains draft/open/unmerged. No production deployment and no Supabase schema, policy, or vendor-data mutation was performed.
 
+
+### Marketplace stale-card retest + Supabase request-log review (2026-11-28)
+
+User observed a marketplace card still visible after its last vendor listing became unavailable; tapping it showed "No vendor on QuickShop is selling this right now."
+
+#### Confirmed root cause in source
+- `reconcileMarketChangedProducts()` detected a falling active-offer count and returned `null`, with a comment claiming it would fall back to the authoritative page.
+- Neither caller performed that fallback. `loadRecent()` and `scheduleMarketRefresh()` both treated `null` as "do nothing", leaving the old first-page snapshot visible.
+- `qs_market_offers_v2` filters out `products.qty <= 0`, so removed listings have no tombstone in the delta query. A canonical detail lookup can correctly return an empty offer list while the old card remains in localStorage.
+- Corrected in PR #12: on a falling offer count, fetch only the authoritative visible first page from `qs_market_products_v2`, replace the persisted first-page snapshot and UI, and preserve the incremental path for ordinary updates.
+
+#### Request logs (production Supabase project, requests originated from PR preview)
+Window: 2026-11-28 15:23–15:34 UTC, referer filtered to the preview deployment `quickshopper-2s0uy3du6...`.
+- `qs_market_products_v2`: 5 GETs. Two identical first-page 60-row requests occurred 340 ms apart; two identical changed-ID (20 IDs) requests occurred 304 ms apart; one slug lookup. This points to duplicate initial/lifecycle and overlapping reconciliation work.
+- `qs_market_offers_v2`: 104 canonical-ID detail/prefetch GETs across 53 distinct canonical-ID queries, plus 17 watermark GETs and 10 delta GETs. 56 OPTIONS preflights were also logged for the view.
+- At least one canonical-ID lookup returned an empty JSON array (HTTP 200, content length 2, Content-Range */*), consistent with the no-vendor message.
+- The 17 watermark GETs used the same exact-count/latest-timestamp query. `writeMarketSnapshot()` did not persist `probedAt`, so the 15-second freshness cooldown was ineffective after reading the snapshot again.
+- The 104 canonical-ID queries were initiated by card `touchstart` prefetch. On Android, touchstart also occurs for scroll gestures; this was fetching vendor offers before a card was actually opened.
+- Corrected in PR #12: authoritative first-page fallback for offer-count decreases; persist `probedAt`; coalesce overlapping snapshot reconciliations; suppress initial non-BFCache `pageshow` refresh that can duplicate the initial load; remove touchstart prefetch; start offer lookup on actual click and select only fields used to render vendor choices.
+- These changes are intended to reduce unnecessary offer queries while retaining authoritative detail fetch on actual product open.
+
+#### Important storefront metadata permission failure — unresolved release blocker
+- In the same preview window, `GET /rest/v1/products?select=id,updated_at,qty&user_id=...` returned HTTP 401 four times (the broader 6-hour window showed 23 such failures).
+- Postgres logs explicitly report `permission denied for table products` for the anon role. The table has no anon SELECT grant; the RLS policy alone does not grant SQL privileges.
+- `public_catalog_products` is an existing anon-readable view with the public active-product projection, but it currently omits `updated_at`. The current storefront incremental metadata code therefore cannot work for public visitors, and the changed-row fetch against `products` is also invalid.
+- Do NOT grant anon SELECT on the base `products` table. Safe correction needs a migration to append `updated_at` to the existing `public_catalog_products` view, then switch both metadata and changed-row reads to that public view. No such migration or database change has been made yet.
+- PR #12 must not be merged until this is corrected and verified. The migration needs to be created with Supabase CLI and reviewed; production remains unchanged.
+
+#### Sync log signal
+- In the same preview window, `qs_upsert_products_and_listings_v2` had 3 POST requests returning HTTP 204, consistent with the user's report that Sync Now is now working.
+- Earlier 400/P0001 "Product id belongs to another vendor" errors were still present in the broader log window at 13:08–13:14 UTC; these predate the latest 3 successful preview upserts and should remain in the regression watch.
+- PostgREST also emitted several "Thread killed by timeout manager" system log entries around 15:23–15:30 UTC. They are not directly correlated to a specific QuickShop REST path in the available logs; do not attribute them to the new marketplace logic without further evidence.
+
+No production deployment, SQL grant, schema mutation, or vendor-data mutation was performed in this log review.
+
