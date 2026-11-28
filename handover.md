@@ -591,3 +591,101 @@ Do not broaden the Realtime change yet. The strongest next measurement is browse
 - `sw.js` remains unchanged from `main`; the image-cache finding remains the lazy-loading/opportunistic-cache interaction described in the previous entry. No speculative eager image prefetch was added.
 - Current branch head: `0c2ab8a8306423bb7f5bc0092d064ce3e6ed46cd`. PR #12 remains draft/unmerged. Production remains untouched.
 - No fresh GitHub Actions run is exposed yet for this latest connector-created head, so CI is **not declared green**. The last completed run is #405 above. Static source verification of the corrected guards and CSP has been completed.
+
+
+## 2026-11-28 — PR #12 recovery, exact-head verification, and next-phase handoff
+
+### Repository identity and recovery correction
+- The canonical repository is **`moyinksv-ai/QuickShop`**. The earlier failed recovery attempts queried the wrong owner (`Moyinks/QuickShop`); their 404 responses were not evidence that PR #12 or its branch had been deleted.
+- PR #12: https://github.com/moyinksv-ai/QuickShop/pull/12
+- Title: **Next release: safe marketplace freshness and navigation regressions**.
+- State at this checkpoint: OPEN, DRAFT, UNMERGED; GitHub reports mergeable.
+- Head branch: `next-release-freshness-regressions-2026-11-25`.
+- Verified head SHA before this documentation-only continuation: `52379bf6fc16696b2ff9110f70d649f9290216e9`.
+- Verified base: `main` at `10de99a4fba6644f4fa3d0256b33aacf0170d091`.
+- Exact comparison: **31 commits ahead / 0 behind main**, five changed files before this documentation update: `appss.js`, `handover.md`, `regression.md`, `search.html`, and `tests/regression-guards.test.js`.
+- The PR head includes the regression-guard correction commit `52379bf6fc16696b2ff9110f70d649f9290216e9`; it was not missing or lost.
+- No branch recreation, reset, force-push, merge, production deployment, or Supabase mutation was performed during recovery.
+
+### Exact-head CI and preview evidence
+- GitHub Actions **Regression guards run #417**, run ID `46026811859`: completed **success** for exact PR head `52379bf6fc16696b2ff9110f70d649f9290216e9`, event `pull_request`.
+- The same exact SHA also has push run #416 / ID `46026801215`: completed **success**.
+- Earlier failures remain part of the audit trail, not the current result: #405 / ID `45792464601` had 42 passed / 5 failed; #415 / ID `45793117403` had 44 passed / 3 failed. The literal-string guard corrections and CSP digest correction were followed by the successful #416/#417 runs. Do not describe old failures as current unresolved CI failures.
+- Vercel deployment for the exact head: ID `dpl_Da3smtgFMLVSHZaLDZoDSKphi4bt`, state **READY**, Git metadata confirms branch and SHA above. Preview alias: https://quickshopper-git-next-release-69fe11-moyinks-projects-5a3815db.vercel.app
+- The PR also contains a Netlify deploy-preview notification for the same SHA: https://deploy-preview-12--quickshopperapp.netlify.app (deploy record `6b09a41fa12f7d56182818d8`). Treat the Vercel preview as the canonical target for the next smoke-test pass unless the owner explicitly chooses otherwise.
+- CI success and deployment READY establish automated checks/build availability only. **They do not establish browser behavior, mobile usability, or measured Supabase egress savings. Manual preview smoke testing remains outstanding.**
+
+### What PR #12 changes — scope to validate, not assume
+1. **Marketplace first-page snapshot:** persisted, versioned snapshot key `qs_market_snapshot_v1:home`; 30-minute snapshot age; 15-second freshness-probe cooldown.
+2. **Unchanged marketplace path:** render the stored first-page cards immediately, then query lightweight `qs_market_offers_v2` freshness metadata (exact count + latest `offer_updated_at`). If unchanged, do not download the full `qs_market_products_v2` first page again.
+3. **Changed marketplace path:** map changed offers to canonical product IDs and fetch affected cards in bounded batches. If total offer count decreases, take the conservative authoritative first-page fallback because the current aggregation view does not provide durable tombstones/change history. Do not promise perfect deletion detection for every possible same-count mutation.
+4. **Offline fallback:** if the freshness probe fails, preserve/render the valid stored marketplace snapshot; do not erase it or make network freshness failure blank the catalogue.
+5. **Storefront:** preserve its existing scoped cache + lightweight `products(id, updated_at, qty)` metadata check + bounded changed-ID fetch. Do not replace it with the marketplace implementation.
+6. **Vendor history:** `mergeVendorHistoryState(view)` preserves existing history fields (including the landing/auth screen state) while adding `qsView` and `qsVendorApp`.
+7. **Sign-out:** write `qs_show_auth_after_signout` before `supabase.auth.signOut({ scope: 'local' })`, because local `SIGNED_OUT` fires before the server revocation completes.
+8. **Product-detail refresh:** preserve the earlier coalescing guard so a products-table event does not tear down/re-route an already-open product detail.
+9. **Service worker:** `sw.js` was confirmed byte-for-byte identical to main at the reviewed checkpoint. Do not change it as part of the current preview QA or image-sizing work without new evidence.
+
+### Mandatory preview smoke test — next immediate task
+Use the exact Vercel preview above on Android/mobile and, where possible, desktop responsive view. Use a dedicated authorized test vendor/account and test products only. Do not edit a paying vendor's real inventory to manufacture events.
+
+**A. Marketplace request/freshness behavior**
+- Cold first load: verify cards, deterministic order, search/category/Stores behavior, Load More, product details and offer display.
+- Warm revisit with no data change: cached first page should appear immediately; inspect Network/Resource Timing and confirm the lightweight freshness probe occurs but the full first-page card payload does not.
+- Repeat refresh/revisit inside the 15-second probe cooldown and after it expires; record exactly which requests happen. Do not mistake browser memory cache for absence of a Supabase request.
+- Change one test-vendor offer/product while marketplace is open: verify only the affected canonical card(s) reconcile; unrelated cards remain stable.
+- Exercise deletion/out-of-stock and offer-count decrease: verify conservative full-page fallback happens where intended and no stale sellable card remains.
+- Exercise same-count edits and multiple changed IDs; ensure batching and merge order are correct.
+- Product-detail open + product update/realtime event: detail must remain open and correct; returning to listing must reveal the latest state.
+- Confirm filters, pagination and Load More are not accidentally reset or silently converted to an all-products fetch.
+
+**B. Storefront and handoff**
+- Cold storefront load; warm revisit unchanged; single product edit; add product; stock-to-zero/removal; and restore network after offline.
+- For unchanged warm revisit, confirm lightweight metadata request rather than a complete catalogue payload.
+- Marketplace → product detail → vendor storefront → Back/Keep Shopping → WhatsApp/order path.
+- Refresh after the Marketplace handoff: remain on the intended vendor storefront/current listing state; do not reopen the old originating product detail unless a direct vendor URL intentionally includes a product ID.
+- Verify product ordering, stock labels, cart quantity reconciliation, image fallbacks, dual-image swipe/lightbox and realtime updates.
+
+**C. Vendor navigation/auth regressions**
+- Vendor Home → Settings/payment/activation wall → system Back: remain inside vendor app and return to the correct vendor view; do not unexpectedly fall through to public landing.
+- Explicit sign-out: ends at visible signed-out/auth destination, not blank screen or stale vendor app.
+- Refresh after sign-out: must remain signed out and must not resurrect the app.
+- Test browser Back/Forward and cold reload separately; history behavior can differ between these paths.
+- Test slow network and repeat on Android browser/PWA if possible.
+
+**D. Offline behavior**
+- With marketplace/storefront first visited online, go offline and revisit. Confirm cached metadata/products remain usable and network failure does not wipe them.
+- Distinguish cached product metadata from cached image assets. Lazy images never requested by that browser may not exist in `qs-images-v4.0`; this is expected under opportunistic caching.
+- Do not demand that every marketplace image is offline-available unless a bounded image-prefetch policy is separately designed and measured.
+- Reconnect and confirm reconciliation occurs without duplicate refresh storms or stale state.
+
+**E. Evidence to capture**
+For each journey, record preview SHA/URL, device/browser, online/offline state, exact action sequence, request path/RPC, method/status, request initiator, count, transferred bytes/decoded bytes where available, response rows, image URL/bytes, and observed UI state. Keep API/RPC and Storage image traffic separate. Compare against main using the same test account/catalogue, viewport, network and cache state. Use browser Resource Timing/DevTools where available and correlate with Supabase logs; gateway log bytes are not automatically billing-meter bytes.
+- Pass criteria are both correctness and lower measured bytes on the unchanged warm path. A smaller request count alone is insufficient.
+- No production merge until the owner has reviewed the evidence and explicitly authorizes it.
+
+### Image resizing/layout work — approved investigation, not yet an implementation
+The user wants image display to become more standard and consistent across Marketplace and Storefront while reducing transfer bytes from serving original images at display size. Visual character should remain familiar; no dramatic redesign, quality loss, or inconsistent card geometry.
+
+Verified current facts:
+- Marketplace `search.html` has `_IMG_TRANSFORM = false`; `imgTransform()` currently returns original public Storage URLs. Marketplace card images use `loading="lazy"` and `decoding="async"`.
+- Storefront `safeImgSrc()` currently preserves the original public Storage URL; no storefront thumbnail transform is applied.
+- Upload path currently compresses originals (historical source audit: max width 1024 px, JPEG quality 0.7). Do not lower upload quality globally as a shortcut.
+- Keep `sw.js` untouched; the existing image cache is per-browser and opportunistic.
+
+Required next investigation/design:
+1. Inspect actual CSS/container dimensions and image aspect ratios for Marketplace cards, Storefront cards, product detail, and any secondary image/lightbox. Define consistent image slots/object-fit behavior without changing the overall visual identity.
+2. Measure representative source image intrinsic dimensions, encoded bytes, format, and actual rendered CSS dimensions at common Android viewport sizes. Include portrait, landscape, square, transparent/PNG if supported, high-detail and low-light examples.
+3. Derive output pixel dimensions from actual display slot dimensions × devicePixelRatio, with a defensible cap. Pixel count scales with width × height; if both dimensions are scaled by factor `s`, pixels scale by `s²`. For example, a 0.5 linear scale produces 0.25 pixel count, not 0.5; encoded byte savings are content/codec dependent and must be measured rather than assumed.
+4. Compare purpose-sized variants (card thumbnail, product detail, larger/lightbox) against original using actual encoded transfer bytes and perceptual inspection. Test multiple formats/quality levels; do not assume a fixed JPEG quality or that 0.5 is acceptable.
+5. Prefer retaining the original as the canonical vendor asset and deriving display variants. Never destructively overwrite the vendor original. Determine whether the current Supabase plan supports Storage image transformation and calculate actual cost/egress trade-offs before enabling it. If transform pricing is unavailable/uneconomic, evaluate pre-generated derivatives or another safe variant pipeline.
+6. Use responsive `srcset`/`sizes` or equivalent only when the chosen URL variants are real, stable, and supported by the current hosting/storage configuration. Ensure cache keys/versioning invalidate old variants safely.
+7. Compare bytes per viewed card and per journey, not just one image file. Lazy loading, correct slot sizing and CDN cache behavior affect aggregate savings.
+8. Preserve loading shimmer, async decoding, error/original fallback, image ordering, dual-image gestures, lightbox, accessibility/alt text, offline opportunistic cache and image freshness. Do not eagerly download every image.
+9. Add regression guards for stable image slot/aspect-ratio behavior, selected variant URL, fallback to original, no accidental eager loading, and no mutation of original uploads. Validate Android low-bandwidth behavior and actual visual quality before proposing merge.
+
+### Release decision at this checkpoint
+- PR #12 is still a **draft release candidate**, not approved for merge.
+- Automated regression checks on exact head are green; preview deployment is READY.
+- Manual smoke testing, request/byte measurements, and user acceptance are still required.
+- Main and production remain untouched. Any documentation update should remain on this PR branch. Keep image resizing as a separate measured change after PR #12's current runtime fixes are smoke-tested, unless the owner explicitly chooses a combined but isolated commit series.
