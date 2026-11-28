@@ -380,6 +380,66 @@
     }
   }
 
+  // Patch same-origin public storefront snapshots only after the atomic
+  // products + vendor-listings RPC succeeds. localStorage.setItem replaces each
+  // snapshot atomically; no unrelated products or cache entries are rewritten.
+  function patchCatalogSnapshotsForVendor(userId, rows) {
+    if (!userId || !Array.isArray(rows) || !rows.length) return;
+    var prefix = 'qs_catalog_cache_v1:';
+    try {
+      var keys = [];
+      for (var ki = 0; ki < localStorage.length; ki++) {
+        var key = localStorage.key(ki);
+        if (key && key.indexOf(prefix) === 0) keys.push(key);
+      }
+      keys.forEach(function (key) {
+        try {
+          var snapshot = JSON.parse(localStorage.getItem(key) || 'null');
+          if (!snapshot || snapshot.version !== 1 ||
+              String(snapshot.storeId || '') !== String(userId) ||
+              !Array.isArray(snapshot.products) || !Array.isArray(snapshot.meta)) return;
+          var products = snapshot.products.slice();
+          var meta = snapshot.meta.slice();
+          var changed = false;
+          rows.forEach(function (row) {
+            if (!row || !row.id) return;
+            var id = String(row.id);
+            var productIndex = products.findIndex(function (p) { return p && String(p.id) === id; });
+            var metaIndex = meta.findIndex(function (m) { return m && String(m.id) === id; });
+            var inStock = Number(row.qty || 0) > 0;
+            if (!inStock) {
+              if (productIndex !== -1) { products.splice(productIndex, 1); changed = true; }
+              if (metaIndex !== -1) { meta.splice(metaIndex, 1); changed = true; }
+              return;
+            }
+            var product = {
+              id: row.id, user_id: row.user_id, name: row.name, price: row.price,
+              qty: row.qty, category: row.category, image_url: row.image_url,
+              image_url2: row.image_url2, icon: row.icon, description: row.description
+            };
+            if (productIndex === -1) products.push(product);
+            else products[productIndex] = Object.assign({}, products[productIndex], product);
+            var fingerprint = {
+              id: id, updatedAt: row.updated_at || null, qty: Number(row.qty || 0)
+            };
+            if (metaIndex === -1) meta.push(fingerprint);
+            else meta[metaIndex] = fingerprint;
+            changed = true;
+          });
+          if (!changed) return;
+          snapshot.products = products;
+          snapshot.meta = meta;
+          snapshot.savedAt = Date.now();
+          localStorage.setItem(key, JSON.stringify(snapshot));
+        } catch (cacheError) {
+          warn('Could not patch storefront snapshot ' + key + ':', cacheError);
+        }
+      });
+    } catch (e) {
+      warn('Storefront snapshot patch failed:', e);
+    }
+  }
+
   // ── syncPendingToSupabase (BATCHED) ──────────────────────────────────
   async function syncPendingToSupabaseInternal() {
 
@@ -575,8 +635,12 @@
           var r1 = await supabase.rpc('qs_upsert_products_and_listings_v2', { rows: productUpsertRows });
           if (r1.error) { console.error('[qsdb] Product upsert failed:', r1.error); failedBatches.push('products'); }
           else {
+            // The RPC transaction is authoritative for both the product row
+            // and its public vendor listing. Mirror only those confirmed rows
+            // into same-device storefront snapshots before clearing the queue.
+            patchCatalogSnapshotsForVendor(userId, productUpsertRows);
             doneActIds = doneActIds.concat(productUpsertActIds, productSupersededActIds);
-            log('Product + marketplace upsert OK.');
+            log('Product + marketplace upsert OK; storefront snapshots patched.');
           }
         } catch (e) { console.error('[qsdb] Product upsert threw:', e); failedBatches.push('products'); }
       }
