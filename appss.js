@@ -1038,6 +1038,7 @@ function handleTouchEnd() {
     // Callers (Sync Now, pull-to-refresh) need the real outcome instead of
     // assuming success — record it here instead of only toasting internally.
     let pendingResult = null;
+    let cloudProductCount = null;
     let syncError = null;
     try {
       if (window.qsdb && window.qsdb.syncPendingToSupabase) pendingResult = await window.qsdb.syncPendingToSupabase();
@@ -1059,6 +1060,7 @@ function handleTouchEnd() {
         createdAt: new Date(p.created_at).getTime(),
         updatedAt: p.updated_at ? new Date(p.updated_at).getTime() : new Date(p.created_at).getTime()
       }));
+      cloudProductCount = cloudProducts.length;
       const cloudSales = (salesRes.data || []).map(s => ({
         id: s.id, productId: s.product_id, qty: s.qty, price: s.price, cost: s.cost,
         ts: new Date(s.sale_date).getTime(),
@@ -1128,7 +1130,8 @@ function handleTouchEnd() {
       ok: !syncError && pendingOk,
       pullOk: !syncError,
       error: syncError ? (syncError.message || String(syncError)) : (reasons.length ? ('upload failed: ' + reasons.join('; ')) : null),
-      pendingResult: pendingResult
+      pendingResult: pendingResult,
+      cloudProductCount: cloudProductCount
     };
   }
 
@@ -1636,7 +1639,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       userDisplayNameEl.textContent = displayName ? `Name: ${displayName}` : '';
     }
     loadLocalData(user.id);
-    await syncCloudData(user, { force: true });
+    const initialSyncResult = await syncCloudData(user, { force: true });
 
     // ── Durable referral attribution ─────────────────────────────────────
     // Pending click survives navigation, refresh, PWA restarts, and OTP delay.
@@ -1688,9 +1691,12 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     }
     // ── End durable referral attribution ──────────────────────────────────
 
-    // After cloud sync: if local products exist but cloud had none, queue them all for upload.
-    // This recovers from the case where products were created offline or before Supabase tables existed.
-    if (window.qsdb && window.qsdb.addPendingChange && state.products && state.products.length > 0) {
+    // Recovery only: requeue local products when the completed initial pull proves
+    // the cloud catalog is empty. Never rewrite the whole catalog on every login.
+    if (initialSyncResult && initialSyncResult.pullOk !== false &&
+        (!initialSyncResult.pendingResult || initialSyncResult.pendingResult.ok !== false) &&
+        initialSyncResult.cloudProductCount === 0 &&
+        window.qsdb && window.qsdb.addPendingChange && state.products && state.products.length > 0) {
       try {
         const pending = await window.qsdb.getAllPending(user.id);
         const alreadyQueued = new Set(pending.map(p => p.item && (p.item.id || p.item.productId)).filter(Boolean));
