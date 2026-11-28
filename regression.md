@@ -570,3 +570,13 @@ PR #12 remains draft and unmerged until manual preview QA is completed and revie
 
 - All above source guards and existing marketplace/storefront freshness, offline sync, product-detail freshness, and image fallback guards must pass CI.
 - Android preview retest is mandatory. No merge or production deployment until the user explicitly approves after retest.
+
+
+### Additional sync/image regression guards (2026-11-28)
+
+- An edit queued while a push is running must trigger a follow-up pass after the active batch settles; it must not remain stranded behind a coalesced promise.
+- Concurrent cloud-sync callers for the same vendor await the same result. A different vendor cannot receive another account's result.
+- Offline/not-ready sync must return an incomplete result, never a success-shaped skip.
+- Manual Sync Now sends pending actions only; it must not enqueue every local product or force a full-catalog write when no product changed.
+- Android file-picker MIME metadata may be generic even for valid image bytes; do not reject solely by MIME. Decode the bytes and return a clear unsupported-format/read/compression/storage error.
+- Legacy delete actions are claimed only after an explicit `user_id = currentUser.id` query confirms the row belongs to the current vendor.
