@@ -874,3 +874,35 @@ Latest client/test commits:
 - `tests/regression-guards.test.js`: `c9c0e671da5ebd6089d8adaa9c77e9b5fc5ce582`
 
 This source-level correction is not yet a release verification. Run CI and deploy a fresh preview for the latest branch head, then verify on Android that a cached storefront with no changes retains its cached payload, a single changed product fetches only that product, a zero-stock product disappears, and the view requests return successfully without any anon request to `/rest/v1/products`. Preserve the vendor IndexedDB/offline path and same-origin atomic cache patching. PR #12 remains open/draft/unmerged; no production deployment is authorized.
+
+
+---
+
+## Latest release follow-up — 2026-11-28 (post PR #12)
+
+### Production identity
+- main and the READY Vercel production deployment both point to 8d247c8c3ec6a911eeacde4042e84d16886bcd92 (PR #12 merge). Production aliases verified: quickshopper.vercel.app and quickshoppify.vercel.app.
+- This is deployment verification only; it does not prove every installed PWA has already loaded the new JavaScript.
+
+### PWA update propagation — still open
+- Released sw.js is still qs-v2.1.10; the deployed sw.js did not change in PR #12. The app-shell strategy is stale-while-revalidate, and qs-init.js only logs when a new worker is installed. There is no visible, safe update prompt or controlled reload flow.
+- Consequently, a returning installed PWA can run its cached JavaScript on the first visit while revalidation happens in the background. Do not claim universal immediate rollout.
+- A future fix must explicitly account for offline fallback and in-progress vendor edits. Do not blindly bump the app-shell cache name: the activate handler deletes old caches, and deleting the old shell before the new shell is warmed could break offline startup. Keep image and marketplace caches intact. Prefer an explicit update-ready UX that never forces a reload while unsaved work may exist, and prove which assets are fresh before inviting reload.
+- No PWA update code was changed in this follow-up branch.
+
+### Vendor sync failure investigation
+- Supabase Postgres logs for 2026-11-28 show 16 errors between 13:08:57 and 13:14:42 UTC, across 15 Postgres sessions/processes, all with Product id belongs to another vendor from qs_upsert_products_and_listings_v2(jsonb) (P0001, function line 81).
+- The RPC ON CONFLICT (id) DO UPDATE ... WHERE products.user_id = auth.uid() deliberately refuses to update a row owned by another vendor; the subsequent ownership check raises this error. This is a protective cross-vendor boundary, not evidence of a database overwrite.
+- The server logs do not include the affected product IDs, request body, or authenticated vendor ID. Therefore the precise queued row and affected vendor cannot be identified from the available logs. Do not delete, reassign, or rewrite any IndexedDB queue row or product record based on this evidence.
+- Source review found a client-side attribution risk: getQueueOwnerId() fell back to qs_last_user_id and qs_user_cache when the authenticated app identity was not available. Those values are cached hints and can be stale during account transitions. The follow-up branch removes those fallbacks. When auth identity is unavailable, a new queue row remains unassigned and can only be claimed later through the existing guarded legacy-claim checks.
+- This is preventative ownership hardening, not proof that the 16 logged failures were caused by that fallback. Existing wrongly tagged rows are not automatically repaired by this change.
+- Do not modify the RPC or relax its ownership checks. After preview verification, investigate affected-device queue contents using a safe vendor-authorized diagnostic before deciding how to resolve any pre-existing bad row.
+
+### Egress measurement
+- No controlled before/after egress-byte comparison has been established. Supabase REST logs do not provide a reliable response-body byte count in the available query results; preview request samples are not production proof. Keep database egress and Storage image egress separate.
+- Do not publish a savings percentage until Supabase Usage metrics are compared over matched activity windows.
+
+### Branch / release discipline
+- Branch: fix/strict-offline-queue-ownership-2026-11-28, based directly on production main SHA above.
+- This branch changes only the queue owner resolver, a regression guard, and these handover/regression notes. No SQL, schema, RLS, RPC, storage, vendor data, or production deployment changes.
+- Required before merge: exact-head CI regression run, diff review, preview smoke test for online/offline product edits and account switching, and explicit user approval. Production remains unchanged.
