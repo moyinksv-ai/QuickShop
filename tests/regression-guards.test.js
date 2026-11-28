@@ -824,8 +824,17 @@ test('offline sync actions are vendor-scoped and concurrent callers share the re
   assert.match(idbSource, /failedBatches\.push\('unassigned-pending'\)/);
   assert.match(idbSource, /var syncInFlightPromise = null/);
   assert.match(idbSource, /return syncInFlightPromise/);
+  assert.match(idbSource, /syncAgainRequested = true/);
+  assert.match(idbSource, /while \(syncAgainRequested && navigator\.onLine\)/,
+    'edits added during an active push must be picked up by a follow-up pass');
+  assert.match(idbSource, /ok: false, skipped: true, reason: 'offline'/,
+    'offline must never be reported as a successful upload');
   assert.doesNotMatch(idbSource, /return \{ ok: true, skipped: true, reason: 'already-syncing' \}/,
     'an in-flight sync must never be reported as a successful upload');
+
+  assert.match(appSource, /async function syncCloudData\(user, options = \{\}\)[\s\S]*?if \(syncCloudInFlightPromise\)[\s\S]*?return syncCloudInFlightPromise/);
+  assert.match(appSource, /ok: false, pullOk: false, skipped: true, reason,[\s\S]*?Offline — changes remain queued/);
+  assert.doesNotMatch(appSource, /return \{ ok: true, skipped: true, reason: !navigator\.onLine/);
 
   assert.match(appSource, /getAllPending\(user\.id\)/);
   const syncNowStart = appSource.indexOf('const btnSyncNow');
