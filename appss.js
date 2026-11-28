@@ -7542,7 +7542,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       setActiveView('home', false, true);
       try { history.pushState(mergeVendorHistoryState('home'), '', window.location.href); } catch(_) {}
     }
-  });;
+  });
 
   initAuth();
 
