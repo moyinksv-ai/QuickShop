@@ -829,9 +829,9 @@ test('offline queue ownership uses only the authenticated app identity, never st
   const ownerEnd = idbSource.indexOf('// Old queue rows have no owner.', ownerStart);
   assert.ok(ownerStart >= 0 && ownerEnd > ownerStart, 'queue owner resolver should remain a small isolated function');
   const ownerResolver = idbSource.slice(ownerStart, ownerEnd);
-  assert.match(ownerResolver, /window\\.__QS_APP/);
-  assert.match(ownerResolver, /app\\.getUser\\(\\)/);
-  assert.match(ownerResolver, /return user && user\\.id \\? String\\(user\\.id\\) : null/);
+  assert.match(ownerResolver, /window\.__QS_APP/);
+  assert.match(ownerResolver, /app\.getUser\(\)/);
+  assert.match(ownerResolver, /return user && user\.id \? String\(user\.id\) : null/);
   assert.doesNotMatch(ownerResolver, /localStorage|qs_last_user_id|qs_user_cache/, 'cached identity hints must never assign ownership to a new offline write');
 });
 
