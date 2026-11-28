@@ -805,6 +805,9 @@ test('failed image replacement preserves the existing product image and reports 
     'the second image input must allow selecting the same file again');
   assert.match(appSource, /This image format could not be opened by the browser/);
   assert.match(appSource, /The selected image could not be read from this device/);
+  assert.match(appSource, /Do not trust the picker MIME type alone/,
+    'valid Android image bytes must not be rejected only because the provider reports a generic MIME type');
+  assert.doesNotMatch(appSource, /file\.type && !\/\^image/);
   assert.match(imageHandler, /The image could not be prepared or uploaded/);
 });
 
