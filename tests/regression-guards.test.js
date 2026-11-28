@@ -892,7 +892,10 @@ test('storefront page entry always checks compact freshness metadata without a f
   assert.match(init, /refreshCatalogIncrementally\(client, storeId, _catalogCacheInput,/);
   assert.match(catalogSource, /\.select\('id, updated_at, qty'\)/);
   assert.match(catalogSource, /fetchCatalogProductsByIds\(client, storeId, changedIds\)/);
-  assert.match(catalogSource, /\.gt\('qty', 0\)/);
+  assert.match(catalogSource, /from\('public_catalog_products'\)/,
+    'freshness requests must use the active-stock public view');
+  assert.doesNotMatch(catalogSource, /from\('products'\)/,
+    'anonymous storefront requests must not target the protected base table');
 });
 
 test('closed storefront detail overlay cannot bleed through the product grid during scroll', () => {
