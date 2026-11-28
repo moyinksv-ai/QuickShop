@@ -627,8 +627,8 @@ The regression suite passed **51/51** on runtime commit `07d8c6f6eab6ea4f6391b9f
 
 ### Verification after marketplace deletion/request fixes (2026-11-28)
 
-- Latest commit: `fe689f71c9ed026176ad7e26201ab708ff267995`.
-- Regression guard run #523: **59/59 passed**.
-- Exact-HEAD preview deployment: `dpl_4APVwBf7jkQ4QgLZNvYdYprX82KU`, READY.
+- Latest app-code commit tested: `4ed6ac21df2151ff803681ff8c14aac8b38b3ca7` (subsequent commits only update release notes).
+- Regression guard run #530: **59/59 passed**.
+- Exact-app-commit preview deployment: `dpl_EobHUowprYQihQKSJc7XCjiHdeZR`, READY.
 - PR #12 is still draft/open. Storefront metadata query 401 is a merge blocker pending a safe public-view migration; do not grant anon SELECT on base products.
 
