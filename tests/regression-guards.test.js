@@ -669,7 +669,7 @@ test('storefront freshness uses cache metadata and incremental product fetches i
   assert.match(catalogSource, /CATALOG_CACHE_PREFIX = 'qs_catalog_cache_v1:'/, 'storefront cache must be versioned and scoped');
   assert.match(catalogSource, /async function fetchCatalogProductMeta[\s\S]*?from\('public_catalog_products'\)[\s\S]*?select\('id, updated_at, qty'\)/,
     'anonymous freshness probes must read compact metadata from the public view');
-  assert.match(catalogSource, /async function fetchCatalogProductsByIds[\s\S]*?from\('public_catalog_products'\)[\s\S]*?for \(var offset = 0; offset < ids\.length; offset \+= 100\)[\s\S]*?\.in\('id', ids\.slice\(offset, offset \+ 100\)\)/,
+  assert.match(catalogSource, /async function fetchCatalogProductsByIds[\s\S]*?for \(var offset = 0; offset < ids\.length; offset \+= 100\)[\s\S]*?from\('public_catalog_products'\)[\s\S]*?\.in\('id', ids\.slice\(offset, offset \+ 100\)\)/,
     'all changed products must be fetched from the public view in complete batches of at most 100');
   assert.match(catalogSource, /updated_at: row\.updated_at \|\| null/,
     'changed-row cache entries must preserve their freshness timestamp');
