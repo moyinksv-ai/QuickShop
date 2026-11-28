@@ -1436,25 +1436,25 @@
   }
 
   function catalogProductSelect() {
-    return 'id, user_id, name, price, qty, category, image_url, image_url2, icon, description, created_at, updated_at';
+    // Match the public_catalog_products projection exactly; created_at is not
+    // exposed by that view and is not required by storefront rendering.
+    return 'id, user_id, name, price, qty, category, image_url, image_url2, icon, description, updated_at';
   }
 
   async function fetchCatalogProductMeta(client, storeId) {
     return client
-      .from('products')
+      .from('public_catalog_products')
       .select('id, updated_at, qty')
-      .eq('user_id', storeId)
-      .gt('qty', 0);
+      .eq('user_id', storeId);
   }
 
   async function fetchCatalogProductsByIds(client, storeId, ids) {
     if (!ids || !ids.length) return { data: [], error: null };
     return client
-      .from('products')
+      .from('public_catalog_products')
       .select(catalogProductSelect())
       .eq('user_id', storeId)
-      .in('id', ids.slice(0, 100))
-      .gt('qty', 0);
+      .in('id', ids.slice(0, 100));
   }
 
   function catalogProductForCache(row) {
@@ -3055,14 +3055,9 @@
         .select('*')
         .eq('user_id', storeId)
         .order('name', { ascending: true });
-      if (!vr.error) return vr;
-      console.warn('[Catalog] View missing, falling back to products table:', vr.error.message);
-      return client
-        .from('products')
-        .select('id, user_id, name, price, qty, category, image_url, image_url2, icon, description')
-        .eq('user_id', storeId)
-        .gt('qty', 0)
-        .order('name', { ascending: true });
+      // The public view is the intentional anonymous access boundary.
+      // Never fall back to the protected base products table on a public page.
+      return vr;
     }
 
     async function fetchProfile() {
