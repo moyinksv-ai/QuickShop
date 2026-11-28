@@ -632,3 +632,15 @@ The regression suite passed **51/51** on runtime commit `07d8c6f6eab6ea4f6391b9f
 - Exact-app-commit preview deployment: `dpl_EobHUowprYQihQKSJc7XCjiHdeZR`, READY.
 - PR #12 is still draft/open. Storefront metadata query 401 is a merge blocker pending a safe public-view migration; do not grant anon SELECT on base products.
 
+
+
+### Public storefront view access and incremental freshness (2026-11-28)
+
+- Anonymous storefront freshness metadata must come from `public_catalog_products`, selecting only `id, updated_at, qty`.
+- Changed storefront product rows must also come from `public_catalog_products`, filtered by the matching `user_id` and bounded ID batch (maximum 100). Do not query the protected `products` table from the public storefront.
+- The changed-row projection must contain only columns exposed by the public view; `created_at` is not part of that view.
+- If the public view request fails, surface/retain the failure state; do not silently fall back to a base-table request that anonymous users are intentionally not permitted to make.
+- The database permission invariant is: anon can SELECT `products.updated_at` at column scope; anon does not have table-wide SELECT on `products`; `public_catalog_products` exposes `updated_at` and retains `security_invoker=true`.
+- No full catalogue refetch for one changed product. Keep the bootstrap metadata seed, local removal of products absent from the active public view, bounded changed-row fetch, and persisted cache behavior.
+- Release verification must include a no-change revisit (metadata probe only), one-product update (one changed-row fetch), zero-stock removal, another vendor's storefront isolation, and no anonymous `/rest/v1/products` requests. Confirm IndexedDB/offline vendor sync and atomic cache patch behavior remain unchanged.
+- The live SQL was applied by the user in Supabase Dashboard. A version-controlled migration file and migration-history reconciliation remain outstanding until CLI workflow is available; do not manually fabricate migration history.
