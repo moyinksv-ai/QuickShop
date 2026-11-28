@@ -841,6 +841,13 @@ test('offline sync actions are vendor-scoped and concurrent callers share the re
   assert.match(appSource, /initialSyncResult\.cloudProductCount === 0/,
     'login recovery may bulk-queue local products only after a successful pull confirms an empty cloud catalog');
   assert.match(appSource, /cloudProductCount: cloudProductCount/);
+  const cloudSyncStart = appSource.indexOf('async function syncCloudDataInternal');
+  const cloudSyncEnd = appSource.indexOf('§5  AUTH', cloudSyncStart);
+  const cloudSync = appSource.slice(cloudSyncStart, cloudSyncEnd);
+  assert.match(cloudSync, /const queuedAfterPull = await window\.qsdb\.getAllPending\(user\.id\)/);
+  assert.match(cloudSync, /if \(queuedAfterPull && queuedAfterPull\.length > 0\)/);
+  assert.match(cloudSync, /pendingResult = await window\.qsdb\.syncPendingToSupabase\(\)/,
+    'edits queued during the cloud pull must be flushed before sync completion is reported');
   const syncNowStart = appSource.indexOf('const btnSyncNow');
   const syncNowEnd = appSource.indexOf('const btnLoadDemo', syncNowStart);
   const syncNow = appSource.slice(syncNowStart, syncNowEnd);
