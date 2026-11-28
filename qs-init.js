@@ -162,6 +162,9 @@
     } catch (_) {}
 
     window.addEventListener('popstate', function (event) {
+      // Once authenticated, vendor tab history belongs exclusively to appss.js.
+      // Do not interpret its preserved qsScreen field as a landing/auth request.
+      if (document.body.classList.contains('mode-app')) return;
       var screen = event.state && event.state.qsScreen;
       var authIsVisible = document.body.classList.contains('qs-show-auth');
       if (screen === 'auth') {
