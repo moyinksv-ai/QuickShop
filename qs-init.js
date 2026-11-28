@@ -224,12 +224,9 @@
       if (!target) return;
       e.preventDefault();
       e.stopPropagation();
-      // The auth entry was created by this script, so use Back to keep the
-      // browser history truthful; popstate performs the canonical transition.
-      if (window.history.state && window.history.state.qsScreen === 'auth') {
-        window.history.back();
-        return;
-      }
+      // Sign-out replaces the active vendor entry with an auth entry, so
+      // there may be no reliable prior landing entry to pop back to. Perform
+      // the canonical transition directly; it also normalizes this history entry.
       if (typeof window.__qs_showLanding === 'function') window.__qs_showLanding();
     });
 
