@@ -915,12 +915,10 @@
       '</div>';
   }
 
-  // ── Batch-fetch listing stats ─────────────────────────────────────────────
-  // ── Prefetch vendor listings on touchstart ────────────────────────────────
-  // Starts the qs_vendor_listings fetch ~100-200ms before the tap registers.
-  // On most Nigerian 4G connections the data arrives before openProduct runs,
-  // eliminating the loading state entirely.  The same Promise is reused if
-  // the user taps after touchstart — never fetches twice for the same item.
+  // ── Fetch vendor offers on actual product open ──────────────────────────
+  // Keep one in-flight/resolved request per canonical product while the detail
+  // is open. Do not prefetch on touchstart: scroll gestures must not trigger
+  // offer queries for cards the shopper never opens.
   function _prefetchProduct(item) {
     if (!sb || _prefetchCache.has(item.id)) return;
     var p = new Promise(function (resolve, reject) {
