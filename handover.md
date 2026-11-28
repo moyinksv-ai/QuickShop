@@ -837,3 +837,13 @@ Window: 2026-11-28 15:23–15:34 UTC, referer filtered to the preview deployment
 
 No production deployment, SQL grant, schema mutation, or vendor-data mutation was performed in this log review.
 
+
+### Verification after marketplace stale-card/request fixes (2026-11-28)
+
+- Latest source/test/docs HEAD: `fe689f71c9ed026176ad7e26201ab708ff267995`.
+- GitHub Actions run #523: **59 tests passed, 0 failed**.
+- Exact-HEAD Vercel deployment: `dpl_4APVwBf7jkQ4QgLZNvYdYprX82KU`, state READY.
+- Preview URL: https://quickshopper-a1bs2nxl6-moyinks-projects-5a3815db.vercel.app
+- PR #12 remains open/draft/unmerged.
+- The storefront public metadata permission blocker remains unresolved and must be fixed with a reviewed migration before merge. No Supabase schema/grant/data changes have been made.
+
