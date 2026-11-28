@@ -874,3 +874,15 @@ Latest client/test commits:
 - `tests/regression-guards.test.js`: `c9c0e671da5ebd6089d8adaa9c77e9b5fc5ce582`
 
 This source-level correction is not yet a release verification. Run CI and deploy a fresh preview for the latest branch head, then verify on Android that a cached storefront with no changes retains its cached payload, a single changed product fetches only that product, a zero-stock product disappears, and the view requests return successfully without any anon request to `/rest/v1/products`. Preserve the vendor IndexedDB/offline path and same-origin atomic cache patching. PR #12 remains open/draft/unmerged; no production deployment is authorized.
+
+
+---
+
+## PWA update propagation implementation — 2026-11-28
+
+- Branch: fix/pwa-safe-update-rollout-2026-11-28, based directly on production main SHA 8d247c8c3ec6a911eeacde4042e84d16886bcd92.
+- The proposed update protocol keeps existing app-shell, image, and marketplace cache names unchanged. It does not purge the previously cached offline shell.
+- When a previously controlled page receives a new service-worker controller, the page sends its same-origin script and stylesheet URLs to the new worker. The worker fetches each with cache reload and replaces only successfully refreshed entries in the existing app-shell cache.
+- Only after all listed app-shell assets refresh successfully does the page show a visible Update / Later notice. Reload is user initiated and additionally checks for an open Add Product workspace, product edit, visible modal, or focused form control; the confirmation warns the vendor to save work first.
+- First-time service-worker control does not show an update notice. Offline update failures keep the current page and existing offline cache; an online event retries the refresh.
+- This protocol still requires Android/PWA preview testing, including first install, existing installation update, interrupted/offline asset refresh, Add Product open, product edit open, visible modal, and normal reload. Do not merge or deploy before those tests and explicit approval.
