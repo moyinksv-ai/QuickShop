@@ -290,14 +290,22 @@ function initApp() {
 
   function compressImage(file, maxWidth = 1024, quality = 0.7) {
     return new Promise((resolve, reject) => {
+      if (!file) return reject(new Error('No image file was selected.'));
+      if (file.type && !/^image\//i.test(file.type)) {
+        return reject(new Error('Choose an image file (JPG, PNG or WebP).'));
+      }
+
       const reader = new FileReader();
-      reader.readAsDataURL(file);
+      reader.onerror = () => reject(new Error('The selected image could not be read from this device.'));
       reader.onload = (event) => {
         const img = new Image();
-        img.src = event.target.result;
+        img.onerror = () => reject(new Error(
+          'This image format could not be opened by the browser. Please choose a JPG, PNG or WebP image.'
+        ));
         img.onload = () => {
           const canvas = document.createElement('canvas');
           let width = img.width, height = img.height;
+          if (!width || !height) return reject(new Error('The selected image has invalid dimensions.'));
           if (width > maxWidth) {
             height = Math.round(height * (maxWidth / width));
             width = maxWidth;
@@ -305,15 +313,17 @@ function initApp() {
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext('2d');
+          if (!ctx) return reject(new Error('Image preparation is unavailable in this browser.'));
           ctx.drawImage(img, 0, 0, width, height);
           canvas.toBlob((blob) => {
-            if (blob) resolve(blob);
-            else reject(new Error('Compression failed'));
+            if (blob && blob.size > 0) resolve(blob);
+            else reject(new Error('The image could not be compressed. Please try another image.'));
           }, 'image/jpeg', quality);
         };
-        img.onerror = (err) => reject(err);
+        img.src = event.target.result;
       };
-      reader.onerror = (err) => reject(err);
+      try { reader.readAsDataURL(file); }
+      catch (_) { reject(new Error('The selected image could not be read from this device.')); }
     });
   }
 
@@ -6464,7 +6474,10 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
           toast('Profile photo updated ✓');
         } catch (err) {
           errlog('Avatar upload failed', err);
-          toast('Upload failed: ' + (err.message || 'unknown'), 'error');
+          const reason = err && err.message
+        ? err.message
+        : 'The image could not be prepared or uploaded. Try a JPG, PNG or WebP image.';
+      toast('Upload failed: ' + reason, 'error');
         } finally {
           avatarBtn.classList.remove('qs-sp-uploading');
           showLoading(false);
