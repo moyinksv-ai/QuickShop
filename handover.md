@@ -886,3 +886,33 @@ This source-level correction is not yet a release verification. Run CI and deplo
 - Only after all listed app-shell assets refresh successfully does the page show a visible Update / Later notice. Reload is user initiated and additionally checks for an open Add Product workspace, product edit, visible modal, or focused form control; the confirmation warns the vendor to save work first.
 - First-time service-worker control does not show an update notice. Offline update failures keep the current page and existing offline cache; an online event retries the refresh.
 - This protocol still requires Android/PWA preview testing, including first install, existing installation update, interrupted/offline asset refresh, Add Product open, product edit open, visible modal, and normal reload. Do not merge or deploy before those tests and explicit approval.
+
+
+---
+
+## Consolidated production follow-up telemetry — 2026-11-28
+
+### Offline queue ownership conflict
+- Production Postgres logs recorded 16 P0001 errors between 13:08:57 and 13:14:42 UTC across 15 sessions/processes. All raised Product id belongs to another vendor from qs_upsert_products_and_listings_v2(jsonb).
+- The RPC's global-ID conflict path checks products.user_id against auth.uid() and raises instead of overwriting another vendor. The ownership boundary is working; do not relax it.
+- Logs do not expose the conflicting product ID, request body, or authenticated vendor ID, so the exact IndexedDB action and originating device are not proven.
+- Current main source stamped new IndexedDB queue actions from getQueueOwnerId(), which used authenticated app identity first but fell back to cached qs_last_user_id and qs_user_cache. This could misattribute a new write if app auth identity was not yet ready during an account transition.
+- The consolidated release candidate removes those fallbacks. When no authenticated app identity is available, the action remains unassigned and can only be claimed by the existing guarded legacy-claim logic. Existing queue rows are not rewritten or deleted.
+
+### Latest 24-hour API observations
+- Production-origin marketplace reads: 69 successful GETs to qs_market_offers_v2 and 6 successful GETs to qs_market_products_v2 in the observed 24-hour log window. These are request counts, not bytes or a controlled before/after comparison.
+- public_catalog_products: 7 metadata-only reads were observed from a preview origin; no production-origin request appeared in this 24-hour sample. Do not claim the production storefront population has exercised the new view path.
+- Base-table products metadata requests: 9 total across production and preview origins, all selecting only id, updated_at, qty; 5 returned 401 and 4 returned 200. Current main catalog.js uses public_catalog_products for storefront metadata, not the base products table. The requests may be stale client code or another client path; logs do not establish which. The 401 responses are permission denials, not successful data transfers.
+- REST response content_length was absent for the product metadata requests and most marketplace responses. A reliable database egress byte total cannot be calculated from these logs.
+
+### Latest 24-hour Storage observations
+- storage.object.get_public: 154 HTTP 200 image-object downloads, 153 distinct object URLs, 26,413,267 declared response bytes (about 26.4 MB), average about 171.5 KB per response.
+- Only one object URL appeared twice in the 154 downloads. This is consistent with the cache reducing repeat fetches for the same image URL in this sample, but does not prove an overall percentage saving.
+- storage.object.info_public: 428 HTTP 200 metadata/info requests, 220 carrying conditional validators, 211,436 declared bytes. These are object-info responses, not image-body downloads.
+- No matched pre-release window with comparable vendor activity is available, so no percentage or absolute egress savings claim is justified.
+
+### Release boundary
+- The consolidated changes are on fix/pwa-safe-update-rollout-2026-11-28 and are included in draft PR #14.
+- The branch preserves the existing three service-worker cache names, adds same-origin shell refresh before an explicit update prompt, and uses authenticated app identity only for new queue ownership.
+- No Supabase SQL, schema, RLS, RPC, Storage policy, vendor data, or production deployment changes were made.
+- CI and preview build are required but not a substitute for Android installed-PWA update testing. Do not merge or deploy without explicit user approval.
