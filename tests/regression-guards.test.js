@@ -808,7 +808,7 @@ test('failed image replacement preserves the existing product image and reports 
   assert.match(appSource, /Do not trust the picker MIME type alone/,
     'valid Android image bytes must not be rejected only because the provider reports a generic MIME type');
   assert.doesNotMatch(appSource, /file\.type && !\/\^image/);
-  assert.match(imageHandler, /The image could not be prepared or uploaded/);
+  assert.match(inventorySource, /The image could not be prepared or uploaded/);
 });
 
 test('offline sync actions are vendor-scoped and concurrent callers share the real result', () => {
