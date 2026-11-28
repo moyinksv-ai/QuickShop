@@ -792,3 +792,13 @@ Additional UI/image corrections:
 
 Important verification boundary: these are source-level corrections committed to PR #12. They do not prove that the user's specific stock edit now refreshes correctly until the latest preview is tested on Android. Do not merge or deploy production until CI, preview deployment, and the focused Android retest pass.
 
+
+### Verification — stock freshness and Android follow-up (2026-11-28)
+
+- Runtime source commit: bbfbcbbc2adf57fee8902db03b0c8f8c8ff0bfe3.
+- GitHub Actions Regression guards run #508: **56 passed, 0 failed** on the runtime source commit.
+- Vercel preview for the exact runtime commit: deployment dpl_8ViN9d74v65LxAum4UAktKjEvKpa, state READY.
+- Preview URL: https://quickshopper-2ok50grzk-moyinks-projects-5a3815db.vercel.app
+- Authenticated Android verification of the new atomic stock patch, Blob URL image path, auth Home action, and detail-overlay bleed remains outstanding.
+- PR #12 remains draft/open/unmerged. No production deployment and no Supabase schema, policy, or vendor-data mutation was performed.
+
