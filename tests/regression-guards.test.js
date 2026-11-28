@@ -835,39 +835,104 @@ test('offline queue ownership uses only the authenticated app identity, never st
   assert.doesNotMatch(ownerResolver, /localStorage|qs_last_user_id|qs_user_cache/, 'cached identity hints must never assign ownership to a new offline write');
 });
 
-test('PWA updates refresh same-origin app-shell assets before offering a user-controlled reload', () => {
+test('PWA worker validates the full app shell before activating an update', () => {
   const swSource = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
   const initSource = fs.readFileSync(path.join(root, 'qs-init.js'), 'utf8');
   const cssSource = fs.readFileSync(path.join(root, 'styless.css'), 'utf8');
 
-  assert.match(swSource, /QS_REFRESH_APP_SHELL/);
-  assert.match(swSource, /url\.origin !== self\.location\.origin/,
-    'the update worker must refuse cross-origin asset refresh requests');
+  assert.match(swSource, /UPDATE_DYNAMIC_ASSETS/);
+  assert.match(swSource, /discoverDocumentAssets/);
   assert.match(swSource, /cache: 'reload'/);
-  assert.match(swSource, /cache\.put\(new Request\(url\.href\)/);
+  assert.match(swSource, /credentials: 'same-origin'/);
+  assert.match(swSource, /await self\.skipWaiting\(\)/,
+    'the worker may activate only after all required assets have been fetched and cached');
   assert.match(swSource, /var CACHE_NAME\s*=\s*'qs-v2\.1\.10'/,
-    'retain the existing app-shell cache so offline assets are not purged during rollout');
+    'keep the existing app-shell cache identity so old offline entries remain available');
   assert.match(swSource, /var IMAGE_CACHE\s*=\s*'qs-images-v4\.0'/);
   assert.match(swSource, /var MARKET_CACHE\s*=\s*'qs-market-v2\.1'/);
+  assert.match(swSource, /if \(!assetResponse \|\| !assetResponse\.ok \|\| assetResponse\.type === 'opaque'\)/);
+  assert.match(swSource, /var refreshedAssets = \[\]/);
+  assert.ok(swSource.indexOf('for (var assetUrl of assetUrls)') < swSource.indexOf('var cache = await caches.open(CACHE_NAME)'),
+    'do not mutate the old app-shell cache until every network asset has passed validation');
 
   assert.match(initSource, /navigator\.serviceWorker\.addEventListener\('controllerchange'/);
-  assert.match(initSource, /new MessageChannel\(\)/);
-  assert.match(initSource, /type: 'QS_REFRESH_APP_SHELL'/);
-  assert.match(initSource, /result\.ok === true && result\.total === urls\.length/,
-    'do not offer reload until every same-origin script and stylesheet has refreshed');
-  assert.match(initSource, /hasOpenVendorEditor\(\)/);
-  assert.match(initSource, /while \(current && current\.nodeType === 1\)/,
-    'editor detection must account for hidden modal/workspace ancestors');
-  assert.match(initSource, /current\.getAttribute\('aria-hidden'\) === 'true'/);
-  assert.match(initSource, /getEditingProductId\(\)/);
+  assert.match(initSource, /showUpdateBanner\(\)/);
+  assert.doesNotMatch(initSource, /QS_REFRESH_APP_SHELL|new MessageChannel\(\)/,
+    'first rollout must not depend on a page-to-worker message understood only by new clients');
   assert.match(initSource, /window\.location\.reload\(\)/);
-  assert.match(initSource, /confirmUpdate\(/);
+  assert.match(initSource, /hasOpenVendorEditor\(\)/);
   assert.match(cssSource, /\.qs-update-ready/);
   const controllerHandlerStart = initSource.indexOf("navigator.serviceWorker.addEventListener('controllerchange'");
-  const controllerHandlerEnd = initSource.indexOf("window.addEventListener('online'", controllerHandlerStart);
+  const controllerHandlerEnd = initSource.indexOf("window.addEventListener('load'", controllerHandlerStart);
   const controllerHandler = initSource.slice(controllerHandlerStart, controllerHandlerEnd);
   assert.doesNotMatch(controllerHandler, /location\.reload/,
     'a worker takeover must never force-reload an active vendor page');
+});
+
+test('PWA install failure leaves the old app-shell cache untouched and does not activate', async () => {
+  const vm = require('node:vm');
+  const swSource = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
+  const origin = 'https://quickshop.test';
+  const handlers = {};
+  const puts = [];
+  const requests = [];
+  let skipWaitingCalled = false;
+  let cacheOpened = false;
+  const cache = { put: async (request) => { puts.push(request.url); } };
+
+  async function runInstall(failUrl) {
+    handlers.install = null;
+    puts.length = 0;
+    requests.length = 0;
+    skipWaitingCalled = false;
+    cacheOpened = false;
+    const self = {
+      location: { origin },
+      addEventListener: (type, handler) => { handlers[type] = handler; },
+      skipWaiting: async () => { skipWaitingCalled = true; },
+      clients: { claim: async () => {} }
+    };
+    const caches = {
+      open: async (name) => { cacheOpened = true; assert.equal(name, 'qs-v2.1.10'); return cache; },
+      keys: async () => ['qs-v2.1.10', 'qs-images-v4.0', 'qs-market-v2.1'],
+      delete: async () => true
+    };
+    const fakeFetch = async (request) => {
+      const url = typeof request === 'string' ? request : request.url;
+      requests.push(url);
+      if (url === failUrl) return new Response('unavailable', { status: 503 });
+      if (url === origin + '/') {
+        return new Response('<link rel="stylesheet" href="/styless.css"><script src="/qs-init.js"></script>', { status: 200 });
+      }
+      if (url === origin + '/search.html') {
+        return new Response('<script src="/search.js"></script>', { status: 200 });
+      }
+      return new Response('asset', { status: 200 });
+    };
+    vm.runInNewContext(swSource, {
+      self, caches, fetch: fakeFetch, URL, Request, Response, Promise, Set, console
+    });
+    let waitForInstall;
+    handlers.install({ waitUntil: (promise) => { waitForInstall = promise; } });
+    await waitForInstall;
+  }
+
+  const failedAsset = origin + '/appss.js';
+  await assert.rejects(runInstall(failedAsset), /Required app asset could not be refreshed/);
+  assert.equal(cacheOpened, false, 'failed preflight must not even open the existing shell cache');
+  assert.equal(puts.length, 0, 'no cached asset may be replaced after a failed network preflight');
+  assert.equal(skipWaitingCalled, false, 'failed install must leave the old worker active');
+
+  await runInstall(null);
+  assert.equal(skipWaitingCalled, true, 'successful full preflight may activate the new worker');
+  assert.ok(cacheOpened);
+  assert.ok(puts.includes(origin + '/'));
+  assert.ok(puts.includes(origin + '/index.html'));
+  assert.ok(puts.includes(origin + '/search.html'));
+  for (const asset of ['qs-init.js', 'styless.css', 'search.js', 'catalog.js', 'indexeddb_sync.js', 'share-catalog.js', 'appss.js', 'canonical.js', 'inventory.js']) {
+    assert.ok(puts.includes(origin + '/' + asset), 'refreshed app shell must include ' + asset);
+  }
+  assert.ok(requests.indexOf(origin + '/appss.js') >= 0);
 });
 
 test('offline sync actions are vendor-scoped and concurrent callers share the real result', () => {
