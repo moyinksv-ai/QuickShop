@@ -649,21 +649,15 @@ The regression suite passed **51/51** on runtime commit `07d8c6f6eab6ea4f6391b9f
 
 ---
 
-## 2026-11-28: safe PWA update rollout
+## 2026-11-28: first-rollout-safe PWA update rollout
 
-- Regression guard covers the explicit worker-to-page app-shell refresh protocol, same-origin restriction, completion gating, preservation of all three existing cache names, and user-controlled reload.
-- Required preview QA: update an already-installed PWA from the previous worker; confirm all same-origin JS/CSS refresh before the notice appears; confirm no forced reload; verify open Add Product/product edit/modal/focused form blocks reload; verify the user can dismiss or apply the update; verify offline operation and cached product images/marketplace remain available if refresh fails.
-- First install must not show an update notice. Offline refresh failure must not clear existing cache entries or force a reload.
-- No production release until exact-head CI and Android preview QA pass.
+- The installing worker must validate the root app document and `search.html`, discover same-origin script/stylesheet URLs, and include all dynamic scripts loaded by `qs-init.js`.
+- Every required same-origin document and asset must fetch successfully with revalidation before the worker writes to the existing app-shell cache or calls `skipWaiting()`.
+- If any required fetch fails (including offline installation), the existing app-shell cache must remain untouched and the old worker must remain active. Image and marketplace caches remain intact.
+- The first update must work when the currently open page is running the old production `qs-init.js`, which has no new update-message listener. The new worker cannot depend on that page sending a message.
+- A worker takeover must never force-reload a page. Existing first-rollout pages may not display an Update banner; they use the refreshed shell on their next normal navigation/reload. Subsequent updates may show Update/Later from the new bootstrap.
+- Automated regression coverage must simulate both complete install preflight and an asset failure, proving no cache writes and no activation on failure.
+- Android preview QA remains mandatory: update an already-installed PWA from the previous worker; test first install; simulate offline/failed asset refresh; confirm old cache and offline images/marketplace remain available; verify no forced reload while Add Product/product edit/modal/focused form is active; confirm subsequent update banner and user-controlled reload; verify online/offline sync and vendor A/B isolation.
+- Cache writes are delayed until all network requests succeed, but Cache API writes are not a transactional multi-entry commit. Browser quota/write-failure behaviour remains a residual risk to test.
+- No production release until exact-head CI, preview deployment, and Android lifecycle QA pass.
 
-
----
-
-## 2026-11-28 consolidated release-candidate checks
-
-- The new queue-owner resolver accepts only window.__QS_APP.getUser() as the source of ownership; cached last-user and user-cache hints must not stamp a new action.
-- Missing app identity leaves a new action unassigned; no queue rows are rewritten, deleted, or reassigned by this change.
-- The PWA update protocol must refresh every same-origin script/stylesheet into the existing app-shell cache before displaying the Update notice. The existing app-shell, image, and marketplace cache names must remain unchanged.
-- The Update action is user initiated, confirms before reload, and is blocked while the Add Product workspace, product edit, visible modal, or focused form control is active. A worker takeover must never directly reload the page.
-- Production telemetry is documented in handover.md. REST body byte totals are unavailable; Storage image-body observations must not be conflated with object-info requests.
-- Required Android preview QA remains: existing installed PWA update, first install, offline refresh failure, Add Product/product edit/modal protection, online/offline sync, and account A/B isolation.
