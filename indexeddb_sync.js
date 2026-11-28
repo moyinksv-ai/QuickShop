@@ -195,9 +195,9 @@
     return null;
   }
 
-  // Old queue rows have no owner. Claim only when their entity is still present
-  // in this account's user-scoped local snapshot; destructive actions cannot be
-  // inferred safely and remain quarantined until their original owner returns.
+  // Old queue rows have no owner. Claim non-destructive actions only when their
+  // entity is present in this account's local snapshot. Delete actions use a
+  // separate user-scoped RLS ownership query before they may be claimed.
   function legacyActionMatchesCurrentState(action, localState) {
     if (!action || !action.item || !localState) return false;
     var item = action.item;
