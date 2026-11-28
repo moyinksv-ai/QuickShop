@@ -924,7 +924,9 @@
     if (!sb || _prefetchCache.has(item.id)) return;
     var p = new Promise(function (resolve, reject) {
       sb.from('qs_market_offers_v2')
-        .select('canonical_id, product_id, vendor_id, storefront_name, storefront_slug, storefront_avatar_url, storefront_location, storefront_tagline, delivery_available, product_name, price, qty, category, image_url, image_url2, description, offer_updated_at')
+        // Only fields used to render vendor choices and construct the store URL.
+        // The canonical product card already supplies the product's own details.
+        .select('product_id, vendor_id, storefront_name, storefront_tagline, storefront_avatar_url, price')
         .eq('canonical_id', item.id)
         .order('price', { ascending: true })
         .then(resolve, reject);
@@ -1031,7 +1033,8 @@
     card.appendChild(body);
 
     function open() { openProduct(item); }
-    card.addEventListener('touchstart', function () { _prefetchProduct(item); }, { passive: true });
+    // Do not prefetch on touchstart: Android fires touchstart for scroll gestures
+    // as well as taps. Start the offer request only after the user opens the card.
     card.addEventListener('click', open);
     card.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
@@ -1744,10 +1747,15 @@
     } catch (_) { return null; }
   }
 
-  function writeMarketSnapshot(items, freshness) {
+  function writeMarketSnapshot(items, freshness, probedAt) {
     try {
+      var now = Date.now();
       localStorage.setItem(marketCacheKey(), JSON.stringify({
-        version: 1, savedAt: Date.now(), items: Array.isArray(items) ? items : [], freshness: freshness || null
+        version: 1,
+        savedAt: now,
+        probedAt: Number(probedAt || now),
+        items: Array.isArray(items) ? items : [],
+        freshness: freshness || null
       }));
     } catch (_) {}
   }
@@ -1771,8 +1779,25 @@
     };
   }
 
+  async function fetchAuthoritativeMarketPage(freshness) {
+    // Deletions have no tombstone in qs_market_offers_v2. When the offer count
+    // falls, rebuild only the visible first page from the authoritative aggregate
+    // view so cached cards with no remaining sellers are removed.
+    var result = await sb.from('qs_market_products_v2')
+      .select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names, created_at')
+      .order('created_at', { ascending: false })
+      .range(0, _RECENT_PAGE - 1);
+    if (result.error) throw result.error;
+    var items = weightedShuffle(result.data || []);
+    var currentFreshness = freshness || await fetchMarketFreshness();
+    writeMarketSnapshot(items, currentFreshness, Date.now());
+    return { items: items, freshness: currentFreshness, changed: true, authoritative: true };
+  }
+
   async function reconcileMarketChangedProducts(previousFreshness, cachedItems, currentFreshness) {
-    if (!previousFreshness || !previousFreshness.latestOfferUpdatedAt) return null;
+    if (!previousFreshness || !previousFreshness.latestOfferUpdatedAt) {
+      return fetchAuthoritativeMarketPage(currentFreshness);
+    }
 
     var changed = await sb.from('qs_market_offers_v2')
       .select('canonical_id, offer_updated_at')
@@ -1786,12 +1811,14 @@
     });
     var changedIds = Object.keys(ids);
 
-    // A falling offer count can mean the last offer for a canonical product
-    // disappeared. There is no tombstone in the current view, so fall back to
-    // the authoritative page rather than risk leaving a deleted card visible.
+    // A falling offer count can mean one or more listings disappeared. The
+    // public offers view has no tombstone for removed rows, so an ID delta alone
+    // cannot identify the deleted canonical product. Rebuild the visible page.
     var now = currentFreshness || await fetchMarketFreshness();
-    if (Number(now.offerCount) < Number(previousFreshness.offerCount)) return null;
-    if (changedIds.length > 1000) return null;
+    if (Number(now.offerCount) < Number(previousFreshness.offerCount)) {
+      return fetchAuthoritativeMarketPage(now);
+    }
+    if (changedIds.length > 1000) return fetchAuthoritativeMarketPage(now);
     if (!changedIds.length) return { items: cachedItems, freshness: now, changed: false };
 
     var map = {};
@@ -1811,23 +1838,35 @@
     return { items: merged.slice(0, _RECENT_PAGE), freshness: now, changed: true };
   }
 
-  async function reconcileMarketSnapshot(snapshot) {
+  var _marketReconcilePromise = null;
+
+  async function reconcileMarketSnapshotInternal(snapshot) {
     if (!snapshot || !Array.isArray(snapshot.items)) return null;
     if (snapshot.freshness && Date.now() - Number(snapshot.probedAt || 0) < MARKET_FRESHNESS_TTL) {
       return { items: snapshot.items, freshness: snapshot.freshness, changed: false };
     }
     var freshness = await fetchMarketFreshness();
     if (marketFreshnessEqual(snapshot.freshness, freshness)) {
-      snapshot.probedAt = Date.now();
-      writeMarketSnapshot(snapshot.items, freshness);
+      var probedAt = Date.now();
+      snapshot.probedAt = probedAt;
+      writeMarketSnapshot(snapshot.items, freshness, probedAt);
       return { items: snapshot.items, freshness: freshness, changed: false };
     }
     var patched = await reconcileMarketChangedProducts(snapshot.freshness, snapshot.items, freshness);
     if (patched) {
-      writeMarketSnapshot(patched.items, patched.freshness);
+      writeMarketSnapshot(patched.items, patched.freshness, Date.now());
       return patched;
     }
-    return null;
+    return fetchAuthoritativeMarketPage(freshness);
+  }
+
+  function reconcileMarketSnapshot(snapshot) {
+    // Lifecycle events can overlap while the first metadata probe is in flight.
+    // Share one reconciliation promise so they cannot duplicate the same reads.
+    if (_marketReconcilePromise) return _marketReconcilePromise;
+    _marketReconcilePromise = reconcileMarketSnapshotInternal(snapshot)
+      .finally(function () { _marketReconcilePromise = null; });
+    return _marketReconcilePromise;
   }
 
   // ── LOAD RECENT PRODUCTS ──────────────────────────────────────────────────
@@ -1897,7 +1936,7 @@
       if (!append) {
         productsGrid.innerHTML = '';
         _memo.set('home', ordered);
-        try { writeMarketSnapshot(ordered, await fetchMarketFreshness()); } catch (_) {}
+        try { writeMarketSnapshot(ordered, await fetchMarketFreshness(), Date.now()); } catch (_) {}
       }
       if (append) productsGrid.querySelectorAll('.lm-skel').forEach(function (el) { el.remove(); });
       ordered.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
@@ -2075,8 +2114,13 @@
     }, 220);
   }
 
+  var _marketInitialPageShowHandled = false;
+
   function wireMarketFreshness() {
     if (!sb || _marketLiveChannel) return;
+    // routeFromURL() has already started the initial load. Suppress initial
+    // lifecycle noise so pageshow/visibility cannot start a duplicate request.
+    _lastLifecycleRefresh = Date.now();
 
     _marketLiveChannel = sb
       .channel('qs-market-products-live-v2')
@@ -2091,6 +2135,10 @@
     });
 
     window.addEventListener('pageshow', function (event) {
+      if (!_marketInitialPageShowHandled) {
+        _marketInitialPageShowHandled = true;
+        if (!event.persisted) return;
+      }
       var now = Date.now();
       if (event.persisted || now - _lastLifecycleRefresh > 5000) {
         _lastLifecycleRefresh = now;
