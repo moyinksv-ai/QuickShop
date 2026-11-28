@@ -689,3 +689,54 @@ Required next investigation/design:
 - Automated regression checks on exact head are green; preview deployment is READY.
 - Manual smoke testing, request/byte measurements, and user acceptance are still required.
 - Main and production remain untouched. Any documentation update should remain on this PR branch. Keep image resizing as a separate measured change after PR #12's current runtime fixes are smoke-tested, unless the owner explicitly chooses a combined but isolated commit series.
+
+
+---
+
+## 2026-11-28 — PR #12 regression investigation and fixes in progress
+
+**Release boundary:** All fixes below are being made on the existing PR #12 branch, `next-release-freshness-regressions-2026-11-25`. Do not merge or deploy to production until CI and the user's Android preview retest pass. No production data, schema, storage policy, or Supabase configuration was changed.
+
+### Evidence gathered from the user's Android test and Supabase logs
+
+- Production `qs_upsert_products_and_listings_v2` calls returned repeated HTTP 400 responses between approximately 13:08 and 13:14 UTC on 2026-11-28.
+- PostgreSQL recorded the specific exception `Product id belongs to another vendor` from line 81 of `qs_upsert_products_and_listings_v2(jsonb)`. The SQL ownership guard is correct and must not be weakened.
+- Production Storage recorded an image upload to `user_images` returning HTTP 200 at 13:14:19 UTC. The product/listing RPC then failed at 13:14:25 and 13:14:42. Therefore the image binary upload can succeed while the product row that references it fails to sync.
+- Preview requests for `qs_upsert_products_and_listings_v2` returned HTTP 204 and `get_my_products` returned HTTP 200 during the later preview test. No preview Storage upload request was present in the inspected log window, so a preview image-selection/compression failure is not yet proven to be a Storage rejection.
+
+### Root causes identified
+
+1. **Storefront refresh replayed the marketplace-selected product.** Marketplace vendor links include `pid`; `catalog.js` auto-opens that product every boot. The URL retained `pid`, so refreshing the vendor storefront replayed the product-detail overlay. Fix: capture and consume `pid` once for `from=market`, using `history.replaceState` to remove only `pid`; preserve `store`, `from`, and `market_product`. Direct vendor `?pid=` links remain unchanged.
+2. **Landing/auth and vendor tab history competed for the same popstate.** `qs-init.js` handled a preserved `qsScreen` before `appss.js`, stopping the vendor listener. Also, app view restoration pushed duplicate states. Fix: while `mode-app` is active, leave popstate to `appss.js`; restore all valid vendor tabs including Home without pushing a duplicate; only seed vendor history when `qs_session_active` is true; at the authenticated history boundary, ask for sign-out confirmation and restore the current view on cancel.
+3. **Explicit sign-out marker was consumed too early.** `SIGNED_OUT` called `handleAuthLogout()`, which removed `qs_show_auth_after_signout` before the reload. Fix: only consume the marker when `options.initialLoad` is true. A shared guarded `requestSignOut()` now serves Settings and the Back boundary and labels the signed-out history entry as auth.
+4. **IndexedDB pending actions were not account-scoped.** `getAllPending()` returned every browser queue item and the worker submitted all of them using the currently logged-in user's ID. This can send an old vendor's product ID under another vendor and trigger the database's correct ownership exception. Fix: stamp new actions with their originating `userId`; filter queue reads and sync by the active user; only claim legacy unowned actions when their entity is still present in that user's local snapshot; leave ambiguous/destructive legacy actions queued and report them rather than risk cross-account writes. Keep the database ownership guard intact.
+5. **Manual Sync Now pushed the queue twice.** It called `syncPendingToSupabase()` directly and then `syncCloudData()`, which pushes again. Fix: one push+pull pass, with separate push/pull success reporting. Concurrent callers now await the same in-flight sync result; an in-flight operation is never reported as a successful upload.
+6. **Image replacement failure erased the existing image preview.** Fix: retain the current image if a replacement fails; reset the second image input so the same file can be selected again; provide explicit decode/read/compression error messages instead of an opaque event string.
+
+### Files changed in PR #12
+
+- `appss.js`: authenticated history ownership, Back-boundary sign-out confirmation, sign-out marker lifecycle, one-pass manual sync, image preparation diagnostics.
+- `qs-init.js`: defer popstate ownership to the vendor app while authenticated.
+- `catalog.js`: one-time marketplace `pid` consumption.
+- `indexeddb_sync.js`: per-user queue ownership, conservative legacy claiming, coalesced in-flight sync.
+- `inventory.js`: preserve existing image when replacement upload fails; reset image picker inputs.
+- `tests/regression-guards.test.js`: guards for the regressions above.
+- `handover.md` and `regression.md`: this investigation and test requirements.
+
+### Important compatibility / release cautions
+
+- Legacy IndexedDB rows without an owner are not blindly assigned to whichever vendor logs in. Non-destructive legacy actions are claimed only when their item ID exists in the active user's local snapshot. Ambiguous or destructive legacy actions remain untouched and cause Sync Now to report an incomplete sync. This is intentional fail-closed behavior; verify the displayed count during preview retest. Do not delete or clear those rows as a workaround.
+- The Storage 200 proves at least one production image upload succeeded; it does not prove the preview image picker is fixed. Preview image selection must be retested with the same Android device and a normal JPG/PNG/WebP image. If no Storage POST appears, inspect the now-specific client-side decode/read error.
+- The SQL function `qs_upsert_products_and_listings_v2` and its ownership exception are not to be changed for this fix.
+- CI has not yet been re-verified after the latest commits. Check PR #12 head, run all workflow jobs, and inspect the exact preview deployment before requesting retest.
+
+### Required Android retest before merge
+
+1. Sign in, open Inventory, press Android Back. Expect a sign-out confirmation, not landing. Cancel; the same inventory view must remain. Navigate Home → Inventory; Back should return Home; Back again should ask to sign out.
+2. Confirm Sign Out in Settings and through the Back confirmation. Expect the login/auth screen after the reload, with the Home route still accessible. Refresh; it must remain on auth, not silently return to landing or reopen Inventory.
+3. From marketplace, open a vendor product, confirm the selected product detail opens once, refresh the vendor page, and confirm the vendor product grid appears. Verify Back to Marketplace returns to the originating product.
+4. Edit an existing product, select a replacement image, save, and confirm both image and product data persist. Repeat with the second image slot and with the same image selected twice. A failed replacement must preserve the old image.
+5. Edit a product without adding an image. Confirm background sync completes once. Press Sync Now and verify no success toast appears if any batch fails or legacy actions remain unassigned. Verify another account's queued actions are not sent as the current vendor.
+6. Confirm marketplace/storefront snapshots, incremental freshness, and offline cached rendering remain intact.
+
+**Current state:** changes are committed to the PR #12 branch; CI and browser/device validation remain outstanding. No merge or production deployment is authorized.
