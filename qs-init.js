@@ -47,9 +47,15 @@
 
     function isVisibleElement(el) {
       if (!el) return false;
-      var style = window.getComputedStyle ? window.getComputedStyle(el) : null;
-      return style ? style.display !== 'none' && style.visibility !== 'hidden' :
-        el.style.display !== 'none';
+      var current = el;
+      while (current && current.nodeType === 1) {
+        var style = window.getComputedStyle ? window.getComputedStyle(current) : null;
+        if (current.getAttribute('aria-hidden') === 'true' ||
+            (style && (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0')) ||
+            (!style && current.style.display === 'none')) return false;
+        current = current.parentElement;
+      }
+      return true;
     }
 
     function hasOpenVendorEditor() {
