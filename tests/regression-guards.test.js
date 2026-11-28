@@ -823,6 +823,38 @@ test('failed image replacement preserves the existing product image and reports 
   assert.match(inventorySource, /The image could not be prepared or uploaded/);
 });
 
+test('PWA updates refresh same-origin app-shell assets before offering a user-controlled reload', () => {
+  const swSource = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
+  const initSource = fs.readFileSync(path.join(root, 'qs-init.js'), 'utf8');
+  const cssSource = fs.readFileSync(path.join(root, 'styless.css'), 'utf8');
+
+  assert.match(swSource, /QS_REFRESH_APP_SHELL/);
+  assert.match(swSource, /url\.origin !== self\.location\.origin/,
+    'the update worker must refuse cross-origin asset refresh requests');
+  assert.match(swSource, /cache: 'reload'/);
+  assert.match(swSource, /cache\.put\(new Request\(url\.href\)/);
+  assert.match(swSource, /var CACHE_NAME\s*=\s*'qs-v2\.1\.10'/,
+    'retain the existing app-shell cache so offline assets are not purged during rollout');
+  assert.match(swSource, /var IMAGE_CACHE\s*=\s*'qs-images-v4\.0'/);
+  assert.match(swSource, /var MARKET_CACHE\s*=\s*'qs-market-v2\.1'/);
+
+  assert.match(initSource, /navigator\.serviceWorker\.addEventListener\('controllerchange'/);
+  assert.match(initSource, /new MessageChannel\(\)/);
+  assert.match(initSource, /type: 'QS_REFRESH_APP_SHELL'/);
+  assert.match(initSource, /result\.ok === true && result\.total === urls\.length/,
+    'do not offer reload until every same-origin script and stylesheet has refreshed');
+  assert.match(initSource, /hasOpenVendorEditor\(\)/);
+  assert.match(initSource, /getEditingProductId\(\)/);
+  assert.match(initSource, /window\.location\.reload\(\)/);
+  assert.match(initSource, /confirmUpdate\(/);
+  assert.match(cssSource, /\.qs-update-ready/);
+  const controllerHandlerStart = initSource.indexOf("navigator.serviceWorker.addEventListener('controllerchange'");
+  const controllerHandlerEnd = initSource.indexOf("window.addEventListener('online'", controllerHandlerStart);
+  const controllerHandler = initSource.slice(controllerHandlerStart, controllerHandlerEnd);
+  assert.doesNotMatch(controllerHandler, /location\.reload/,
+    'a worker takeover must never force-reload an active vendor page');
+});
+
 test('offline sync actions are vendor-scoped and concurrent callers share the real result', () => {
   const idbSource = fs.readFileSync(path.join(root, 'indexeddb_sync.js'), 'utf8');
   assert.match(idbSource, /storedAction\.userId = ownerId/);
