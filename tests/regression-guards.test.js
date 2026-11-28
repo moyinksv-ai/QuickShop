@@ -857,3 +857,56 @@ test('offline sync actions are vendor-scoped and concurrent callers share the re
   assert.doesNotMatch(syncNow, /for \(const p of state\.products\)/,
     'manual Sync Now must not re-enqueue the entire catalog when no product changed');
 });
+
+
+test('confirmed product upserts atomically patch only the matching vendor storefront snapshots', () => {
+  const idbSource = fs.readFileSync(path.join(root, 'indexeddb_sync.js'), 'utf8');
+  assert.match(idbSource, /function patchCatalogSnapshotsForVendor\(userId, rows\)/);
+  assert.match(idbSource, /String\(snapshot\.storeId \|\| ''\) !== String\(userId\)/);
+  assert.match(idbSource, /snapshot\.products = products/);
+  assert.match(idbSource, /snapshot\.meta = meta/);
+  assert.match(idbSource, /localStorage\.setItem\(key, JSON\.stringify\(snapshot\)\)/);
+  const upsertStart = idbSource.indexOf("var r1 = await supabase.rpc('qs_upsert_products_and_listings_v2'");
+  const upsertEnd = idbSource.indexOf('// ── Product deletes', upsertStart);
+  const upsert = idbSource.slice(upsertStart, upsertEnd);
+  assert.ok(upsert.indexOf('if (r1.error)') < upsert.indexOf('patchCatalogSnapshotsForVendor(userId, productUpsertRows)'));
+  assert.match(upsert, /else\s*\{[\s\S]*?patchCatalogSnapshotsForVendor\(userId, productUpsertRows\)/);
+  assert.match(idbSource, /Number\(row\.qty \|\| 0\) > 0/);
+});
+
+test('storefront page entry always checks compact freshness metadata without a full catalogue refetch', () => {
+  assert.doesNotMatch(catalogSource, /CATALOG_FRESHNESS_TTL/);
+  const initStart = catalogSource.indexOf('async function initCatalog()');
+  const initEnd = catalogSource.indexOf('/* ── 18.', initStart);
+  const init = catalogSource.slice(initStart, initEnd);
+  assert.match(init, /refreshCatalogIncrementally\(client, storeId, _catalogCacheInput,/);
+  assert.match(catalogSource, /\.select\('id, updated_at, qty'\)/);
+  assert.match(catalogSource, /fetchCatalogProductsByIds\(client, storeId, changedIds\)/);
+  assert.match(catalogSource, /\.gt\('qty', 0\)/);
+});
+
+test('closed storefront detail overlay cannot bleed through the product grid during scroll', () => {
+  assert.match(catalogSource, /#cat-detail\{[\s\S]*?visibility:hidden;pointer-events:none/);
+  assert.match(catalogSource, /#cat-detail\.open\{[\s\S]*?visibility:visible;pointer-events:auto/);
+  assert.match(catalogSource, /#cat-detail-name\{font-size:24px;font-weight:900;color:#fff/);
+});
+
+test('auth Home control is prominent and navigates without depending on browser Back history', () => {
+  const homeStart = qsInitSource.indexOf("target.closest('#btnBackToLanding')");
+  const homeEnd = qsInitSource.indexOf('// Scroll-reveal', homeStart);
+  const handler = qsInitSource.slice(homeStart, homeEnd);
+  assert.match(handler, /window\.__qs_showLanding\(\)/);
+  assert.doesNotMatch(handler, /window\.history\.back\(\)/);
+  assert.match(styleSource, /#btnBackToLanding\s*\{[\s\S]*?min-height: 44px/);
+  assert.match(styleSource, /#btnBackToLanding\s*\{[\s\S]*?linear-gradient/);
+});
+
+test('Android image preparation prefers Blob URLs over FileReader data URLs', () => {
+  const start = appSource.indexOf('function compressImage(file, maxWidth = 1024, quality = 0.7)');
+  const end = appSource.indexOf('const getSupabase', start);
+  const source = appSource.slice(start, end);
+  assert.match(source, /URL\.createObjectURL\(file\)/);
+  assert.match(source, /URL\.revokeObjectURL\(objectUrl\)/);
+  assert.ok(source.indexOf('URL.createObjectURL(file)') < source.indexOf('new FileReader()'));
+});
+
