@@ -667,10 +667,14 @@ test('Add Product creation and edit paths provide explicit success feedback', ()
 
 test('storefront freshness uses cache metadata and incremental product fetches instead of full catalogue refreshes', () => {
   assert.match(catalogSource, /CATALOG_CACHE_PREFIX = 'qs_catalog_cache_v1:'/, 'storefront cache must be versioned and scoped');
-  assert.match(catalogSource, /from\('products'\)\s*\n\s*\.select\('id, updated_at, qty'\)/,
-    'freshness check must request only lightweight product metadata');
-  assert.match(catalogSource, /\.in\('id', ids\.slice\(0, 100\)\)/,
-    'changed products must be fetched by bounded id batches');
+  assert.match(catalogSource, /async function fetchCatalogProductMeta[\s\S]*?from\('public_catalog_products'\)[\s\S]*?select\('id, updated_at, qty'\)/,
+    'anonymous freshness probes must read compact metadata from the public view');
+  assert.match(catalogSource, /async function fetchCatalogProductsByIds[\s\S]*?from\('public_catalog_products'\)[\s\S]*?\.in\('id', ids\.slice\(0, 100\)\)/,
+    'changed products must be fetched from the public view in bounded id batches');
+  assert.doesNotMatch(catalogSource, /from\('products'\)/,
+    'public storefront bootstrap and freshness paths must never fall back to the protected products table');
+  assert.match(catalogSource, /return 'id, user_id, name, price, qty, category, image_url, image_url2, icon, description, updated_at'/,
+    'changed-row projection must match the public view and exclude unavailable columns');
   assert.match(catalogSource, /if \(!Array\.isArray\(cachedMeta\) \|\| cachedMeta\.length === 0\)/,
     'bootstrap must seed freshness metadata without downloading the catalogue twice');
   assert.match(catalogSource, /refreshCatalogIncrementally\(client, storeId, _catalogCacheInput/,
