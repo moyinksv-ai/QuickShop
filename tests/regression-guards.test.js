@@ -56,13 +56,13 @@ test('vendor sign-out supports the Settings button being rendered after startup'
     /const btnLogout = \$\('btnLogout'\);\s*if \(btnLogout\)\s*\{\s*btnLogout\.addEventListener/,
     'Do not bind the vendor Sign Out handler only during startup before Settings exists'
   );
-  assert.match(appSource, /const confirmed = await showConfirm\(\{[\s\S]*?title: 'Sign Out'[\s\S]*?message: 'Are you sure you want to sign out\?'/,
-    'vendor sign-out must show the confirmation modal before changing auth state');
-  assert.match(appSource, /if \(!confirmed\) return;/,
-    'canceling sign-out must leave the current session active');
-  const logoutStart = appSource.indexOf("document.addEventListener('click', async function (event)");
-  const logoutEnd = appSource.indexOf("\n    });", logoutStart);
+  const logoutStart = appSource.indexOf('async function requestSignOut()');
+  const logoutEnd = appSource.indexOf('function handleAuthLogout(options = {})', logoutStart);
   const logoutHandler = appSource.slice(logoutStart, logoutEnd);
+  assert.match(logoutHandler, /const confirmed = await showConfirm\(\{[\s\S]*?title: 'Sign Out'[\s\S]*?message: 'Are you sure you want to sign out\?'/,
+    'vendor sign-out must show the confirmation modal before changing auth state');
+  assert.match(logoutHandler, /if \(!confirmed\) return false;/,
+    'canceling sign-out must leave the current session active');
   assert.ok(logoutHandler.indexOf('await showConfirm') < logoutHandler.indexOf("supabase.auth.signOut"),
     'confirmation must happen before Supabase signOut');
   assert.match(appSource, /supabase\.auth\.signOut\(\{ scope: 'local' \}\)/);
