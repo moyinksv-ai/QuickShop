@@ -300,10 +300,27 @@
 
   };
 
-  // ── syncPendingToSupabase (BATCHED) ──────────────────────────────────
-  async function syncPendingToSupabase() {
+  // Coalesce manual and automatic callers onto the same in-flight push. A caller
+  // must never interpret "another sync is running" as a successful upload.
+  var syncInFlightPromise = null;
 
-    if (isSyncing) { log('Sync in progress — skipping.'); return { ok: true, skipped: true, reason: 'already-syncing' }; }
+  async function syncPendingToSupabase() {
+    if (syncInFlightPromise) {
+      log('Sync already running — awaiting the active result.');
+      return syncInFlightPromise;
+    }
+    syncInFlightPromise = syncPendingToSupabaseInternal();
+    try {
+      return await syncInFlightPromise;
+    } finally {
+      syncInFlightPromise = null;
+    }
+  }
+
+  // ── syncPendingToSupabase (BATCHED) ──────────────────────────────────
+  async function syncPendingToSupabaseInternal() {
+
+    if (isSyncing) { log('Sync in progress — refusing a duplicate push.'); return { ok: false, skipped: true, reason: 'already-syncing' }; }
     if (!navigator.onLine) { log('Offline — skipping sync.'); return { ok: true, skipped: true, reason: 'offline' }; }
 
     isSyncing = true;
