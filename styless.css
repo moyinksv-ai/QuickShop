@@ -1642,9 +1642,10 @@ body.customer-mode .btn-sell:hover, #catalogList .btn-sell:hover { background: v
 }
 
 /* ── Safe PWA update notice ─────────────────────────────────────── */
+/* Stay above app overlays but below the global toast (1000002). */
 .qs-update-ready {
   position: fixed;
-  z-index: 1000003;
+  z-index: 1000001;
   left: max(12px, env(safe-area-inset-left));
   right: max(12px, env(safe-area-inset-right));
   bottom: calc(env(safe-area-inset-bottom, 0px) + 82px);
