@@ -916,3 +916,28 @@ test('Android image preparation prefers Blob URLs over FileReader data URLs', ()
   assert.ok(source.indexOf('URL.createObjectURL(file)') < source.indexOf('new FileReader()'));
 });
 
+
+test('marketplace removes stale cards through an authoritative first-page fallback when active offers disappear', () => {
+  const start = marketHtml.indexOf('async function reconcileMarketChangedProducts');
+  const end = marketHtml.indexOf('async function reconcileMarketSnapshotInternal', start);
+  const reconcile = marketHtml.slice(start, end);
+  assert.match(reconcile, /Number\(now\.offerCount\) < Number\(previousFreshness\.offerCount\)[\s\S]*?return fetchAuthoritativeMarketPage\(now\)/);
+  assert.match(marketHtml, /async function fetchAuthoritativeMarketPage\(freshness\)[\s\S]*?from\('qs_market_products_v2'\)[\s\S]*?\.range\(0, _RECENT_PAGE - 1\)/);
+  assert.match(marketHtml, /writeMarketSnapshot\(items, currentFreshness, Date\.now\(\)\)/);
+});
+
+test('marketplace freshness probe cooldown is persisted and overlapping reconciliations are coalesced', () => {
+  assert.match(marketHtml, /probedAt: Number\(probedAt \|\| now\)/);
+  assert.match(marketHtml, /var _marketReconcilePromise = null/);
+  assert.match(marketHtml, /_marketReconcilePromise = reconcileMarketSnapshotInternal\(snapshot\)[\s\S]*?finally\(function \(\) \{ _marketReconcilePromise = null; \}\)/);
+  assert.match(marketHtml, /_lastLifecycleRefresh = Date\.now\(\)/);
+  assert.match(marketHtml, /_marketInitialPageShowHandled/);
+});
+
+test('marketplace offer details are fetched only after a product card is opened, not on scroll touchstart', () => {
+  assert.doesNotMatch(marketHtml, /addEventListener\('touchstart', function \(\) \{ _prefetchProduct\(item\);/);
+  assert.match(marketHtml, /card\.addEventListener\('click', open\)/);
+  assert.match(marketHtml, /\.select\('product_id, vendor_id, storefront_name, storefront_tagline, storefront_avatar_url, price'\)/);
+  assert.match(marketHtml, /_prefetchProduct\(item\);\s*\/\/ no-op if already warmed by touchstart/);
+});
+
