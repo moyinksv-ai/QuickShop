@@ -1450,11 +1450,20 @@
 
   async function fetchCatalogProductsByIds(client, storeId, ids) {
     if (!ids || !ids.length) return { data: [], error: null };
-    return client
-      .from('public_catalog_products')
-      .select(catalogProductSelect())
-      .eq('user_id', storeId)
-      .in('id', ids.slice(0, 100));
+
+    // Keep each PostgREST IN filter bounded, but do not silently truncate a
+    // large reconciliation to the first 100 changed products.
+    var rows = [];
+    for (var offset = 0; offset < ids.length; offset += 100) {
+      var batch = await client
+        .from('public_catalog_products')
+        .select(catalogProductSelect())
+        .eq('user_id', storeId)
+        .in('id', ids.slice(offset, offset + 100));
+      if (batch.error) return { data: null, error: batch.error };
+      rows = rows.concat(batch.data || []);
+    }
+    return { data: rows, error: null };
   }
 
   function catalogProductForCache(row) {
@@ -1469,7 +1478,8 @@
       image_url: row.image_url,
       image_url2: row.image_url2,
       icon: row.icon,
-      description: row.description
+      description: row.description,
+      updated_at: row.updated_at || null
     };
   }
 
