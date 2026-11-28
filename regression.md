@@ -624,3 +624,11 @@ The regression suite passed **51/51** on runtime commit `07d8c6f6eab6ea4f6391b9f
 - Request sample in that preview window: 5 `qs_market_products_v2` GETs (including two duplicate first-page and two duplicate changed-ID reads), 17 watermark GETs, 10 delta GETs, and 104 canonical offer GETs for 53 distinct canonical IDs. This is a short test window, not a general production traffic baseline.
 - Sync signal: 3 product/listing upsert RPC calls returned 204 in the same window. Earlier 400/P0001 cross-vendor ownership errors remain in the broader day log and should continue to be monitored.
 
+
+### Verification after marketplace deletion/request fixes (2026-11-28)
+
+- Latest commit: `fe689f71c9ed026176ad7e26201ab708ff267995`.
+- Regression guard run #523: **59/59 passed**.
+- Exact-HEAD preview deployment: `dpl_4APVwBf7jkQ4QgLZNvYdYprX82KU`, READY.
+- PR #12 is still draft/open. Storefront metadata query 401 is a merge blocker pending a safe public-view migration; do not grant anon SELECT on base products.
+
