@@ -916,3 +916,15 @@ This source-level correction is not yet a release verification. Run CI and deplo
 - The branch preserves the existing three service-worker cache names, adds same-origin shell refresh before an explicit update prompt, and uses authenticated app identity only for new queue ownership.
 - No Supabase SQL, schema, RLS, RPC, Storage policy, vendor data, or production deployment changes were made.
 - CI and preview build are required but not a substitute for Android installed-PWA update testing. Do not merge or deploy without explicit user approval.
+
+
+## 2026-11-28: first-rollout-safe PWA update strategy (PR #14 follow-up)
+
+- The earlier page-to-worker `QS_REFRESH_APP_SHELL` handshake was insufficient for the first update of existing production installs: their currently running `qs-init.js` predates that message listener. Do not reintroduce a dependency on old pages understanding new update messages.
+- The candidate worker now validates the root app document and `search.html`, discovers their same-origin script and stylesheet references, and adds the known dynamic scripts from `qs-init.js` (`catalog.js`, `indexeddb_sync.js`, `share-catalog.js`, `appss.js`, `canonical.js`, `inventory.js`).
+- It fetches every required same-origin app-shell asset with cache revalidation and rejects installation if any required document/asset fails or returns an opaque response. Only after all network fetches succeed does it write the refreshed shell entries into the existing `qs-v2.1.10` cache and call `skipWaiting()`.
+- The app-shell cache identity remains unchanged; image and marketplace caches are not opened or purged by the install preflight. Failed network preflight leaves the existing app-shell cache untouched and does not activate the new worker.
+- The page no longer sends a first-rollout refresh message. Existing old pages need not participate and are never force-reloaded. On the first rollout, the refreshed shell is picked up on the next normal reload/navigation; because old bootstrap code has no update banner, it may not show an update notice until the user revisits. Subsequent updates can show the user-controlled Update/Later banner from the new bootstrap.
+- This is safer for old installed clients but still requires actual Android PWA lifecycle QA. Source-level simulation does not prove browser cache semantics, Vercel routing, offline update retry, or multi-tab behaviour.
+- Cache writes occur only after all fetches pass. Cache API write/quota failure during the final write phase is not a transactional rollback; test on target browsers and consider a versioned staged-cache design only if it can preserve all existing offline entries without introducing a larger migration risk.
+- No merge, production deployment, cache purge, Supabase change, or vendor-data mutation is authorized by this work.
