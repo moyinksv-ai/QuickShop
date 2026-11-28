@@ -390,6 +390,7 @@
         : sb.user;
       if (!user || !user.id) { warn('No user — deferred.'); isSyncing = false; return { ok: false, skipped: true, reason: 'no-user' }; }
       var userId = user.id;
+      var supabase = sb.client;
       var allPending = await window.qsdb.getAllPending();
       var pending = (allPending || []).filter(function (action) {
         return action && action.userId === userId;
@@ -437,7 +438,6 @@
         return { ok: true, skipped: true, reason: 'nothing-pending' };
       }
       log('Pending actions for current account:', pending.length, '/ Unassigned legacy:', unassignedPending);
-      var supabase = sb.client;
 
       // ── Group by type ──────────────────────────────────────────────
       var productUpsertRows   = []; var productUpsertActIds = [];
