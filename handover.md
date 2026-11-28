@@ -768,3 +768,27 @@ The later commits above supersede the earlier CI statement. Re-check CI and Verc
 - `syncCloudData` now re-checks the current vendor's IndexedDB queue after the cloud pull/reconciliation. If edits arrived during the pull, it flushes them before returning the sync result. This closes the race where a manual Sync Now could await an earlier push, report success, and then show a later background upload failure for an edit queued during the pull.
 - The login recovery path now receives the initial pull result and bulk-requeues local products only when the pull succeeded, the initial pending push did not fail, and the cloud product count is exactly zero. It no longer rewrites the whole local catalog on every login.
 - Manual Sync Now also no longer requeues every local product; it uses the pending queue only.
+
+
+### User retest findings and next-release corrections (2026-11-28)
+
+The user's latest Android preview retest confirms:
+- Sign-out now lands on the auth screen; Sync Now works.
+- Marketplace to storefront handoff and refresh no longer reopen the selected detail.
+- Image selection intermittently fails with "the selected image cannot be read from this device", but succeeds on a subsequent attempt.
+- The auth Home control is visually too quiet and did not respond reliably immediately after sign-out.
+- A closed product-detail heading briefly bleeds into the storefront grid on initial scroll.
+- Vendor stock can differ from the public storefront after an edit and refresh.
+
+Code inspection established the storefront staleness window: the cached storefront skipped metadata reconciliation for 15 seconds after a recent probe. A stock edit during that window could leave the old snapshot on refresh. The server's atomic product/listing RPC updates the listing timestamp, so the public offer freshness signal is available. The correction is to probe compact product metadata on every full storefront page entry, while still fetching only changed product rows.
+
+The sync path now also patches same-origin storefront cache entries with the qs_catalog_cache_v1 prefix for the matching vendor only, and only after qs_upsert_products_and_listings_v2 succeeds. The patch replaces or removes only the affected product and its metadata, preserving all unrelated cached products. Failed RPCs do not touch the public cache. Zero-stock products are removed from the sellable snapshot.
+
+Additional UI/image corrections:
+- Image compression now prefers URL.createObjectURL(file) to avoid Android's intermittent FileReader-to-base64 read path; FileReader remains a compatibility fallback. Object URLs are revoked after decode.
+- The auth Home button now invokes the canonical landing transition directly rather than relying on a prior history entry.
+- Closed detail overlay uses hidden visibility and disabled pointer events, and becomes visible only while open, preventing its content from bleeding through the grid.
+- Product detail title typography has been strengthened; auth Home button has a clearer high-contrast surface.
+
+Important verification boundary: these are source-level corrections committed to PR #12. They do not prove that the user's specific stock edit now refreshes correctly until the latest preview is tested on Android. Do not merge or deploy production until CI, preview deployment, and the focused Android retest pass.
+
