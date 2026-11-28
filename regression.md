@@ -604,3 +604,11 @@ The regression suite passed **51/51** on runtime commit `07d8c6f6eab6ea4f6391b9f
 - Closed product-detail overlay must be visibility-hidden and non-interactive so its heading cannot bleed into the storefront grid during scroll. Detail title and auth Home button should remain high-contrast and accessible.
 - Release gate: verify vendor edit, successful RPC, same-device cache patch, storefront refresh shows new stock without a full catalogue fetch; test zero-stock removal and another vendor cache isolation. Run CI and retest on Android preview before merge.
 
+
+### Verification — atomic stock freshness and UI follow-up (2026-11-28)
+
+- Regression guards: **56/56 passed**, run #508, runtime commit bbfbcbbc2adf57fee8902db03b0c8f8c8ff0bfe3.
+- Exact-commit Vercel preview: deployment dpl_8ViN9d74v65LxAum4UAktKjEvKpa, state READY.
+- Android acceptance tests remain required: immediate stock update on storefront revisit, zero-stock removal, no full catalogue refetch for one changed product, image selection, auth Home, and no closed-detail overlay bleed.
+- This is not a production release approval. PR #12 remains draft/open/unmerged.
+
