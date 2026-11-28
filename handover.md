@@ -847,3 +847,30 @@ No production deployment, SQL grant, schema mutation, or vendor-data mutation wa
 - PR #12 remains open/draft/unmerged.
 - The storefront public metadata permission blocker remains unresolved and must be fixed with a reviewed migration before merge. No Supabase schema/grant/data changes have been made.
 
+
+
+### Public storefront freshness permission fix (2026-11-28)
+
+The user ran the reviewed SQL in the Supabase Dashboard for project `wicpvvypqpaljuexmczi`. The follow-up verification query returned:
+
+- `anon_can_read_updated_at = true`
+- `anon_has_full_table_select = false`
+- `view_exposes_updated_at = true`
+- `view_security_options = {security_invoker=true}`
+
+A direct information_schema check also confirmed that `public_catalog_products.updated_at` is `timestamp with time zone`. This confirms the intended narrow permission boundary: anonymous clients can read the freshness timestamp through the public projection without receiving table-wide SELECT on `products`.
+
+PR #12 client correction:
+- `fetchCatalogProductMeta()` now selects only `id, updated_at, qty` from `public_catalog_products`.
+- `fetchCatalogProductsByIds()` now fetches changed rows from `public_catalog_products`, retaining the 100-ID batch bound and active-stock filtering provided by the view.
+- The changed-row projection now matches the view exactly and no longer requests `created_at`, which is not exposed by the view.
+- Public storefront bootstrap no longer falls back to the protected `products` base table if the public view fails. It returns the view error instead of issuing a predictably unauthorized request.
+- Regression guards now require both freshness paths to use the public view and prohibit `.from('products')` in the standalone storefront client.
+
+The live database change was applied manually through Dashboard SQL Editor because the user is working from a phone and cannot run the CLI. It does not yet have a corresponding committed Supabase migration file or migration-history entry. Do not fabricate or insert a migration-history row. When CLI access is available, reconcile the exact live DDL into a proper version-controlled migration and verify migration history before future schema deployments. The live SQL is the previously reviewed GRANT SELECT (updated_at) plus CREATE OR REPLACE VIEW definition; do not broaden grants.
+
+Latest client/test commits:
+- `catalog.js`: `636693a09e67590207d39ee3e5a372120e5ac42c`
+- `tests/regression-guards.test.js`: `bf8d6c46ba1fc1f734cc9c479847282244a63751`
+
+This source-level correction is not yet a release verification. Run CI and deploy a fresh preview for the latest branch head, then verify on Android that a cached storefront with no changes retains its cached payload, a single changed product fetches only that product, a zero-stock product disappears, and the view requests return successfully without any anon request to `/rest/v1/products`. Preserve the vendor IndexedDB/offline path and same-origin atomic cache patching. PR #12 remains open/draft/unmerged; no production deployment is authorized.
