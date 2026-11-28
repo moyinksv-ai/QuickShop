@@ -221,6 +221,54 @@
     }
   }
 
+  async function claimLegacyDeleteActions(legacyActions, supabase, userId) {
+    var groups = [
+      { type: 'removeProduct', table: 'products' },
+      { type: 'removeSale', table: 'sales' },
+      { type: 'removeNote', table: 'notes' }
+    ];
+    var claimed = [];
+    for (var gi = 0; gi < groups.length; gi++) {
+      var group = groups[gi];
+      var candidates = legacyActions.filter(function (action) {
+        return action && !action.userId && action.type === group.type &&
+          action.item && action.item.id != null;
+      });
+      if (!candidates.length) continue;
+      var ids = Array.from(new Set(candidates.map(function (action) {
+        return String(action.item.id);
+      })));
+      try {
+        // RLS + explicit user_id filter prove ownership without exposing another
+        // vendor's row. Only existing rows owned by this user may be claimed.
+        var ownedResult = await supabase.from(group.table).select('id')
+          .eq('user_id', userId).in('id', ids);
+        if (ownedResult.error) {
+          warn('Legacy ' + group.type + ' ownership check failed:', ownedResult.error);
+          continue;
+        }
+        var ownedIds = new Set((ownedResult.data || []).map(function (row) {
+          return String(row.id);
+        }));
+        for (var ci = 0; ci < candidates.length; ci++) {
+          var candidate = candidates[ci];
+          if (!ownedIds.has(String(candidate.item.id))) continue;
+          try {
+            if (await window.qsdb.claimPendingForUser(candidate.id, userId)) {
+              candidate.userId = userId;
+              claimed.push(candidate);
+            }
+          } catch (claimError) {
+            warn('Could not assign legacy delete action id=' + candidate.id + ':', claimError);
+          }
+        }
+      } catch (ownershipError) {
+        warn('Legacy ' + group.type + ' ownership check threw:', ownershipError);
+      }
+    }
+    return claimed;
+  }
+
   // ── Public API ───────────────────────────────────────────────────────
   var qsdb = {
 
@@ -371,6 +419,10 @@
           warn('Could not assign legacy pending action id=' + legacyAction.id + ':', claimError);
         }
       }
+      // Deleted entities are absent from localState. Claim their old queue rows
+      // only after a user-scoped RLS query proves the cloud row belongs to userId.
+      var claimedLegacyDeletes = await claimLegacyDeleteActions(legacyPending, supabase, userId);
+      claimedLegacy = claimedLegacy.concat(claimedLegacyDeletes);
       pending = pending.concat(claimedLegacy);
       var unassignedPending = legacyPending.length - claimedLegacy.length;
       if (!pending.length) {
