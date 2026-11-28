@@ -837,6 +837,10 @@ test('offline sync actions are vendor-scoped and concurrent callers share the re
   assert.doesNotMatch(appSource, /return \{ ok: true, skipped: true, reason: !navigator\.onLine/);
 
   assert.match(appSource, /getAllPending\(user\.id\)/);
+  assert.match(appSource, /const initialSyncResult = await syncCloudData\(user, \{ force: true \}\)/);
+  assert.match(appSource, /initialSyncResult\.cloudProductCount === 0/,
+    'login recovery may bulk-queue local products only after a successful pull confirms an empty cloud catalog');
+  assert.match(appSource, /cloudProductCount: cloudProductCount/);
   const syncNowStart = appSource.indexOf('const btnSyncNow');
   const syncNowEnd = appSource.indexOf('const btnLoadDemo', syncNowStart);
   const syncNow = appSource.slice(syncNowStart, syncNowEnd);
