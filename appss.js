@@ -2814,18 +2814,9 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         btnSyncNow.disabled = true;
         btnSyncNow.textContent = '⏳ Syncing…';
         try {
-          // Queue all local products that aren't already queued
-          if (window.qsdb && state.products && state.products.length > 0) {
-            const pending = await window.qsdb.getAllPending(currentUser.id);
-            const alreadyQueued = new Set(pending.map(p => p.item && (p.item.id || p.item.productId)).filter(Boolean));
-            for (const p of state.products) {
-              if (!alreadyQueued.has(p.id)) {
-                await window.qsdb.addPendingChange({ type: 'addProduct', item: p });
-              }
-            }
-          }
-          // syncCloudData owns the single push + pull pass. Do not push here
-          // and then immediately ask syncCloudData to push the same queue again.
+          // Sync only queued changes. Re-enqueuing every local product here would
+          // turn a manual sync into a full-catalog write even when nothing changed.
+          // syncCloudData owns the single push + pull pass.
           const syncResult = await syncCloudData(currentUser, { force: true });
           const pushResult = syncResult && syncResult.pendingResult;
           const pushOk = !pushResult || pushResult.ok !== false;
