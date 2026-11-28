@@ -1,23 +1,22 @@
 /* sw.js — QuickShop Service Worker v4.0
  *
- * ARCHITECTURE: Runtime-first caching (no precache list)
- * ─────────────────────────────────────────────────────
- * Previous versions tried to cache a list of files on install.
- * If any single file failed (network hiccup, Vercel cold start,
- * missing file), the entire SW install aborted silently — the app
- * never qualified as installable and beforeinstallprompt never fired.
+ * ARCHITECTURE: Runtime caching with a guarded worker-update preflight
+ * ────────────────────────────────────────────────────────────────────
+ * Normal app use remains runtime-cached: resources are stored when first
+ * fetched, and the app can open offline after a successful online visit.
  *
- * This version caches nothing on install. Instead, every file is
- * cached the first time it's fetched (runtime caching). The app
- * becomes fully offline-capable after the first complete page load.
- * SW install can never fail because there is nothing to pre-fetch.
+ * A worker installation/update is different: before activation, the new
+ * worker fetches the current root and marketplace documents, discovers their
+ * same-origin scripts/styles, and validates the dynamically loaded app
+ * scripts. If any required fetch fails, installation is rejected and the
+ * previous active worker remains in service. Existing app-shell cache entries
+ * are not touched until the complete network preflight succeeds.
  *
  * STRATEGIES PER RESOURCE TYPE:
  * ─────────────────────────────────────────────────────
  *  App shell (HTML, JS, CSS, icons, manifest)
- *    → Stale-while-revalidate: serve from cache instantly, update
- *      in background. User always gets fast load. New version
- *      activates on next page open.
+ *    → Stale-while-revalidate during normal fetches. Worker upgrades
+ *      additionally refresh the required HTML/JS/CSS shell before activation.
  *
  *  Product images (jpg, jpeg, png, gif, webp, avif)
  *    → Cache-first: images never change once uploaded to Supabase
