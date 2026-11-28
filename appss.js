@@ -290,30 +290,73 @@ function initApp() {
 
   function compressImage(file, maxWidth = 1024, quality = 0.7) {
     return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target.result;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          let width = img.width, height = img.height;
+      if (!file) return reject(new Error('No image file was selected.'));
+      // Android document providers can intermittently fail while FileReader
+      // copies a picked file into a large base64 data URL. Prefer a Blob URL:
+      // it lets the browser decode the selected File directly without that copy.
+      const img = new Image();
+      let objectUrl = null;
+      let settled = false;
+      const cleanup = () => {
+        if (objectUrl) {
+          try { URL.revokeObjectURL(objectUrl); } catch (_) {}
+          objectUrl = null;
+        }
+      };
+      const fail = (message) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new Error(message));
+      };
+      img.onerror = () => fail(
+        'The selected image could not be opened. Please choose a JPG, PNG or WebP image and try again.'
+      );
+      img.onload = () => {
+        if (settled) return;
+        cleanup();
+        try {
+          let width = img.naturalWidth || img.width;
+          let height = img.naturalHeight || img.height;
+          if (!width || !height) return fail('The selected image has invalid dimensions.');
           if (width > maxWidth) {
             height = Math.round(height * (maxWidth / width));
             width = maxWidth;
           }
+          const canvas = document.createElement('canvas');
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext('2d');
+          if (!ctx) return fail('Image preparation is unavailable in this browser.');
           ctx.drawImage(img, 0, 0, width, height);
           canvas.toBlob((blob) => {
-            if (blob) resolve(blob);
-            else reject(new Error('Compression failed'));
+            if (settled) return;
+            if (blob && blob.size > 0) {
+              settled = true;
+              resolve(blob);
+            } else {
+              fail('The image could not be compressed. Please try another image.');
+            }
           }, 'image/jpeg', quality);
-        };
-        img.onerror = (err) => reject(err);
+        } catch (_) {
+          fail('The selected image could not be prepared by this browser. Please try again.');
+        }
       };
-      reader.onerror = (err) => reject(err);
+
+      try {
+        if (window.URL && typeof URL.createObjectURL === 'function') {
+          objectUrl = URL.createObjectURL(file);
+          img.src = objectUrl;
+          return;
+        }
+        // Compatibility fallback for browsers without Blob URL support.
+        const reader = new FileReader();
+        reader.onerror = () => fail('The selected image could not be read from this device.');
+        reader.onload = (event) => { img.src = event.target.result; };
+        reader.readAsDataURL(file);
+      } catch (_) {
+        fail('The selected image could not be opened from this device. Please select it again.');
+      }
     });
   }
 
@@ -329,6 +372,8 @@ function initApp() {
   let state = { products: [], sales: [], changes: [], notes: [], categories: [], logs: [] };
   let isSyncing = false;
   let isSyncInProgress = false;
+  let syncCloudInFlightPromise = null;
+  let syncCloudInFlightUserId = null;
   let _lastSyncAt = 0; // timestamp of the last completed syncCloudData call
   let isSaveStateSyncing = false;
   let _lsPersistTimer = null;
@@ -980,22 +1025,54 @@ function handleTouchEnd() {
     return all;
   }
 
+  // Concurrent callers for the same vendor await one real push+pull result.
+  // A second account must never inherit another vendor's sync result.
   async function syncCloudData(user, options = {}) {
+    const requestedUserId = user && user.id ? String(user.id) : null;
+    if (syncCloudInFlightPromise) {
+      if (syncCloudInFlightUserId === requestedUserId) return syncCloudInFlightPromise;
+      return {
+        ok: false, pullOk: false, skipped: true,
+        reason: 'different-user-sync-in-progress',
+        error: 'Another account sync is still finishing.'
+      };
+    }
+    syncCloudInFlightUserId = requestedUserId;
+    syncCloudInFlightPromise = syncCloudDataInternal(user, options);
+    try {
+      return await syncCloudInFlightPromise;
+    } finally {
+      syncCloudInFlightPromise = null;
+      syncCloudInFlightUserId = null;
+    }
+  }
+
+  async function syncCloudDataInternal(user, options = {}) {
     if (!user || !getClient() || !navigator.onLine) {
-      if (!navigator.onLine) log('Offline, skipping cloud sync.');
-      return { ok: true, skipped: true, reason: !navigator.onLine ? 'offline' : 'not-ready' };
+      const reason = !navigator.onLine ? 'offline' : 'not-ready';
+      if (reason === 'offline') log('Offline, cloud sync not completed; changes remain queued.');
+      return {
+        ok: false, pullOk: false, skipped: true, reason,
+        error: reason === 'offline'
+          ? 'Offline — changes remain queued until the connection returns.'
+          : 'Cloud sync is not ready. Please sign in and try again.'
+      };
     }
     const forceSync = options.force === true;
     const AUTO_SYNC_COOLDOWN_MS = 15000;
     if (!forceSync && Date.now() - _lastSyncAt < AUTO_SYNC_COOLDOWN_MS) {
       return { ok: true, skipped: true, reason: 'recent-sync' };
     }
-    if (isSyncInProgress) return { ok: true, skipped: true, reason: 'already-syncing' };
+    if (isSyncInProgress) {
+      return { ok: false, pullOk: false, skipped: true, reason: 'already-syncing',
+        error: 'A cloud sync is already in progress.' };
+    }
     isSyncInProgress = true;
     showLoading(true, 'Syncing data...');
     // Callers (Sync Now, pull-to-refresh) need the real outcome instead of
     // assuming success — record it here instead of only toasting internally.
     let pendingResult = null;
+    let cloudProductCount = null;
     let syncError = null;
     try {
       if (window.qsdb && window.qsdb.syncPendingToSupabase) pendingResult = await window.qsdb.syncPendingToSupabase();
@@ -1017,6 +1094,7 @@ function handleTouchEnd() {
         createdAt: new Date(p.created_at).getTime(),
         updatedAt: p.updated_at ? new Date(p.updated_at).getTime() : new Date(p.created_at).getTime()
       }));
+      cloudProductCount = cloudProducts.length;
       const cloudSales = (salesRes.data || []).map(s => ({
         id: s.id, productId: s.product_id, qty: s.qty, price: s.price, cost: s.cost,
         ts: new Date(s.sale_date).getTime(),
@@ -1033,7 +1111,7 @@ function handleTouchEnd() {
         id: l.id, action: l.action, details: l.details, user: l.performed_by,
         ts: new Date(l.created_at).getTime()
       }));
-      const pendingChanges = (window.qsdb && await window.qsdb.getAllPending()) || [];
+      const pendingChanges = (window.qsdb && await window.qsdb.getAllPending(user.id)) || [];
       const pendingProductIds = new Set(
         pendingChanges.filter(c => c.type === 'updateProduct' || c.type === 'addProduct' || c.type === 'addStock')
           .map(c => c.item.id || c.item.productId)
@@ -1078,14 +1156,36 @@ function handleTouchEnd() {
     initAppUI();
     await saveState();
 
+    // A product can be edited while the cloud pull is running. Re-check this
+    // vendor's queue after reconciliation and flush any actions that arrived
+    // after the initial push, so Sync Now cannot report success ahead of them.
+    if (window.qsdb && typeof window.qsdb.getAllPending === 'function' &&
+        typeof window.qsdb.syncPendingToSupabase === 'function') {
+      try {
+        const queuedAfterPull = await window.qsdb.getAllPending(user.id);
+        if (queuedAfterPull && queuedAfterPull.length > 0) {
+          pendingResult = await window.qsdb.syncPendingToSupabase();
+        }
+      } catch (queueCheckError) {
+        errlog('post-pull pending queue check failed', queueCheckError);
+        pendingResult = {
+          ok: false,
+          failedBatches: ['pending-queue-check'],
+          fatalError: queueCheckError && (queueCheckError.message || String(queueCheckError))
+        };
+      }
+    }
+
     const pendingOk = !pendingResult || pendingResult.ok !== false;
     const reasons = [];
     if (pendingResult && pendingResult.failedBatches && pendingResult.failedBatches.length) reasons.push(pendingResult.failedBatches.join(', '));
     if (pendingResult && pendingResult.fatalError) reasons.push(pendingResult.fatalError);
     return {
       ok: !syncError && pendingOk,
+      pullOk: !syncError,
       error: syncError ? (syncError.message || String(syncError)) : (reasons.length ? ('upload failed: ' + reasons.join('; ')) : null),
-      pendingResult: pendingResult
+      pendingResult: pendingResult,
+      cloudProductCount: cloudProductCount
     };
   }
 
@@ -1448,7 +1548,7 @@ function handleTouchEnd() {
     });
 
     // The Sign Out button is created dynamically when the Settings panel renders.
-    // Delegate the click, but keep the destructive action behind one explicit confirmation.
+    // The same guarded flow is used at the authenticated vendor-app Back boundary.
     document.addEventListener('click', async function (event) {
       const target = event.target;
       const btnLogout = target && typeof target.closest === 'function'
@@ -1456,51 +1556,11 @@ function handleTouchEnd() {
         : null;
       if (!btnLogout) return;
       event.preventDefault();
-
-      // Guard double taps while the confirmation modal or sign-out request is active.
       if (btnLogout.dataset.qsSignoutPending === 'true') return;
       btnLogout.dataset.qsSignoutPending = 'true';
       btnLogout.disabled = true;
-
       try {
-        const confirmed = await showConfirm({
-          title: 'Sign Out',
-          message: 'Are you sure you want to sign out?',
-          okText: 'Sign Out',
-          okDanger: true
-        });
-        // Fail closed: cancel or a missing confirmation modal must never sign out.
-        if (!confirmed) return;
-
-        const supabase = getClient();
-        let signOutError = null;
-        try {
-          if (supabase) {
-            const result = await supabase.auth.signOut({ scope: 'local' });
-            signOutError = result && result.error ? result.error : null;
-          }
-        } catch (e) {
-          signOutError = e;
-        } finally {
-          // Clear app-owned state and any persisted Supabase auth token as a fallback.
-          ['qs_session_active', 'qs_last_user_id', 'qs_user_cache'].forEach((key) => {
-            try { localStorage.removeItem(key); } catch (_) {}
-          });
-          try {
-            Object.keys(localStorage).forEach((key) => {
-              if (/^sb-.+-auth-token$/.test(key)) localStorage.removeItem(key);
-            });
-          } catch (_) {}
-          currentUser = null;
-          document.body.classList.remove('mode-app', 'qs-auth-pending');
-          document.body.classList.add('qs-show-auth');
-          if (signOutError) errlog('Supabase signout returned an error; local app session cleared', signOutError);
-          toast('Signed out');
-          // Preserve the explicit sign-out destination across the reload. A normal
-          // cold visit has no marker and should show the public landing page.
-          try { sessionStorage.setItem('qs_show_auth_after_signout', 'true'); } catch (_) {}
-          window.location.replace(window.location.pathname);
-        }
+        await requestSignOut();
       } finally {
         if (btnLogout.isConnected) {
           btnLogout.disabled = false;
@@ -1633,7 +1693,7 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       userDisplayNameEl.textContent = displayName ? `Name: ${displayName}` : '';
     }
     loadLocalData(user.id);
-    await syncCloudData(user, { force: true });
+    const initialSyncResult = await syncCloudData(user, { force: true });
 
     // ── Durable referral attribution ─────────────────────────────────────
     // Pending click survives navigation, refresh, PWA restarts, and OTP delay.
@@ -1685,11 +1745,14 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     }
     // ── End durable referral attribution ──────────────────────────────────
 
-    // After cloud sync: if local products exist but cloud had none, queue them all for upload.
-    // This recovers from the case where products were created offline or before Supabase tables existed.
-    if (window.qsdb && window.qsdb.addPendingChange && state.products && state.products.length > 0) {
+    // Recovery only: requeue local products when the completed initial pull proves
+    // the cloud catalog is empty. Never rewrite the whole catalog on every login.
+    if (initialSyncResult && initialSyncResult.pullOk !== false &&
+        (!initialSyncResult.pendingResult || initialSyncResult.pendingResult.ok !== false) &&
+        initialSyncResult.cloudProductCount === 0 &&
+        window.qsdb && window.qsdb.addPendingChange && state.products && state.products.length > 0) {
       try {
-        const pending = await window.qsdb.getAllPending();
+        const pending = await window.qsdb.getAllPending(user.id);
         const alreadyQueued = new Set(pending.map(p => p.item && (p.item.id || p.item.productId)).filter(Boolean));
         for (const p of state.products) {
           if (!alreadyQueued.has(p.id)) {
@@ -1707,6 +1770,64 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     const settingsPanel = $('settingsPanel');
     if (settingsPanel && settingsPanel.classList.contains('active')) {
       renderSettingsPanel();
+    }
+  }
+
+  let _signOutRequestInProgress = false;
+
+  async function requestSignOut() {
+    if (_signOutRequestInProgress) return false;
+    _signOutRequestInProgress = true;
+    try {
+      const confirmed = await showConfirm({
+        title: 'Sign Out',
+        message: 'Are you sure you want to sign out?',
+        okText: 'Sign Out',
+        okDanger: true
+      });
+      if (!confirmed) return false;
+
+      // Supabase emits SIGNED_OUT immediately for local scope. Keep this marker
+      // until the next cold INITIAL_SESSION handler consumes it.
+      try { sessionStorage.setItem('qs_show_auth_after_signout', 'true'); } catch (_) {}
+
+      const supabase = getClient();
+      let signOutError = null;
+      try {
+        if (supabase) {
+          const result = await supabase.auth.signOut({ scope: 'local' });
+          signOutError = result && result.error ? result.error : null;
+        }
+      } catch (e) {
+        signOutError = e;
+      } finally {
+        ['qs_session_active', 'qs_last_user_id', 'qs_user_cache'].forEach((key) => {
+          try { localStorage.removeItem(key); } catch (_) {}
+        });
+        try {
+          Object.keys(localStorage).forEach((key) => {
+            if (/^sb-.+-auth-token$/.test(key)) localStorage.removeItem(key);
+          });
+        } catch (_) {}
+        currentUser = null;
+        document.body.classList.remove('mode-app', 'qs-auth-pending');
+        document.body.classList.add('qs-show-auth');
+        // Replace the current vendor entry with an explicit signed-out auth entry.
+        try {
+          const current = history.state && typeof history.state === 'object' ? history.state : {};
+          const next = Object.assign({}, current);
+          delete next.qsVendorApp;
+          delete next.qsView;
+          next.qsScreen = 'auth';
+          history.replaceState(next, '', window.location.href);
+        } catch (_) {}
+        if (signOutError) errlog('Supabase signout returned an error; local app session cleared', signOutError);
+        toast('Signed out');
+        window.location.replace(window.location.pathname);
+      }
+      return true;
+    } finally {
+      _signOutRequestInProgress = false;
     }
   }
 
@@ -1731,12 +1852,12 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
       _savedResetEmail = (localStorage.getItem('qs_pending_reset_email') || '').trim();
     } catch (_) {}
 
-    // A one-time session marker preserves the explicit sign-out destination across
-    // the reload below; ordinary cold visits should show the public landing page.
+    // Keep the explicit sign-out marker through the immediate SIGNED_OUT event.
+    // Only the following cold INITIAL_SESSION check is allowed to consume it.
     let _explicitSignOut = false;
     try {
       _explicitSignOut = sessionStorage.getItem('qs_show_auth_after_signout') === 'true';
-      sessionStorage.removeItem('qs_show_auth_after_signout');
+      if (options.initialLoad) sessionStorage.removeItem('qs_show_auth_after_signout');
     } catch (_) {}
     // Pending verification/reset steps remain on auth so users can resume.
     if (options.initialLoad && !_explicitSignOut && !_pendingVerificationEmail && !_savedResetEmail &&
@@ -2785,31 +2906,23 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
         btnSyncNow.disabled = true;
         btnSyncNow.textContent = '⏳ Syncing…';
         try {
-          // Queue all local products that aren't already queued
-          if (window.qsdb && state.products && state.products.length > 0) {
-            const pending = await window.qsdb.getAllPending();
-            const alreadyQueued = new Set(pending.map(p => p.item && (p.item.id || p.item.productId)).filter(Boolean));
-            for (const p of state.products) {
-              if (!alreadyQueued.has(p.id)) {
-                await window.qsdb.addPendingChange({ type: 'addProduct', item: p });
-              }
-            }
-          }
-          // Push everything pending
-          let pushResult = null;
-          if (window.qsdb && window.qsdb.syncPendingToSupabase) pushResult = await window.qsdb.syncPendingToSupabase();
-          // Pull from cloud
-          const pullResult = await syncCloudData(currentUser, { force: true });
-
+          // Sync only queued changes. Re-enqueuing every local product here would
+          // turn a manual sync into a full-catalog write even when nothing changed.
+          // syncCloudData owns the single push + pull pass.
+          const syncResult = await syncCloudData(currentUser, { force: true });
+          const pushResult = syncResult && syncResult.pendingResult;
           const pushOk = !pushResult || pushResult.ok !== false;
-          const pullOk = !pullResult || pullResult.ok !== false;
+          const pullOk = !syncResult || syncResult.pullOk !== false;
           if (pushOk && pullOk) {
             toast('Sync complete — catalog is now live', 'success');
           } else {
             const reasons = [];
             if (pushResult && pushResult.failedBatches && pushResult.failedBatches.length) reasons.push(pushResult.failedBatches.join(', '));
+            if (pushResult && pushResult.unassignedPending) {
+              reasons.push(pushResult.unassignedPending + ' older pending change(s) could not be safely assigned to this account');
+            }
             if (pushResult && pushResult.fatalError) reasons.push(pushResult.fatalError);
-            if (pullResult && pullResult.error) reasons.push(pullResult.error);
+            if (syncResult && syncResult.error && !pushResult?.failedBatches?.length) reasons.push(syncResult.error);
             toast('Sync incomplete' + (reasons.length ? ' — ' + reasons.join('; ') : ' — some data may not be up to date'), 'error');
           }
         } catch(e) {
@@ -3058,10 +3171,18 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
   }
 
   // Tab order matches DOM nav order — used to determine slide direction.
+  function mergeVendorHistoryState(view) {
+    const current = history.state;
+    const next = current && typeof current === 'object' ? Object.assign({}, current) : {};
+    next.qsView = view;
+    next.qsVendorApp = true;
+    return next;
+  }
+
   const _TAB_ORDER = ['home', 'inventory', 'reports', 'notes', 'settings'];
   let _prevViewName = null;
 
-  function setActiveView(view, resetScroll = false) {
+  function setActiveView(view, resetScroll = false, fromHistory = false) {
     cleanupViewState();
 
     // ── Direction ─────────────────────────────────────────────────────
@@ -3083,8 +3204,8 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     // Push a synthetic entry on every real navigation so the browser has
     // something to pop when the vendor presses the system back button.
     // The popstate handler intercepts the pop and routes within the app.
-    if (prevIdx !== -1) {
-      try { history.pushState({ qsView: view }, ''); } catch(_) {}
+    if (prevIdx !== -1 && !fromHistory) {
+      try { history.pushState(mergeVendorHistoryState(view), '', window.location.href); } catch(_) {}
     }
 
     _prevViewName = view;
@@ -6436,7 +6557,10 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
           toast('Profile photo updated ✓');
         } catch (err) {
           errlog('Avatar upload failed', err);
-          toast('Upload failed: ' + (err.message || 'unknown'), 'error');
+          const reason = err && err.message
+        ? err.message
+        : 'The image could not be prepared or uploaded. Try a JPG, PNG or WebP image.';
+      toast('Upload failed: ' + reason, 'error');
         } finally {
           avatarBtn.classList.remove('qs-sp-uploading');
           showLoading(false);
@@ -7356,7 +7480,13 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
 
         // Seed the history stack with the restored view so the back button
         // has at least one entry to pop before trying to exit.
-        try { history.replaceState({ qsView: restoredView }, ''); } catch(_) {}
+        // The app shell also boots on public landing/auth screens before Supabase resolves.
+        // Only an authenticated session may claim this history entry as a vendor view.
+        try {
+          if (localStorage.getItem('qs_session_active') === 'true') {
+            history.replaceState(mergeVendorHistoryState(restoredView), '', window.location.href);
+          }
+        } catch(_) {}
       }
       showLoading(false);
       const modalBackdrop = $('modalBackdrop');
@@ -7437,14 +7567,13 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
   let _backPressedOnce = false;
   let _backPressTimer  = null;
 
-  window.addEventListener('popstate', function (e) {
-    // If a modal is open, close it and re-push the entry so the stack stays intact.
+  window.addEventListener('popstate', async function (e) {
     const modalOpen = document.querySelector('.modal-backdrop[style*="flex"]') ||
                       document.querySelector('#modalBackdrop[style*="flex"]') ||
                       document.querySelector('#confirmModalBackdrop[style*="flex"]');
     if (modalOpen) {
       hideModal();
-      try { history.pushState({ qsView: _prevViewName || 'home' }, ''); } catch(_) {}
+      try { history.pushState(mergeVendorHistoryState(_prevViewName || 'home'), '', window.location.href); } catch(_) {}
       return;
     }
 
@@ -7452,35 +7581,49 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
                         document.getElementById('addProductWorkspace').style.display !== 'none';
     if (addFormOpen) {
       hideAddForm();
-      try { history.pushState({ qsView: _prevViewName || 'home' }, ''); } catch(_) {}
+      try { history.pushState(mergeVendorHistoryState(_prevViewName || 'home'), '', window.location.href); } catch(_) {}
       return;
     }
 
-    // Navigate within the app if the popped state belongs to us.
+    // Every vendor view, including Home, is restored from its own history entry.
+    // A history restoration must never push a duplicate entry.
     const targetView = e.state && e.state.qsView;
-    if (targetView && targetView !== 'home' && _TAB_ORDER.includes(targetView)) {
-      // We have a previous app view to return to — go there.
-      setActiveView(targetView, false);
+    if (targetView && _TAB_ORDER.includes(targetView)) {
+      setActiveView(targetView, false, true);
       return;
     }
 
-    // Stack exhausted or already on Home — warn before exit.
+    // A non-vendor entry is the authenticated app's exit boundary.
+    if (currentUser && document.body.classList.contains('mode-app')) {
+      const signedOut = await requestSignOut();
+      if (!signedOut) {
+        // If Back closed the confirmation modal, its own handler has already
+        // restored the vendor entry. Avoid pushing a duplicate history entry.
+        const currentState = history.state;
+        if (!(currentState && currentState.qsVendorApp && currentState.qsView)) {
+          try { history.pushState(mergeVendorHistoryState(_prevViewName || 'home'), '', window.location.href); } catch(_) {}
+        }
+      }
+      return;
+    }
+
+    // Public/auth screen transitions remain owned by qs-init.js.
+    if (document.body.classList.contains('qs-show-auth')) return;
+
+    // Defensive fallback for an app shell without an authenticated session.
     const onHome = !_prevViewName || _prevViewName === 'home';
     if (onHome) {
       if (_backPressedOnce) {
-        // Second back — allow the browser to exit naturally.
         clearTimeout(_backPressTimer);
         return;
       }
       _backPressedOnce = true;
       toast('Press back again to exit', 'info', 2000);
-      // Re-push so the browser has an entry for the second back press.
-      try { history.pushState({ qsView: 'home' }, ''); } catch(_) {}
+      try { history.pushState(mergeVendorHistoryState('home'), '', window.location.href); } catch(_) {}
       _backPressTimer = setTimeout(function () { _backPressedOnce = false; }, 2000);
     } else {
-      // Not on Home — navigate to Home instead of exiting.
-      setActiveView('home', false);
-      try { history.pushState({ qsView: 'home' }, ''); } catch(_) {}
+      setActiveView('home', false, true);
+      try { history.pushState(mergeVendorHistoryState('home'), '', window.location.href); } catch(_) {}
     }
   });
 

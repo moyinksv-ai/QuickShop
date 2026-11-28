@@ -305,7 +305,10 @@
       return urlData.publicUrl;
     } catch (err) {
       errlog('Image upload failed (' + slot + ')', err);
-      toast('Upload failed: ' + (err.message || 'unknown'), 'error');
+      const reason = err && typeof err.message === 'string' && err.message.trim()
+        ? err.message
+        : 'The image could not be prepared or uploaded. Choose a JPG, PNG or WebP image under 5 MB.';
+      toast('Upload failed: ' + reason, 'error');
       return null;
     } finally {
       setSlotUploading(slot, false);
@@ -316,8 +319,12 @@
     async function handleFileForSlot(file, slot) {
       if (!file) return;
       const url = await uploadImageToSlot(file, slot);
-      if (url) { showImageInSlot(url, slot); scheduleAddProductDraftSave(); }
-      else { if (slot === 'img1') clearInvImage(); else clearInvImage2(); scheduleAddProductDraftSave(); }
+      if (url) {
+        showImageInSlot(url, slot);
+        scheduleAddProductDraftSave();
+      }
+      // A failed replacement must not erase the image already attached to an
+      // edited product. Leave the existing preview/URL untouched on failure.
     }
 
     const bothBtn      = $('invPhotoBothBtn');
@@ -343,6 +350,7 @@
     if (img1Btn && img1Input) {
       img1Btn.addEventListener('click', function () {
         img1Input.removeAttribute('multiple');
+        img1Input.value = ''; // allow selecting the same image again
         img1Input.click();
       });
       img1Input.addEventListener('change', async function (e) {
@@ -360,10 +368,14 @@
     const img2Btn   = $('invImg2Btn');
     const img2Input = $('invImg2');
     if (img2Btn && img2Input) {
-      img2Btn.addEventListener('click', function () { img2Input.click(); });
+      img2Btn.addEventListener('click', function () {
+        img2Input.value = ''; // allow selecting the same image again
+        img2Input.click();
+      });
       img2Input.addEventListener('change', async function (e) {
         const file = e.target.files && e.target.files[0];
         await handleFileForSlot(file, 'img2');
+        img2Input.value = '';
       });
     }
 

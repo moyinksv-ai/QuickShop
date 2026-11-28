@@ -520,3 +520,357 @@ Regression guard added to verify the scheduler/cooldown and preserve forced manu
 - Regression guard now verifies marketplace card lazy loading/async decoding and preservation of the original-image fallback.
 - Main remains untouched; this branch must be preview-tested before any merge.
 
+
+
+## 2026-11-21 — Trigger → request → response-size baseline evidence
+
+- Current baseline branch: `optimize/market-refresh-coalescing-2026-11-20`, 2 commits ahead / 0 behind `main`. No production merge or Supabase mutation was performed.
+- Supabase project ref: `wicpvvypqpaljuexmczi`.
+- A read-only Supabase unified-log check for **2026-11-13 00:00–24:00 UTC** provides the strongest historical request/response evidence currently available. This is log-observed gateway response content, not the authoritative billing meter.
+- Production-origin public Storage image traffic for that day: **4,691 GET requests / 373 distinct image objects / 1,057,823,351 response-content bytes (~1.01 GB)**. Of these, **4,462 HIT requests / 1,010,988,925 bytes (~965 MB)** and **229 MISS requests / 46,834,426 bytes (~44.7 MB)**.
+- The same production referer generated **6** first-page `qs_market_products_v2` requests with `offset=0&limit=60`, **10** `qs_find_canonical_v2` RPC requests, **145** legacy `qs_find_canonical` RPC requests, **1** category-page request, **1** stores-page request, and **23** `qs_market_offers_v2` product-detail offer requests in that window. REST response `content_length` was not populated for these database requests in the sampled gateway logs, so their response bytes cannot be responsibly reconstructed from this field.
+- Repeated-image evidence is strong but trigger attribution is not yet complete: several individual image objects were requested **23–24 times** between approximately 08:25 and 23:22 UTC. The logs expose origin/referer and request timing, but cross-origin Storage requests often carry only the site origin as referer, so the log alone cannot prove whether each repeat came from marketplace lifecycle refresh, storefront opens, multiple visitors, or browser-level cache behavior.
+- Current source inspection confirms marketplace cards use native `loading="lazy"` and currently leave `_IMG_TRANSFORM = false`; therefore the marketplace is presently requesting original Storage object URLs rather than Supabase render/image transformations. This is an important cost/image-size finding but is **not yet an approved image-quality optimization**.
+- A current read-only log check for **2026-11-20 08:00 UTC → 2026-11-21 08:00 UTC** shows the Supabase project returning **HTTP 402** for application PostgREST requests, including `qs_get_store`, `public_catalog_profiles`, and `profiles`. This blocks a fresh live request baseline right now. OPTIONS requests still return 200. Do not interpret current absence of successful data requests as proof that the app has no traffic; it is consistent with the project restriction state.
+- Therefore the baseline is **partially established**: Storage request/response volume is measurable historically, marketplace API trigger paths are source-confirmed, but a clean eight-journey before/after byte baseline still requires successful Supabase service responses and browser-level resource timing. No TTL, realtime redesign, schema change, or image recompression should be shipped solely from the current evidence.
+
+
+## 2026-11-22 — Live Supabase trigger/request correlation after project recovery
+
+- Supabase project `wicpvvypqpaljuexmczi` is currently `ACTIVE_HEALTHY`.
+- A deliberate live test was performed after recovery: product edit attempts, marketplace browsing/scrolling, refresh, storefront browsing, and product-detail browsing. The relevant log window is approximately **08:40–09:05 UTC**.
+- The live edge-log window shows **9 GET** requests to `qs_market_products_v2` and **66 GET** requests to `qs_market_offers_v2` between 08:53–08:59 UTC, plus **3** and **45** OPTIONS respectively. These are gateway request counts; the gateway `content_length` field is blank for these database responses, so database response bytes are **not** inferred from this sample.
+- Storage logs in the same 08:53–08:59 window show **92 `storage.object.get_public` GETs / 19,140,654 logged response bytes (~18.25 MiB)** and **92 `storage.object.info_public` requests / 45,435 bytes**. These are log-observed response bytes, not a billing-meter reconciliation.
+- Product-edit attempts occurred earlier: `qs_upsert_products_and_listings_v2` returned HTTP 400 / SQL state `P0001` repeatedly at 08:43–08:50 UTC. This is a separate confirmed vendor-save error pattern and must not be attributed to marketplace egress without further causal evidence.
+- The products table is confirmed in the `supabase_realtime` publication, so the marketplace subscription can receive products-table changes. However, the available `realtime_logs` did **not** expose a reliable application-level products-change delivery event during the test window. Therefore the live data does **not** yet prove `products UPDATE → Realtime delivery → browser refresh` for the 08:53/08:57 marketplace request bursts.
+- The timing currently favors the safer interpretation that the observed marketplace request bursts are user navigation/refresh/detail activity unless browser-side initiator/resource timing or a more specific Realtime event correlation proves otherwise.
+- No Supabase schema/config/data mutation was made during this correlation pass. No freshness architecture redesign has been shipped.
+- PR #11 remains draft and unmerged. Its current branch is `optimize/market-refresh-coalescing-2026-11-20`; latest branch commit after the CSP preservation fix is `c564a187fd9718d13bfcce0780843d5aa4bb4734c`.
+
+### Current engineering decision
+Do not broaden the Realtime change yet. The strongest next measurement is browser-side resource timing/initiator capture for the same controlled journeys, especially to distinguish a lifecycle/realtime-triggered `routeFromURL()` from ordinary navigation. The surgical product-detail coalescing change remains isolated and should be validated independently.
+
+
+
+## 2026-11-25 — Next-release freshness + auth/navigation regression work
+
+- New branch: `next-release-freshness-regressions-2026-11-25`, based on the current marketplace optimization branch; PR #12 is draft and **must not be merged to main yet**.
+- Marketplace first-page freshness now has a persisted browser snapshot (`qs_market_snapshot_v1:home`) with a 30-minute cache age and a 15-second freshness-probe cooldown.
+- The no-change path renders the persisted first-page snapshot immediately, then checks `qs_market_offers_v2` using a lightweight exact offer count + latest `offer_updated_at` probe. If unchanged, the existing card payload is retained and the full `qs_market_products_v2` first-page payload is not downloaded.
+- Changed offers are mapped to affected canonical IDs and only those canonical cards are fetched in bounded batches. A decrease in total offer count is treated conservatively as a possible deletion/tombstone case and falls back to the authoritative first-page query rather than leaving stale cards visible.
+- The current architecture is intentionally conservative about deletions: the existing aggregation view has no durable tombstone/change-log. Do not claim mathematically perfect deletion reconciliation until a durable change feed or equivalent server-side version/change-set exists. The implemented common path eliminates the expensive full-card payload when nothing changed and limits ordinary updates to affected canonical cards.
+- Offline behavior: a valid persisted marketplace snapshot remains renderable when the freshness probe fails. Freshness failure does not erase the cached marketplace or force a network error state.
+- Storefront already has the corresponding scoped local cache + lightweight `products(id, updated_at, qty)` metadata check + bounded changed-ID fetch path. Preserve that implementation; do not replace it with the marketplace cache mechanism.
+- Vendor history regression found: `appss.js` previously replaced/pushed history states with bare `{ qsView: ... }`, discarding `qs-init.js`'s `qsScreen` landing/auth state. The next-release branch now merges vendor view state into the existing history state instead. This is intended to prevent vendor Back navigation from losing the landing/auth boundary.
+- Sign-out regression found: Supabase local sign-out fires `SIGNED_OUT` immediately before its best-effort server revocation completes. The next-release branch records `qs_show_auth_after_signout` **before** calling `signOut({ scope: 'local' })`, so the explicit signed-out destination cannot race the auth event.
+- No Supabase schema/config/data mutation was made for this work. No production deployment or merge was performed.
+- PR #12 preview is available and must be behaviorally tested before release.
+
+
+## 2026-11-26 — Current continuation: CI guard fix + service-worker image review
+
+- Current branch: `next-release-freshness-regressions-2026-11-25`.
+- PR #12 remains draft and unmerged; production remains untouched.
+- Current branch head is `2d8d9467aa247b1b60cfa7f7ed45f11f16fb1bd7`, 22 commits ahead of `main` at the verified comparison point.
+- The previous failed Regression guards run (#400 / ID 45514141536) was reproduced from its logs. The failure was a **regression-guard syntax error**, not an application/runtime regression: `assert.doesNotMatch(appSource, /history.replaceState({ qsView: restoredView }/)` was parsed as an unterminated regular expression. No tests executed in that run.
+- The guard was corrected surgically to use literal `String.includes()` assertions for the three forbidden bare-history-state patterns. The underlying vendor-history invariant was preserved.
+- `sw.js` was inspected on both the current branch head and `main`; the file is byte-for-byte identical at this point. It already has a dedicated `qs-images-v4.0` cache and explicitly allows Supabase Storage object URLs through the Supabase network-only bypass so product images can reach the cache-first image handler.
+- QuickShop image uploads currently use timestamp/random filenames ending in `.jpg`, so the existing image-extension matcher does match the production upload format.
+- Marketplace product cards intentionally use native `loading="lazy"`. Therefore a persisted marketplace snapshot does **not** imply that every offscreen image has previously been downloaded and placed in the browser image cache. This is a likely explanation for offline cards whose images were never viewed online, but it is not yet proof of the exact observed main-branch offline symptom.
+- Do not solve this by eagerly downloading the entire marketplace image set: that would work against the Supabase egress objective. The safer invariant remains opportunistic cache-first delivery for images the browser has actually fetched.
+- Exact-head Vercel deployment for `2d8d9467aa247b1b60cfa7f7ed45f11f16fb1bd7` is READY. Deployment ID: `dpl_9KCaTWzPqxVfvKS7AjLXvyFnXQYQ`; preview alias: `quickshopper-git-next-release-69fe11-moyinks-projects-5a3815db.vercel.app`.
+- The GitHub Actions workflow is configured for both push and pull_request, but no new workflow run is currently exposed for the connector-created commit. Therefore CI is **not yet verified** on the corrected exact head. Do not call the branch CI-green until GitHub reports a successful run for `2d8d9467aa247b1b60cfa7f7ed45f11f16fb1bd7`.
+- No production deployment, Supabase schema/config/data mutation, or merge was performed.
+
+
+## 2026-11-26 — CI guard follow-up + CSP correction
+
+- Run #405 / ID 45792464601 executed the regression suite on the PR merge ref and reached the tests successfully: **42 passed, 5 failed**.
+- All five failures were inspected. Four were brittle source-guard assertions using unescaped regex parentheses/braces for literal source text; they did not indicate application regressions. Those guards were converted to literal `includes()` checks.
+- The fifth failure was substantive: the marketplace router inline-script SHA-256 was not present in `search.html`'s CSP. The current inline scripts were hashed directly from the checked-in source; the CSP contained stale hashes. The two current hashes are now recorded in `search.html`, restoring the CSP invariant rather than weakening the guard.
+- `sw.js` remains unchanged from `main`; the image-cache finding remains the lazy-loading/opportunistic-cache interaction described in the previous entry. No speculative eager image prefetch was added.
+- Current branch head: `0c2ab8a8306423bb7f5bc0092d064ce3e6ed46cd`. PR #12 remains draft/unmerged. Production remains untouched.
+- No fresh GitHub Actions run is exposed yet for this latest connector-created head, so CI is **not declared green**. The last completed run is #405 above. Static source verification of the corrected guards and CSP has been completed.
+
+
+## 2026-11-28 — PR #12 recovery, exact-head verification, and next-phase handoff
+
+### Repository identity and recovery correction
+- The canonical repository is **`moyinksv-ai/QuickShop`**. The earlier failed recovery attempts queried the wrong owner (`Moyinks/QuickShop`); their 404 responses were not evidence that PR #12 or its branch had been deleted.
+- PR #12: https://github.com/moyinksv-ai/QuickShop/pull/12
+- Title: **Next release: safe marketplace freshness and navigation regressions**.
+- State at this checkpoint: OPEN, DRAFT, UNMERGED; GitHub reports mergeable.
+- Head branch: `next-release-freshness-regressions-2026-11-25`.
+- Verified head SHA before this documentation-only continuation: `52379bf6fc16696b2ff9110f70d649f9290216e9`.
+- Verified base: `main` at `10de99a4fba6644f4fa3d0256b33aacf0170d091`.
+- Exact comparison: **31 commits ahead / 0 behind main**, five changed files before this documentation update: `appss.js`, `handover.md`, `regression.md`, `search.html`, and `tests/regression-guards.test.js`.
+- The PR head includes the regression-guard correction commit `52379bf6fc16696b2ff9110f70d649f9290216e9`; it was not missing or lost.
+- No branch recreation, reset, force-push, merge, production deployment, or Supabase mutation was performed during recovery.
+
+### Exact-head CI and preview evidence
+- GitHub Actions **Regression guards run #417**, run ID `46026811859`: completed **success** for exact PR head `52379bf6fc16696b2ff9110f70d649f9290216e9`, event `pull_request`.
+- The same exact SHA also has push run #416 / ID `46026801215`: completed **success**.
+- Earlier failures remain part of the audit trail, not the current result: #405 / ID `45792464601` had 42 passed / 5 failed; #415 / ID `45793117403` had 44 passed / 3 failed. The literal-string guard corrections and CSP digest correction were followed by the successful #416/#417 runs. Do not describe old failures as current unresolved CI failures.
+- Vercel deployment for the exact head: ID `dpl_Da3smtgFMLVSHZaLDZoDSKphi4bt`, state **READY**, Git metadata confirms branch and SHA above. Preview alias: https://quickshopper-git-next-release-69fe11-moyinks-projects-5a3815db.vercel.app
+- The PR also contains a Netlify deploy-preview notification for the same SHA: https://deploy-preview-12--quickshopperapp.netlify.app (deploy record `6b09a41fa12f7d56182818d8`). Treat the Vercel preview as the canonical target for the next smoke-test pass unless the owner explicitly chooses otherwise.
+- CI success and deployment READY establish automated checks/build availability only. **They do not establish browser behavior, mobile usability, or measured Supabase egress savings. Manual preview smoke testing remains outstanding.**
+
+### What PR #12 changes — scope to validate, not assume
+1. **Marketplace first-page snapshot:** persisted, versioned snapshot key `qs_market_snapshot_v1:home`; 30-minute snapshot age; 15-second freshness-probe cooldown.
+2. **Unchanged marketplace path:** render the stored first-page cards immediately, then query lightweight `qs_market_offers_v2` freshness metadata (exact count + latest `offer_updated_at`). If unchanged, do not download the full `qs_market_products_v2` first page again.
+3. **Changed marketplace path:** map changed offers to canonical product IDs and fetch affected cards in bounded batches. If total offer count decreases, take the conservative authoritative first-page fallback because the current aggregation view does not provide durable tombstones/change history. Do not promise perfect deletion detection for every possible same-count mutation.
+4. **Offline fallback:** if the freshness probe fails, preserve/render the valid stored marketplace snapshot; do not erase it or make network freshness failure blank the catalogue.
+5. **Storefront:** preserve its existing scoped cache + lightweight `products(id, updated_at, qty)` metadata check + bounded changed-ID fetch. Do not replace it with the marketplace implementation.
+6. **Vendor history:** `mergeVendorHistoryState(view)` preserves existing history fields (including the landing/auth screen state) while adding `qsView` and `qsVendorApp`.
+7. **Sign-out:** write `qs_show_auth_after_signout` before `supabase.auth.signOut({ scope: 'local' })`, because local `SIGNED_OUT` fires before the server revocation completes.
+8. **Product-detail refresh:** preserve the earlier coalescing guard so a products-table event does not tear down/re-route an already-open product detail.
+9. **Service worker:** `sw.js` was confirmed byte-for-byte identical to main at the reviewed checkpoint. Do not change it as part of the current preview QA or image-sizing work without new evidence.
+
+### Mandatory preview smoke test — next immediate task
+Use the exact Vercel preview above on Android/mobile and, where possible, desktop responsive view. Use a dedicated authorized test vendor/account and test products only. Do not edit a paying vendor's real inventory to manufacture events.
+
+**A. Marketplace request/freshness behavior**
+- Cold first load: verify cards, deterministic order, search/category/Stores behavior, Load More, product details and offer display.
+- Warm revisit with no data change: cached first page should appear immediately; inspect Network/Resource Timing and confirm the lightweight freshness probe occurs but the full first-page card payload does not.
+- Repeat refresh/revisit inside the 15-second probe cooldown and after it expires; record exactly which requests happen. Do not mistake browser memory cache for absence of a Supabase request.
+- Change one test-vendor offer/product while marketplace is open: verify only the affected canonical card(s) reconcile; unrelated cards remain stable.
+- Exercise deletion/out-of-stock and offer-count decrease: verify conservative full-page fallback happens where intended and no stale sellable card remains.
+- Exercise same-count edits and multiple changed IDs; ensure batching and merge order are correct.
+- Product-detail open + product update/realtime event: detail must remain open and correct; returning to listing must reveal the latest state.
+- Confirm filters, pagination and Load More are not accidentally reset or silently converted to an all-products fetch.
+
+**B. Storefront and handoff**
+- Cold storefront load; warm revisit unchanged; single product edit; add product; stock-to-zero/removal; and restore network after offline.
+- For unchanged warm revisit, confirm lightweight metadata request rather than a complete catalogue payload.
+- Marketplace → product detail → vendor storefront → Back/Keep Shopping → WhatsApp/order path.
+- Refresh after the Marketplace handoff: remain on the intended vendor storefront/current listing state; do not reopen the old originating product detail unless a direct vendor URL intentionally includes a product ID.
+- Verify product ordering, stock labels, cart quantity reconciliation, image fallbacks, dual-image swipe/lightbox and realtime updates.
+
+**C. Vendor navigation/auth regressions**
+- Vendor Home → Settings/payment/activation wall → system Back: remain inside vendor app and return to the correct vendor view; do not unexpectedly fall through to public landing.
+- Explicit sign-out: ends at visible signed-out/auth destination, not blank screen or stale vendor app.
+- Refresh after sign-out: must remain signed out and must not resurrect the app.
+- Test browser Back/Forward and cold reload separately; history behavior can differ between these paths.
+- Test slow network and repeat on Android browser/PWA if possible.
+
+**D. Offline behavior**
+- With marketplace/storefront first visited online, go offline and revisit. Confirm cached metadata/products remain usable and network failure does not wipe them.
+- Distinguish cached product metadata from cached image assets. Lazy images never requested by that browser may not exist in `qs-images-v4.0`; this is expected under opportunistic caching.
+- Do not demand that every marketplace image is offline-available unless a bounded image-prefetch policy is separately designed and measured.
+- Reconnect and confirm reconciliation occurs without duplicate refresh storms or stale state.
+
+**E. Evidence to capture**
+For each journey, record preview SHA/URL, device/browser, online/offline state, exact action sequence, request path/RPC, method/status, request initiator, count, transferred bytes/decoded bytes where available, response rows, image URL/bytes, and observed UI state. Keep API/RPC and Storage image traffic separate. Compare against main using the same test account/catalogue, viewport, network and cache state. Use browser Resource Timing/DevTools where available and correlate with Supabase logs; gateway log bytes are not automatically billing-meter bytes.
+- Pass criteria are both correctness and lower measured bytes on the unchanged warm path. A smaller request count alone is insufficient.
+- No production merge until the owner has reviewed the evidence and explicitly authorizes it.
+
+### Image resizing/layout work — approved investigation, not yet an implementation
+The user wants image display to become more standard and consistent across Marketplace and Storefront while reducing transfer bytes from serving original images at display size. Visual character should remain familiar; no dramatic redesign, quality loss, or inconsistent card geometry.
+
+Verified current facts:
+- Marketplace `search.html` has `_IMG_TRANSFORM = false`; `imgTransform()` currently returns original public Storage URLs. Marketplace card images use `loading="lazy"` and `decoding="async"`.
+- Storefront `safeImgSrc()` currently preserves the original public Storage URL; no storefront thumbnail transform is applied.
+- Upload path currently compresses originals (historical source audit: max width 1024 px, JPEG quality 0.7). Do not lower upload quality globally as a shortcut.
+- Keep `sw.js` untouched; the existing image cache is per-browser and opportunistic.
+
+Required next investigation/design:
+1. Inspect actual CSS/container dimensions and image aspect ratios for Marketplace cards, Storefront cards, product detail, and any secondary image/lightbox. Define consistent image slots/object-fit behavior without changing the overall visual identity.
+2. Measure representative source image intrinsic dimensions, encoded bytes, format, and actual rendered CSS dimensions at common Android viewport sizes. Include portrait, landscape, square, transparent/PNG if supported, high-detail and low-light examples.
+3. Derive output pixel dimensions from actual display slot dimensions × devicePixelRatio, with a defensible cap. Pixel count scales with width × height; if both dimensions are scaled by factor `s`, pixels scale by `s²`. For example, a 0.5 linear scale produces 0.25 pixel count, not 0.5; encoded byte savings are content/codec dependent and must be measured rather than assumed.
+4. Compare purpose-sized variants (card thumbnail, product detail, larger/lightbox) against original using actual encoded transfer bytes and perceptual inspection. Test multiple formats/quality levels; do not assume a fixed JPEG quality or that 0.5 is acceptable.
+5. Prefer retaining the original as the canonical vendor asset and deriving display variants. Never destructively overwrite the vendor original. Determine whether the current Supabase plan supports Storage image transformation and calculate actual cost/egress trade-offs before enabling it. If transform pricing is unavailable/uneconomic, evaluate pre-generated derivatives or another safe variant pipeline.
+6. Use responsive `srcset`/`sizes` or equivalent only when the chosen URL variants are real, stable, and supported by the current hosting/storage configuration. Ensure cache keys/versioning invalidate old variants safely.
+7. Compare bytes per viewed card and per journey, not just one image file. Lazy loading, correct slot sizing and CDN cache behavior affect aggregate savings.
+8. Preserve loading shimmer, async decoding, error/original fallback, image ordering, dual-image gestures, lightbox, accessibility/alt text, offline opportunistic cache and image freshness. Do not eagerly download every image.
+9. Add regression guards for stable image slot/aspect-ratio behavior, selected variant URL, fallback to original, no accidental eager loading, and no mutation of original uploads. Validate Android low-bandwidth behavior and actual visual quality before proposing merge.
+
+### Release decision at this checkpoint
+- PR #12 is still a **draft release candidate**, not approved for merge.
+- Automated regression checks on exact head are green; preview deployment is READY.
+- Manual smoke testing, request/byte measurements, and user acceptance are still required.
+- Main and production remain untouched. Any documentation update should remain on this PR branch. Keep image resizing as a separate measured change after PR #12's current runtime fixes are smoke-tested, unless the owner explicitly chooses a combined but isolated commit series.
+
+
+---
+
+## 2026-11-28 — PR #12 regression investigation and fixes in progress
+
+**Release boundary:** All fixes below are being made on the existing PR #12 branch, `next-release-freshness-regressions-2026-11-25`. Do not merge or deploy to production until CI and the user's Android preview retest pass. No production data, schema, storage policy, or Supabase configuration was changed.
+
+### Evidence gathered from the user's Android test and Supabase logs
+
+- Production `qs_upsert_products_and_listings_v2` calls returned repeated HTTP 400 responses between approximately 13:08 and 13:14 UTC on 2026-11-28.
+- PostgreSQL recorded the specific exception `Product id belongs to another vendor` from line 81 of `qs_upsert_products_and_listings_v2(jsonb)`. The SQL ownership guard is correct and must not be weakened.
+- Production Storage recorded an image upload to `user_images` returning HTTP 200 at 13:14:19 UTC. The product/listing RPC then failed at 13:14:25 and 13:14:42. Therefore the image binary upload can succeed while the product row that references it fails to sync.
+- Preview requests for `qs_upsert_products_and_listings_v2` returned HTTP 204 and `get_my_products` returned HTTP 200 during the later preview test. No preview Storage upload request was present in the inspected log window, so a preview image-selection/compression failure is not yet proven to be a Storage rejection.
+
+### Root causes identified
+
+1. **Storefront refresh replayed the marketplace-selected product.** Marketplace vendor links include `pid`; `catalog.js` auto-opens that product every boot. The URL retained `pid`, so refreshing the vendor storefront replayed the product-detail overlay. Fix: capture and consume `pid` once for `from=market`, using `history.replaceState` to remove only `pid`; preserve `store`, `from`, and `market_product`. Direct vendor `?pid=` links remain unchanged.
+2. **Landing/auth and vendor tab history competed for the same popstate.** `qs-init.js` handled a preserved `qsScreen` before `appss.js`, stopping the vendor listener. Also, app view restoration pushed duplicate states. Fix: while `mode-app` is active, leave popstate to `appss.js`; restore all valid vendor tabs including Home without pushing a duplicate; only seed vendor history when `qs_session_active` is true; at the authenticated history boundary, ask for sign-out confirmation and restore the current view on cancel.
+3. **Explicit sign-out marker was consumed too early.** `SIGNED_OUT` called `handleAuthLogout()`, which removed `qs_show_auth_after_signout` before the reload. Fix: only consume the marker when `options.initialLoad` is true. A shared guarded `requestSignOut()` now serves Settings and the Back boundary and labels the signed-out history entry as auth.
+4. **IndexedDB pending actions were not account-scoped.** `getAllPending()` returned every browser queue item and the worker submitted all of them using the currently logged-in user's ID. This can send an old vendor's product ID under another vendor and trigger the database's correct ownership exception. Fix: stamp new actions with their originating `userId`; filter queue reads and sync by the active user; claim legacy non-destructive actions only when their entity is present in that user's local snapshot; claim legacy delete actions only after a user-scoped RLS query confirms the row belongs to that user; leave ambiguous actions queued and report them rather than risk cross-account writes. Keep the database ownership guard intact.
+5. **Manual Sync Now pushed the queue twice.** It called `syncPendingToSupabase()` directly and then `syncCloudData()`, which pushes again. Fix: one push+pull pass over pending changes only (no full-catalog requeue), with separate push/pull success reporting. Concurrent callers now await the same in-flight sync result; an in-flight operation is never reported as a successful upload.
+6. **Image replacement failure erased the existing image preview.** Fix: retain the current image if a replacement fails; reset the second image input so the same file can be selected again; provide explicit decode/read/compression error messages instead of an opaque event string.
+
+### Files changed in PR #12
+
+- `appss.js`: authenticated history ownership, Back-boundary sign-out confirmation, sign-out marker lifecycle, one-pass manual sync, image preparation diagnostics.
+- `qs-init.js`: defer popstate ownership to the vendor app while authenticated.
+- `catalog.js`: one-time marketplace `pid` consumption.
+- `indexeddb_sync.js`: per-user queue ownership, conservative legacy claiming, coalesced in-flight sync.
+- `inventory.js`: preserve existing image when replacement upload fails; reset image picker inputs.
+- `tests/regression-guards.test.js`: guards for the regressions above.
+- `handover.md` and `regression.md`: this investigation and test requirements.
+
+### Important compatibility / release cautions
+
+- Legacy IndexedDB rows without an owner are not blindly assigned to whichever vendor logs in. Non-destructive legacy actions are claimed only when their item ID exists in the active user's local snapshot. Ambiguous or destructive legacy actions remain untouched and cause Sync Now to report an incomplete sync. This is intentional fail-closed behavior; verify the displayed count during preview retest. Do not delete or clear those rows as a workaround.
+- The Storage 200 proves at least one production image upload succeeded; it does not prove the preview image picker is fixed. Preview image selection must be retested with the same Android device and a normal JPG/PNG/WebP image. If no Storage POST appears, inspect the now-specific client-side decode/read error.
+- The SQL function `qs_upsert_products_and_listings_v2` and its ownership exception are not to be changed for this fix.
+- CI has not yet been re-verified after the latest commits. Check PR #12 head, run all workflow jobs, and inspect the exact preview deployment before requesting retest.
+
+### Required Android retest before merge
+
+1. Sign in, open Inventory, press Android Back. Expect a sign-out confirmation, not landing. Cancel; the same inventory view must remain. Navigate Home → Inventory; Back should return Home; Back again should ask to sign out.
+2. Confirm Sign Out in Settings and through the Back confirmation. Expect the login/auth screen after the reload, with the Home route still accessible. Refresh; it must remain on auth, not silently return to landing or reopen Inventory.
+3. From marketplace, open a vendor product, confirm the selected product detail opens once, refresh the vendor page, and confirm the vendor product grid appears. Verify Back to Marketplace returns to the originating product.
+4. Edit an existing product, select a replacement image, save, and confirm both image and product data persist. Repeat with the second image slot and with the same image selected twice. A failed replacement must preserve the old image.
+5. Edit a product without adding an image. Confirm background sync completes once. Press Sync Now and verify no success toast appears if any batch fails or legacy actions remain unassigned. Verify another account's queued actions are not sent as the current vendor.
+6. Confirm marketplace/storefront snapshots, incremental freshness, and offline cached rendering remain intact.
+
+**Current state:** changes are committed to the PR #12 branch; CI and browser/device validation remain outstanding. No merge or production deployment is authorized.
+
+
+### Additional hardening after the first green run (2026-11-28)
+
+- Manual Sync Now no longer re-enqueues every local product. It pushes only the current vendor's pending queue and then performs its pull. This avoids turning a no-change manual sync into a full-catalog write.
+- Pending queue sync coalesces concurrent callers and requests a follow-up pass if a new action is added while a batch is in progress. An offline push returns `ok: false`; it cannot be reported as a completed upload.
+- Cloud pull/sync calls for the same vendor now await one shared result. A different account cannot inherit that result. Offline/not-ready cloud sync returns `pullOk: false`, so the manual button cannot display success for a skipped operation.
+- Legacy delete actions can be migrated only after an RLS-scoped query confirms that the target row belongs to the currently authenticated vendor. If ownership cannot be proven, the action remains queued and the sync reports incomplete.
+- Image decoding no longer rejects a valid image solely because an Android content provider supplied a generic MIME type. The browser must successfully decode the actual bytes; failure then receives a specific error.
+
+The later commits above supersede the earlier CI statement. Re-check CI and Vercel against the final branch HEAD before asking for another Android test.
+
+
+### Verification snapshot — 2026-11-28 13:43 UTC
+
+- Runtime code commit: `07d8c6f6eab6ea4f6391b9f414685b68bc3b15b6`.
+- GitHub Actions Regression guards run #483: **51 passed, 0 failed**.
+- Vercel preview for that exact runtime commit: `dpl_GAZNP8zjfwTRq1hXVA4KQQxmu7TL`, state `READY`; page fetch returned HTTP 200.
+- Preview URL: `https://quickshopper-6fmf9nwtw-moyinks-projects-5a3815db.vercel.app`.
+- This verifies build, source guards, deployment metadata and public page reachability. It does **not** verify authenticated Android vendor workflows or actual image selection; user retest remains mandatory.
+- PR #12 remains open/draft/unmerged. No production deploy, Supabase schema/policy change, or vendor-data mutation has occurred.
+
+
+### Final sync consistency pass (2026-11-28)
+
+- `syncCloudData` now re-checks the current vendor's IndexedDB queue after the cloud pull/reconciliation. If edits arrived during the pull, it flushes them before returning the sync result. This closes the race where a manual Sync Now could await an earlier push, report success, and then show a later background upload failure for an edit queued during the pull.
+- The login recovery path now receives the initial pull result and bulk-requeues local products only when the pull succeeded, the initial pending push did not fail, and the cloud product count is exactly zero. It no longer rewrites the whole local catalog on every login.
+- Manual Sync Now also no longer requeues every local product; it uses the pending queue only.
+
+
+### User retest findings and next-release corrections (2026-11-28)
+
+The user's latest Android preview retest confirms:
+- Sign-out now lands on the auth screen; Sync Now works.
+- Marketplace to storefront handoff and refresh no longer reopen the selected detail.
+- Image selection intermittently fails with "the selected image cannot be read from this device", but succeeds on a subsequent attempt.
+- The auth Home control is visually too quiet and did not respond reliably immediately after sign-out.
+- A closed product-detail heading briefly bleeds into the storefront grid on initial scroll.
+- Vendor stock can differ from the public storefront after an edit and refresh.
+
+Code inspection established the storefront staleness window: the cached storefront skipped metadata reconciliation for 15 seconds after a recent probe. A stock edit during that window could leave the old snapshot on refresh. The server's atomic product/listing RPC updates the listing timestamp, so the public offer freshness signal is available. The correction is to probe compact product metadata on every full storefront page entry, while still fetching only changed product rows.
+
+The sync path now also patches same-origin storefront cache entries with the qs_catalog_cache_v1 prefix for the matching vendor only, and only after qs_upsert_products_and_listings_v2 succeeds. The patch replaces or removes only the affected product and its metadata, preserving all unrelated cached products. Failed RPCs do not touch the public cache. Zero-stock products are removed from the sellable snapshot.
+
+Additional UI/image corrections:
+- Image compression now prefers URL.createObjectURL(file) to avoid Android's intermittent FileReader-to-base64 read path; FileReader remains a compatibility fallback. Object URLs are revoked after decode.
+- The auth Home button now invokes the canonical landing transition directly rather than relying on a prior history entry.
+- Closed detail overlay uses hidden visibility and disabled pointer events, and becomes visible only while open, preventing its content from bleeding through the grid.
+- Product detail title typography has been strengthened; auth Home button has a clearer high-contrast surface.
+
+Important verification boundary: these are source-level corrections committed to PR #12. They do not prove that the user's specific stock edit now refreshes correctly until the latest preview is tested on Android. Do not merge or deploy production until CI, preview deployment, and the focused Android retest pass.
+
+
+### Verification — stock freshness and Android follow-up (2026-11-28)
+
+- Runtime source commit: bbfbcbbc2adf57fee8902db03b0c8f8c8ff0bfe3.
+- GitHub Actions Regression guards run #508: **56 passed, 0 failed** on the runtime source commit.
+- Vercel preview for the exact runtime commit: deployment dpl_8ViN9d74v65LxAum4UAktKjEvKpa, state READY.
+- Preview URL: https://quickshopper-2ok50grzk-moyinks-projects-5a3815db.vercel.app
+- Authenticated Android verification of the new atomic stock patch, Blob URL image path, auth Home action, and detail-overlay bleed remains outstanding.
+- PR #12 remains draft/open/unmerged. No production deployment and no Supabase schema, policy, or vendor-data mutation was performed.
+
+
+### Marketplace stale-card retest + Supabase request-log review (2026-11-28)
+
+User observed a marketplace card still visible after its last vendor listing became unavailable; tapping it showed "No vendor on QuickShop is selling this right now."
+
+#### Confirmed root cause in source
+- `reconcileMarketChangedProducts()` detected a falling active-offer count and returned `null`, with a comment claiming it would fall back to the authoritative page.
+- Neither caller performed that fallback. `loadRecent()` and `scheduleMarketRefresh()` both treated `null` as "do nothing", leaving the old first-page snapshot visible.
+- `qs_market_offers_v2` filters out `products.qty <= 0`, so removed listings have no tombstone in the delta query. A canonical detail lookup can correctly return an empty offer list while the old card remains in localStorage.
+- Corrected in PR #12: on a falling offer count, fetch only the authoritative visible first page from `qs_market_products_v2`, replace the persisted first-page snapshot and UI, and preserve the incremental path for ordinary updates.
+
+#### Request logs (production Supabase project, requests originated from PR preview)
+Window: 2026-11-28 15:23–15:34 UTC, referer filtered to the preview deployment `quickshopper-2s0uy3du6...`.
+- `qs_market_products_v2`: 5 GETs. Two identical first-page 60-row requests occurred 340 ms apart; two identical changed-ID (20 IDs) requests occurred 304 ms apart; one slug lookup. This points to duplicate initial/lifecycle and overlapping reconciliation work.
+- `qs_market_offers_v2`: 104 canonical-ID detail/prefetch GETs across 53 distinct canonical-ID queries, plus 17 watermark GETs and 10 delta GETs. 56 OPTIONS preflights were also logged for the view.
+- At least one canonical-ID lookup returned an empty JSON array (HTTP 200, content length 2, Content-Range */*), consistent with the no-vendor message.
+- The 17 watermark GETs used the same exact-count/latest-timestamp query. `writeMarketSnapshot()` did not persist `probedAt`, so the 15-second freshness cooldown was ineffective after reading the snapshot again.
+- The 104 canonical-ID queries were initiated by card `touchstart` prefetch. On Android, touchstart also occurs for scroll gestures; this was fetching vendor offers before a card was actually opened.
+- Corrected in PR #12: authoritative first-page fallback for offer-count decreases; persist `probedAt`; coalesce overlapping snapshot reconciliations; suppress initial non-BFCache `pageshow` refresh that can duplicate the initial load; remove touchstart prefetch; start offer lookup on actual click and select only fields used to render vendor choices.
+- These changes are intended to reduce unnecessary offer queries while retaining authoritative detail fetch on actual product open.
+
+#### Important storefront metadata permission failure — unresolved release blocker
+- In the same preview window, `GET /rest/v1/products?select=id,updated_at,qty&user_id=...` returned HTTP 401 four times (the broader 6-hour window showed 23 such failures).
+- Postgres logs explicitly report `permission denied for table products` for the anon role. The table has no anon SELECT grant; the RLS policy alone does not grant SQL privileges.
+- `public_catalog_products` is an existing anon-readable view with the public active-product projection, but it currently omits `updated_at`. The current storefront incremental metadata code therefore cannot work for public visitors, and the changed-row fetch against `products` is also invalid.
+- Do NOT grant anon SELECT on the base `products` table. Safe correction needs a migration to append `updated_at` to the existing `public_catalog_products` view, then switch both metadata and changed-row reads to that public view. No such migration or database change has been made yet.
+- PR #12 must not be merged until this is corrected and verified. The migration needs to be created with Supabase CLI and reviewed; production remains unchanged.
+
+#### Sync log signal
+- In the same preview window, `qs_upsert_products_and_listings_v2` had 3 POST requests returning HTTP 204, consistent with the user's report that Sync Now is now working.
+- Earlier 400/P0001 "Product id belongs to another vendor" errors were still present in the broader log window at 13:08–13:14 UTC; these predate the latest 3 successful preview upserts and should remain in the regression watch.
+- PostgREST also emitted several "Thread killed by timeout manager" system log entries around 15:23–15:30 UTC. They are not directly correlated to a specific QuickShop REST path in the available logs; do not attribute them to the new marketplace logic without further evidence.
+
+No production deployment, SQL grant, schema mutation, or vendor-data mutation was performed in this log review.
+
+
+### Verification after marketplace stale-card/request fixes (2026-11-28)
+
+- Latest app-code commit tested: `4ed6ac21df2151ff803681ff8c14aac8b38b3ca7` (the subsequent commits only updated handover/regression documentation).
+- GitHub Actions run #530: **59 tests passed, 0 failed**.
+- Exact-app-commit Vercel deployment: `dpl_EobHUowprYQihQKSJc7XCjiHdeZR`, state READY.
+- Preview URL: https://quickshopper-c8r1zkpkb-moyinks-projects-5a3815db.vercel.app
+- PR #12 remains open/draft/unmerged.
+- The storefront public metadata permission blocker remains unresolved and must be fixed with a reviewed migration before merge. No Supabase schema/grant/data changes have been made.
+
+
+
+### Public storefront freshness permission fix (2026-11-28)
+
+The user ran the reviewed SQL in the Supabase Dashboard for project `wicpvvypqpaljuexmczi`. The follow-up verification query returned:
+
+- `anon_can_read_updated_at = true`
+- `anon_has_full_table_select = false`
+- `view_exposes_updated_at = true`
+- `view_security_options = {security_invoker=true}`
+
+A direct information_schema check also confirmed that `public_catalog_products.updated_at` is `timestamp with time zone`. This confirms the intended narrow permission boundary: anonymous clients can read the freshness timestamp through the public projection without receiving table-wide SELECT on `products`.
+
+PR #12 client correction:
+- `fetchCatalogProductMeta()` now selects only `id, updated_at, qty` from `public_catalog_products`.
+- `fetchCatalogProductsByIds()` now fetches changed rows from `public_catalog_products`, retaining the 100-ID batch bound and active-stock filtering provided by the view.
+- The changed-row projection now matches the view exactly and no longer requests `created_at`, which is not exposed by the view. Changed IDs are fetched in complete sequential batches of at most 100 (not truncated after the first 100), and mapped cache rows retain `updated_at` so a Realtime update does not force a redundant changed-row read on the next revisit.
+- Public storefront bootstrap no longer falls back to the protected `products` base table if the public view fails. It returns the view error instead of issuing a predictably unauthorized request.
+- Regression guards now require both freshness paths to use the public view and prohibit `.from('products')` in the standalone storefront client.
+
+The live database change was applied manually through Dashboard SQL Editor because the user is working from a phone and cannot run the CLI. It does not yet have a corresponding committed Supabase migration file or migration-history entry. Do not fabricate or insert a migration-history row. When CLI access is available, reconcile the exact live DDL into a proper version-controlled migration and verify migration history before future schema deployments. The live SQL is the previously reviewed GRANT SELECT (updated_at) plus CREATE OR REPLACE VIEW definition; do not broaden grants.
+
+Latest client/test commits:
+- `catalog.js`: `35b9945cf9c06c4336906b29d117c3e4031cf0d7`
+- `tests/regression-guards.test.js`: `c9c0e671da5ebd6089d8adaa9c77e9b5fc5ce582`
+
+This source-level correction is not yet a release verification. Run CI and deploy a fresh preview for the latest branch head, then verify on Android that a cached storefront with no changes retains its cached payload, a single changed product fetches only that product, a zero-stock product disappears, and the view requests return successfully without any anon request to `/rest/v1/products`. Preserve the vendor IndexedDB/offline path and same-origin atomic cache patching. PR #12 remains open/draft/unmerged; no production deployment is authorized.

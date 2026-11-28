@@ -56,13 +56,13 @@ test('vendor sign-out supports the Settings button being rendered after startup'
     /const btnLogout = \$\('btnLogout'\);\s*if \(btnLogout\)\s*\{\s*btnLogout\.addEventListener/,
     'Do not bind the vendor Sign Out handler only during startup before Settings exists'
   );
-  assert.match(appSource, /const confirmed = await showConfirm\(\{[\s\S]*?title: 'Sign Out'[\s\S]*?message: 'Are you sure you want to sign out\?'/,
-    'vendor sign-out must show the confirmation modal before changing auth state');
-  assert.match(appSource, /if \(!confirmed\) return;/,
-    'canceling sign-out must leave the current session active');
-  const logoutStart = appSource.indexOf("document.addEventListener('click', async function (event)");
-  const logoutEnd = appSource.indexOf("\n    });", logoutStart);
+  const logoutStart = appSource.indexOf('async function requestSignOut()');
+  const logoutEnd = appSource.indexOf('function handleAuthLogout(options = {})', logoutStart);
   const logoutHandler = appSource.slice(logoutStart, logoutEnd);
+  assert.match(logoutHandler, /const confirmed = await showConfirm\(\{[\s\S]*?title: 'Sign Out'[\s\S]*?message: 'Are you sure you want to sign out\?'/,
+    'vendor sign-out must show the confirmation modal before changing auth state');
+  assert.match(logoutHandler, /if \(!confirmed\) return false;/,
+    'canceling sign-out must leave the current session active');
   assert.ok(logoutHandler.indexOf('await showConfirm') < logoutHandler.indexOf("supabase.auth.signOut"),
     'confirmation must happen before Supabase signOut');
   assert.match(appSource, /supabase\.auth\.signOut\(\{ scope: 'local' \}\)/);
@@ -178,10 +178,21 @@ test('marketplace detail Back pops its existing history entry and invalidates st
   const routerScript = inlineScripts.find(script => script.includes('function navigate(params, replace)'));
   assert.ok(routerScript, 'marketplace router script should be discoverable');
   const digest = crypto.createHash('sha256').update(routerScript).digest('base64');
-  assert.ok(marketHtml.includes("'sha256-" + digest + "'"),
+    assert.ok(marketHtml.includes("'sha256-" + digest + "'"),
     'CSP must allow the exact marketplace router script hash');
 });
 
+test('market freshness does not re-route an already-open product detail', () => {
+  const start = marketHtml.indexOf('function scheduleMarketRefresh(reason) {');
+  const end = marketHtml.indexOf('function wireMarketFreshness()', start);
+  const source = marketHtml.slice(start, end);
+  assert.ok(source.includes("if (getParams().has('product'))"));
+  assert.ok(source.includes("_marketRefreshDeferred = true;"));
+  assert.ok(source.indexOf("getParams().has('product')") < source.indexOf("routeFromURL();"));
+  assert.ok(source.includes('invalidateMarketCaches();'));
+  assert.ok(source.includes('clearTimeout(_marketRefreshTimer);'));
+});
+ 
 test('signup sends at most one request and does not fake OTP success for existing accounts', () => {
   assert.match(appSource, /let signupInFlight = false;/);
   assert.match(appSource, /if \(signupInFlight\) return;/);
@@ -428,8 +439,13 @@ test('landing/auth history restores screens on browser Back and Forward without 
     'Back from auth must restore the landing screen even if history state is missing');
   assert.match(qsInitSource, /event\.stopImmediatePropagation\(\)/,
     'auth/landing history must not be overridden by the vendor app tab popstate handler');
-  assert.match(qsInitSource, /window\.history\.back\(\)/,
-    'the in-app Home button should use the auth history entry rather than leaving stale history');
+  const homeStart = qsInitSource.indexOf("target.closest('#btnBackToLanding')");
+  const homeEnd = qsInitSource.indexOf('// Scroll-reveal', homeStart);
+  const homeHandler = qsInitSource.slice(homeStart, homeEnd);
+  assert.match(homeHandler, /window\.__qs_showLanding\(\)/,
+    'the auth Home button must invoke the canonical landing transition immediately');
+  assert.doesNotMatch(homeHandler, /window\.history\.back\(\)/,
+    'Home must not depend on a prior landing entry after explicit sign-out');
 });
 
 
@@ -651,10 +667,16 @@ test('Add Product creation and edit paths provide explicit success feedback', ()
 
 test('storefront freshness uses cache metadata and incremental product fetches instead of full catalogue refreshes', () => {
   assert.match(catalogSource, /CATALOG_CACHE_PREFIX = 'qs_catalog_cache_v1:'/, 'storefront cache must be versioned and scoped');
-  assert.match(catalogSource, /from\('products'\)\s*\n\s*\.select\('id, updated_at, qty'\)/,
-    'freshness check must request only lightweight product metadata');
-  assert.match(catalogSource, /\.in\('id', ids\.slice\(0, 100\)\)/,
-    'changed products must be fetched by bounded id batches');
+  assert.match(catalogSource, /async function fetchCatalogProductMeta[\s\S]*?from\('public_catalog_products'\)[\s\S]*?select\('id, updated_at, qty'\)/,
+    'anonymous freshness probes must read compact metadata from the public view');
+  assert.match(catalogSource, /async function fetchCatalogProductsByIds[\s\S]*?for \(var offset = 0; offset < ids\.length; offset \+= 100\)[\s\S]*?from\('public_catalog_products'\)[\s\S]*?\.in\('id', ids\.slice\(offset, offset \+ 100\)\)/,
+    'all changed products must be fetched from the public view in complete batches of at most 100');
+  assert.match(catalogSource, /updated_at: row\.updated_at \|\| null/,
+    'changed-row cache entries must preserve their freshness timestamp');
+  assert.doesNotMatch(catalogSource, /from\('products'\)/,
+    'public storefront bootstrap and freshness paths must never fall back to the protected products table');
+  assert.match(catalogSource, /return 'id, user_id, name, price, qty, category, image_url, image_url2, icon, description, updated_at'/,
+    'changed-row projection must match the public view and exclude unavailable columns');
   assert.match(catalogSource, /if \(!Array\.isArray\(cachedMeta\) \|\| cachedMeta\.length === 0\)/,
     'bootstrap must seed freshness metadata without downloading the catalogue twice');
   assert.match(catalogSource, /refreshCatalogIncrementally\(client, storeId, _catalogCacheInput/,
@@ -705,3 +727,226 @@ test('marketplace product-card images use native lazy loading without changing t
   assert.match(cardSource, /img\.src = imgUrl;/,
     'marketplace image fallback must still retry the original public Storage URL');
 });
+
+
+test('marketplace refresh reuses a persisted first-page snapshot and probes freshness before full payload', () => {
+  assert.match(marketHtml, /MARKET_CACHE_PREFIX = 'qs_market_snapshot_v1:'/);
+  assert.match(marketHtml, /function readMarketSnapshot()/);
+  assert.match(marketHtml, /function fetchMarketFreshness()/);
+  assert.ok(marketHtml.includes(".select('offer_updated_at', { count: 'exact' })"));
+  const recentStart = marketHtml.indexOf('async function loadRecent(append) {');
+  const recentEnd = marketHtml.indexOf('// ── LOAD MORE', recentStart);
+  const recent = marketHtml.slice(recentStart, recentEnd);
+  assert.ok(recent.indexOf('readMarketSnapshot()') >= 0);
+  assert.ok(recent.indexOf('reconcileMarketSnapshot(_snapshot)') >= 0);
+  assert.ok(recent.indexOf('var res = await sb') > recent.indexOf('readMarketSnapshot()'),
+    'a valid persisted snapshot must be considered before the full marketplace page query');
+  assert.ok(marketHtml.includes(".select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names, created_at')"));
+});
+
+test('marketplace incremental reconciliation fetches changed canonical products and protects deletions', () => {
+  assert.ok(marketHtml.includes(".select('canonical_id, offer_updated_at')"));
+  assert.ok(marketHtml.includes(".gte('offer_updated_at', previousFreshness.latestOfferUpdatedAt)"));
+  assert.ok(marketHtml.includes(".from('qs_market_products_v2')"));
+  assert.match(marketHtml, /\.in\('id', changedIds\.slice\(offset, offset \+ 100\)\)/);
+  assert.match(marketHtml, /if \(Number\(now\.offerCount\) < Number\(previousFreshness\.offerCount\)\) \{\s*return fetchAuthoritativeMarketPage\(now\)/);
+  assert.ok(marketHtml.includes('merged.slice(0, _RECENT_PAGE)'));
+});
+
+test('vendor history preserves the landing/auth screen state while adding app view state', () => {
+  assert.ok(appSource.includes('function mergeVendorHistoryState(view)'));
+  assert.ok(appSource.includes('Object.assign({}, current)'));
+  assert.match(appSource, /next.qsView = view/);
+  assert.match(appSource, /next.qsVendorApp = true/);
+  assert.ok(!appSource.includes('history.replaceState({ qsView: restoredView }'));
+  assert.ok(!appSource.includes('history.pushState({ qsView: view }'));
+  assert.ok(!appSource.includes('history.pushState({ qsView: _prevViewName'));
+});
+
+test('explicit sign-out destination survives SIGNED_OUT and is consumed only on the next initial load', () => {
+  const start = appSource.indexOf('async function requestSignOut()');
+  const end = appSource.indexOf('function handleAuthLogout(options = {})', start);
+  const signOutFlow = appSource.slice(start, end);
+  const markerAt = signOutFlow.indexOf("sessionStorage.setItem('qs_show_auth_after_signout', 'true')");
+  const signOutAt = signOutFlow.indexOf("supabase.auth.signOut({ scope: 'local' })");
+  assert.ok(markerAt >= 0, 'explicit sign-out destination marker must exist');
+  assert.ok(signOutAt >= 0, 'local Supabase sign-out must remain explicit');
+  assert.ok(markerAt < signOutAt,
+    'marker must be written before signOut because local signOut fires SIGNED_OUT before server revocation completes');
+  assert.ok(signOutFlow.includes("next.qsScreen = 'auth'"));
+  assert.ok(signOutFlow.includes('window.location.replace(window.location.pathname)'));
+
+  const logoutStart = appSource.indexOf('function handleAuthLogout(options = {})');
+  const logoutEnd = appSource.indexOf('function initOnlineOfflineHandlers', logoutStart);
+  const logoutFlow = appSource.slice(logoutStart, logoutEnd);
+  assert.match(logoutFlow, /if \(options\.initialLoad\) sessionStorage\.removeItem\('qs_show_auth_after_signout'\)/,
+    'SIGNED_OUT must not consume the marker before the reload');
+  assert.match(appSource, /document\.addEventListener\('click', async function \(event\) \{[\s\S]*?await requestSignOut\(\)/,
+    'the Settings button must use the same guarded sign-out flow');
+});
+
+test('authenticated vendor Back history is handled by appss and confirms sign-out at the boundary', () => {
+  assert.match(qsInitSource, /if \(document\.body\.classList\.contains\('mode-app'\)\) return;/,
+    'landing/auth popstate handling must not intercept authenticated vendor history');
+  assert.match(appSource, /function setActiveView\(view, resetScroll = false, fromHistory = false\)/);
+  assert.match(appSource, /if \(prevIdx !== -1 && !fromHistory\)/,
+    'restoring a popped vendor view must not push a duplicate entry');
+  assert.match(appSource, /if \(targetView && _TAB_ORDER\.includes\(targetView\)\)\s*\{\s*setActiveView\(targetView, false, true\)/,
+    'Back must restore Home as well as other vendor tabs');
+  assert.match(appSource, /if \(currentUser && document\.body\.classList\.contains\('mode-app'\)\)\s*\{[\s\S]*?requestSignOut\(\)/,
+    'Back at the authenticated app boundary must ask before signing out');
+});
+
+test('marketplace product handoff opens once and does not replay after storefront refresh', () => {
+  assert.match(catalogSource, /var MARKET_HANDOFF_PID = \(_p\.get\('pid'\) \|\| ''\)/);
+  assert.match(catalogSource, /if \(MARKET_ORIGIN && MARKET_HANDOFF_PID\)[\s\S]*?searchParams\.delete\('pid'\)/,
+    'marketplace pid must be removed from the address after its one-time handoff is captured');
+  assert.match(catalogSource, /var _pidParam = MARKET_HANDOFF_PID/);
+  assert.match(catalogSource, /var MARKET_RETURN_URL = MARKET_ORIGIN[\s\S]*?MARKET_PRODUCT/,
+    'the originating marketplace product slug must remain available for the return path');
+});
+
+test('failed image replacement preserves the existing product image and reports decode errors clearly', () => {
+  const imageHandlerStart = inventorySource.indexOf('function initImageUploadHandler()');
+  const imageHandlerEnd = inventorySource.indexOf('// ADD / EDIT FORM', imageHandlerStart);
+  const imageHandler = inventorySource.slice(imageHandlerStart, imageHandlerEnd);
+  assert.match(imageHandler, /failed replacement must not erase the image already attached/);
+  assert.doesNotMatch(imageHandler, /else \{ if \(slot === 'img1'\) clearInvImage\(\)/);
+  assert.match(imageHandler, /img2Input\.value = ''/,
+    'the second image input must allow selecting the same file again');
+  assert.match(appSource, /The selected image could not be opened/);
+  assert.match(appSource, /The selected image could not be read from this device/);
+  assert.match(appSource, /Prefer a Blob URL/);
+  assert.doesNotMatch(appSource, /file\.type && !\/\^image/,
+    'valid Android image bytes must not be rejected only because the provider reports a generic MIME type');
+  assert.doesNotMatch(appSource, /file\.type && !\/\^image/);
+  assert.match(inventorySource, /The image could not be prepared or uploaded/);
+});
+
+test('offline sync actions are vendor-scoped and concurrent callers share the real result', () => {
+  const idbSource = fs.readFileSync(path.join(root, 'indexeddb_sync.js'), 'utf8');
+  assert.match(idbSource, /storedAction\.userId = ownerId/);
+  assert.match(idbSource, /getAllPending: async function \(userId\)/);
+  assert.match(idbSource, /action\.userId === userId/);
+  assert.match(idbSource, /function legacyActionMatchesCurrentState/);
+  assert.match(idbSource, /claimPendingForUser: async function \(id, userId\)/);
+  assert.match(idbSource, /async function claimLegacyDeleteActions\(legacyActions, supabase, userId\)/);
+  assert.match(idbSource, /\.eq\('user_id', userId\)\.in\('id', ids\)/,
+    'legacy delete actions may be claimed only after a user-scoped ownership query');
+  assert.match(idbSource, /failedBatches\.push\('unassigned-pending'\)/);
+  assert.match(idbSource, /var syncInFlightPromise = null/);
+  assert.match(idbSource, /return syncInFlightPromise/);
+  assert.match(idbSource, /syncAgainRequested = true/);
+  assert.match(idbSource, /while \(syncAgainRequested && navigator\.onLine\)/,
+    'edits added during an active push must be picked up by a follow-up pass');
+  assert.match(idbSource, /ok: false, skipped: true, reason: 'offline'/,
+    'offline must never be reported as a successful upload');
+  assert.doesNotMatch(idbSource, /return \{ ok: true, skipped: true, reason: 'already-syncing' \}/,
+    'an in-flight sync must never be reported as a successful upload');
+
+  assert.match(appSource, /async function syncCloudData\(user, options = \{\}\)[\s\S]*?if \(syncCloudInFlightPromise\)[\s\S]*?return syncCloudInFlightPromise/);
+  assert.match(appSource, /ok: false, pullOk: false, skipped: true, reason,[\s\S]*?Offline — changes remain queued/);
+  assert.doesNotMatch(appSource, /return \{ ok: true, skipped: true, reason: !navigator\.onLine/);
+
+  assert.match(appSource, /getAllPending\(user\.id\)/);
+  assert.match(appSource, /const initialSyncResult = await syncCloudData\(user, \{ force: true \}\)/);
+  assert.match(appSource, /initialSyncResult\.cloudProductCount === 0/,
+    'login recovery may bulk-queue local products only after a successful pull confirms an empty cloud catalog');
+  assert.match(appSource, /cloudProductCount: cloudProductCount/);
+  const cloudSyncStart = appSource.indexOf('async function syncCloudDataInternal');
+  const cloudSyncEnd = appSource.indexOf('§5  AUTH', cloudSyncStart);
+  const cloudSync = appSource.slice(cloudSyncStart, cloudSyncEnd);
+  assert.match(cloudSync, /const queuedAfterPull = await window\.qsdb\.getAllPending\(user\.id\)/);
+  assert.match(cloudSync, /if \(queuedAfterPull && queuedAfterPull\.length > 0\)/);
+  assert.match(cloudSync, /pendingResult = await window\.qsdb\.syncPendingToSupabase\(\)/,
+    'edits queued during the cloud pull must be flushed before sync completion is reported');
+  const syncNowStart = appSource.indexOf('const btnSyncNow');
+  const syncNowEnd = appSource.indexOf('const btnLoadDemo', syncNowStart);
+  const syncNow = appSource.slice(syncNowStart, syncNowEnd);
+  assert.match(syncNow, /syncCloudData\(currentUser, \{ force: true \}\)/);
+  assert.doesNotMatch(syncNow, /syncPendingToSupabase\(\)/,
+    'manual Sync Now must not push the same queue twice');
+  assert.doesNotMatch(syncNow, /for \(const p of state\.products\)/,
+    'manual Sync Now must not re-enqueue the entire catalog when no product changed');
+});
+
+
+test('confirmed product upserts atomically patch only the matching vendor storefront snapshots', () => {
+  const idbSource = fs.readFileSync(path.join(root, 'indexeddb_sync.js'), 'utf8');
+  assert.match(idbSource, /function patchCatalogSnapshotsForVendor\(userId, rows\)/);
+  assert.match(idbSource, /String\(snapshot\.storeId \|\| ''\) !== String\(userId\)/);
+  assert.match(idbSource, /snapshot\.products = products/);
+  assert.match(idbSource, /snapshot\.meta = meta/);
+  assert.match(idbSource, /localStorage\.setItem\(key, JSON\.stringify\(snapshot\)\)/);
+  const upsertStart = idbSource.indexOf("var r1 = await supabase.rpc('qs_upsert_products_and_listings_v2'");
+  const upsertEnd = idbSource.indexOf('// ── Product deletes', upsertStart);
+  const upsert = idbSource.slice(upsertStart, upsertEnd);
+  assert.ok(upsert.indexOf('if (r1.error)') < upsert.indexOf('patchCatalogSnapshotsForVendor(userId, productUpsertRows)'));
+  assert.match(upsert, /else\s*\{[\s\S]*?patchCatalogSnapshotsForVendor\(userId, productUpsertRows\)/);
+  assert.match(idbSource, /Number\(row\.qty \|\| 0\) > 0/);
+});
+
+test('storefront page entry always checks compact freshness metadata without a full catalogue refetch', () => {
+  assert.doesNotMatch(catalogSource, /CATALOG_FRESHNESS_TTL/);
+  const initStart = catalogSource.indexOf('async function initCatalog()');
+  const initEnd = catalogSource.indexOf('/* ── 18.', initStart);
+  const init = catalogSource.slice(initStart, initEnd);
+  assert.match(init, /refreshCatalogIncrementally\(client, storeId, _catalogCacheInput,/);
+  assert.match(catalogSource, /\.select\('id, updated_at, qty'\)/);
+  assert.match(catalogSource, /fetchCatalogProductsByIds\(client, storeId, changedIds\)/);
+  assert.match(catalogSource, /from\('public_catalog_products'\)/,
+    'freshness requests must use the active-stock public view');
+  assert.doesNotMatch(catalogSource, /from\('products'\)/,
+    'anonymous storefront requests must not target the protected base table');
+});
+
+test('closed storefront detail overlay cannot bleed through the product grid during scroll', () => {
+  assert.match(catalogSource, /#cat-detail\{[\s\S]*?visibility:hidden;pointer-events:none/);
+  assert.match(catalogSource, /#cat-detail\.open\{[\s\S]*?visibility:visible;pointer-events:auto/);
+  assert.match(catalogSource, /#cat-detail-name\{font-size:24px;font-weight:900;color:#fff/);
+});
+
+test('auth Home control is prominent and navigates without depending on browser Back history', () => {
+  const homeStart = qsInitSource.indexOf("target.closest('#btnBackToLanding')");
+  const homeEnd = qsInitSource.indexOf('// Scroll-reveal', homeStart);
+  const handler = qsInitSource.slice(homeStart, homeEnd);
+  assert.match(handler, /window\.__qs_showLanding\(\)/);
+  assert.doesNotMatch(handler, /window\.history\.back\(\)/);
+  assert.match(styleSource, /#btnBackToLanding\s*\{[\s\S]*?min-height: 44px/);
+  assert.match(styleSource, /#btnBackToLanding\s*\{[\s\S]*?linear-gradient/);
+});
+
+test('Android image preparation prefers Blob URLs over FileReader data URLs', () => {
+  const start = appSource.indexOf('function compressImage(file, maxWidth = 1024, quality = 0.7)');
+  const end = appSource.indexOf('const getSupabase', start);
+  const source = appSource.slice(start, end);
+  assert.match(source, /URL\.createObjectURL\(file\)/);
+  assert.match(source, /URL\.revokeObjectURL\(objectUrl\)/);
+  assert.ok(source.indexOf('URL.createObjectURL(file)') < source.indexOf('new FileReader()'));
+});
+
+
+test('marketplace removes stale cards through an authoritative first-page fallback when active offers disappear', () => {
+  const start = marketHtml.indexOf('async function reconcileMarketChangedProducts');
+  const end = marketHtml.indexOf('async function reconcileMarketSnapshotInternal', start);
+  const reconcile = marketHtml.slice(start, end);
+  assert.match(reconcile, /Number\(now\.offerCount\) < Number\(previousFreshness\.offerCount\)[\s\S]*?return fetchAuthoritativeMarketPage\(now\)/);
+  assert.match(marketHtml, /async function fetchAuthoritativeMarketPage\(freshness\)[\s\S]*?from\('qs_market_products_v2'\)[\s\S]*?\.range\(0, _RECENT_PAGE - 1\)/);
+  assert.match(marketHtml, /writeMarketSnapshot\(items, currentFreshness, Date\.now\(\)\)/);
+});
+
+test('marketplace freshness probe cooldown is persisted and overlapping reconciliations are coalesced', () => {
+  assert.match(marketHtml, /probedAt: Number\(probedAt \|\| now\)/);
+  assert.match(marketHtml, /var _marketReconcilePromise = null/);
+  assert.match(marketHtml, /_marketReconcilePromise = reconcileMarketSnapshotInternal\(snapshot\)[\s\S]*?finally\(function \(\) \{ _marketReconcilePromise = null; \}\)/);
+  assert.match(marketHtml, /_lastLifecycleRefresh = Date\.now\(\)/);
+  assert.match(marketHtml, /_marketInitialPageShowHandled/);
+});
+
+test('marketplace offer details are fetched only after a product card is opened, not on scroll touchstart', () => {
+  assert.doesNotMatch(marketHtml, /addEventListener\('touchstart', function \(\) \{ _prefetchProduct\(item\);/);
+  assert.match(marketHtml, /card\.addEventListener\('click', open\)/);
+  assert.match(marketHtml, /\.select\('product_id, vendor_id, storefront_name, storefront_tagline, storefront_avatar_url, price'\)/);
+  assert.match(marketHtml, /_prefetchProduct\(item\);\s*\/\/ only after an actual product-card open/);
+});
+

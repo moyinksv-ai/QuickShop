@@ -5,7 +5,9 @@
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self'
-               'sha256-9oBNijSD1A5QhI7GFdbMumzXId6CCXq8lEcoCTNl23g='
+               'sha256-1ngHhG+jtkjNZ1OhhOBZyMOLJ2PqeAvmI5sT5FjKmXk='
+               'sha256-ZMH39scBQgqlOcbd1loWWCDDRGICWxqbRdwWgbOjyDk='
+               'sha256-GvFVnSx48r4lL+E0rYe+Ubj4XORrs5LnqPhRWXNde4k='
                https://cdn.jsdelivr.net;
     connect-src 'self'
                 https://*.supabase.co
@@ -913,17 +915,17 @@
       '</div>';
   }
 
-  // ── Batch-fetch listing stats ─────────────────────────────────────────────
-  // ── Prefetch vendor listings on touchstart ────────────────────────────────
-  // Starts the qs_vendor_listings fetch ~100-200ms before the tap registers.
-  // On most Nigerian 4G connections the data arrives before openProduct runs,
-  // eliminating the loading state entirely.  The same Promise is reused if
-  // the user taps after touchstart — never fetches twice for the same item.
+  // ── Fetch vendor offers on actual product open ──────────────────────────
+  // Keep one in-flight/resolved request per canonical product while the detail
+  // is open. Do not prefetch on touchstart: scroll gestures must not trigger
+  // offer queries for cards the shopper never opens.
   function _prefetchProduct(item) {
     if (!sb || _prefetchCache.has(item.id)) return;
     var p = new Promise(function (resolve, reject) {
       sb.from('qs_market_offers_v2')
-        .select('canonical_id, product_id, vendor_id, storefront_name, storefront_slug, storefront_avatar_url, storefront_location, storefront_tagline, delivery_available, product_name, price, qty, category, image_url, image_url2, description, offer_updated_at')
+        // Only fields used to render vendor choices and construct the store URL.
+        // The canonical product card already supplies the product's own details.
+        .select('product_id, vendor_id, storefront_name, storefront_tagline, storefront_avatar_url, price')
         .eq('canonical_id', item.id)
         .order('price', { ascending: true })
         .then(resolve, reject);
@@ -1030,7 +1032,8 @@
     card.appendChild(body);
 
     function open() { openProduct(item); }
-    card.addEventListener('touchstart', function () { _prefetchProduct(item); }, { passive: true });
+    // Do not prefetch on touchstart: Android fires touchstart for scroll gestures
+    // as well as taps. Start the offer request only after the user opens the card.
     card.addEventListener('click', open);
     card.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
@@ -1596,7 +1599,7 @@
     showState('detail');   // animate in immediately — no spinner shown
 
     // ── Async: fetch precise vendor data ─────────────────────────────────
-    _prefetchProduct(item);   // no-op if already warmed by touchstart
+    _prefetchProduct(item);   // only after an actual product-card open
 
     try {
       var listRes = await _prefetchCache.get(item.id);
@@ -1666,7 +1669,7 @@
     showState('loading'); loadingLabel.textContent = 'Loading…';
     try {
       var res = await sb.from('qs_market_products_v2')
-        .select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names')
+        .select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names, created_at')
         .eq('slug', slug).single();
       if (res.error || !res.data) { showState('main'); return; }
       await openProduct(res.data);
@@ -1723,6 +1726,148 @@
       .concat(shuffle(buckets[0]));
   }
 
+  // ── PERSISTED MARKETPLACE SNAPSHOT / FRESHNESS ─────────────────────────────
+  // First-page cards are persisted locally. A lightweight offer watermark
+  // check decides whether card data must be reconciled after refresh/resume.
+  var MARKET_CACHE_PREFIX = 'qs_market_snapshot_v1:';
+  var MARKET_CACHE_MAX_AGE = 30 * 60 * 1000;
+  var MARKET_FRESHNESS_TTL = 15000;
+
+  function marketCacheKey() { return MARKET_CACHE_PREFIX + 'home'; }
+
+  function readMarketSnapshot() {
+    try {
+      var raw = localStorage.getItem(marketCacheKey());
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.items) ||
+          !parsed.savedAt || Date.now() - Number(parsed.savedAt) > MARKET_CACHE_MAX_AGE) return null;
+      return parsed;
+    } catch (_) { return null; }
+  }
+
+  function writeMarketSnapshot(items, freshness, probedAt) {
+    try {
+      var now = Date.now();
+      localStorage.setItem(marketCacheKey(), JSON.stringify({
+        version: 1,
+        savedAt: now,
+        probedAt: Number(probedAt || now),
+        items: Array.isArray(items) ? items : [],
+        freshness: freshness || null
+      }));
+    } catch (_) {}
+  }
+
+  function marketFreshnessEqual(a, b) {
+    return !!a && !!b && Number(a.offerCount || 0) === Number(b.offerCount || 0) &&
+      String(a.latestOfferUpdatedAt || '') === String(b.latestOfferUpdatedAt || '');
+  }
+
+  async function fetchMarketFreshness() {
+    // qs_market_products_v2 is an aggregation of vendor offers. Count + newest
+    // offer timestamp is deliberately much smaller than the first-page cards.
+    var result = await sb.from('qs_market_offers_v2')
+      .select('offer_updated_at', { count: 'exact' })
+      .order('offer_updated_at', { ascending: false, nullsFirst: false })
+      .limit(1);
+    if (result.error) throw result.error;
+    return {
+      offerCount: Number(result.count || 0),
+      latestOfferUpdatedAt: result.data && result.data[0] ? result.data[0].offer_updated_at : null
+    };
+  }
+
+  async function fetchAuthoritativeMarketPage(freshness) {
+    // Deletions have no tombstone in qs_market_offers_v2. When the offer count
+    // falls, rebuild only the visible first page from the authoritative aggregate
+    // view so cached cards with no remaining sellers are removed.
+    var result = await sb.from('qs_market_products_v2')
+      .select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names, created_at')
+      .order('created_at', { ascending: false })
+      .range(0, _RECENT_PAGE - 1);
+    if (result.error) throw result.error;
+    var items = weightedShuffle(result.data || []);
+    var currentFreshness = freshness || await fetchMarketFreshness();
+    writeMarketSnapshot(items, currentFreshness, Date.now());
+    return { items: items, freshness: currentFreshness, changed: true, authoritative: true };
+  }
+
+  async function reconcileMarketChangedProducts(previousFreshness, cachedItems, currentFreshness) {
+    if (!previousFreshness || !previousFreshness.latestOfferUpdatedAt) {
+      return fetchAuthoritativeMarketPage(currentFreshness);
+    }
+
+    var changed = await sb.from('qs_market_offers_v2')
+      .select('canonical_id, offer_updated_at')
+      .gte('offer_updated_at', previousFreshness.latestOfferUpdatedAt)
+      .order('offer_updated_at', { ascending: true });
+    if (changed.error) throw changed.error;
+
+    var ids = {};
+    (changed.data || []).forEach(function (row) {
+      if (row && row.canonical_id) ids[String(row.canonical_id)] = true;
+    });
+    var changedIds = Object.keys(ids);
+
+    // A falling offer count can mean one or more listings disappeared. The
+    // public offers view has no tombstone for removed rows, so an ID delta alone
+    // cannot identify the deleted canonical product. Rebuild the visible page.
+    var now = currentFreshness || await fetchMarketFreshness();
+    if (Number(now.offerCount) < Number(previousFreshness.offerCount)) {
+      return fetchAuthoritativeMarketPage(now);
+    }
+    if (changedIds.length > 1000) return fetchAuthoritativeMarketPage(now);
+    if (!changedIds.length) return { items: cachedItems, freshness: now, changed: false };
+
+    var map = {};
+    (cachedItems || []).forEach(function (item) { if (item && item.id) map[String(item.id)] = item; });
+    for (var offset = 0; offset < changedIds.length; offset += 100) {
+      var cards = await sb.from('qs_market_products_v2')
+        .select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names, created_at')
+        .in('id', changedIds.slice(offset, offset + 100));
+      if (cards.error) throw cards.error;
+      (cards.data || []).forEach(function (item) { if (item && item.id) map[String(item.id)] = item; });
+    }
+
+    var merged = Object.keys(map).map(function (id) { return map[id]; });
+    merged.sort(function (a, b) {
+      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+    });
+    return { items: merged.slice(0, _RECENT_PAGE), freshness: now, changed: true };
+  }
+
+  var _marketReconcilePromise = null;
+
+  async function reconcileMarketSnapshotInternal(snapshot) {
+    if (!snapshot || !Array.isArray(snapshot.items)) return null;
+    if (snapshot.freshness && Date.now() - Number(snapshot.probedAt || 0) < MARKET_FRESHNESS_TTL) {
+      return { items: snapshot.items, freshness: snapshot.freshness, changed: false };
+    }
+    var freshness = await fetchMarketFreshness();
+    if (marketFreshnessEqual(snapshot.freshness, freshness)) {
+      var probedAt = Date.now();
+      snapshot.probedAt = probedAt;
+      writeMarketSnapshot(snapshot.items, freshness, probedAt);
+      return { items: snapshot.items, freshness: freshness, changed: false };
+    }
+    var patched = await reconcileMarketChangedProducts(snapshot.freshness, snapshot.items, freshness);
+    if (patched) {
+      writeMarketSnapshot(patched.items, patched.freshness, Date.now());
+      return patched;
+    }
+    return fetchAuthoritativeMarketPage(freshness);
+  }
+
+  function reconcileMarketSnapshot(snapshot) {
+    // Lifecycle events can overlap while the first metadata probe is in flight.
+    // Share one reconciliation promise so they cannot duplicate the same reads.
+    if (_marketReconcilePromise) return _marketReconcilePromise;
+    _marketReconcilePromise = reconcileMarketSnapshotInternal(snapshot)
+      .finally(function () { _marketReconcilePromise = null; });
+    return _marketReconcilePromise;
+  }
+
   // ── LOAD RECENT PRODUCTS ──────────────────────────────────────────────────
   async function loadRecent(append) {
     if (!sb) return;
@@ -1731,27 +1876,43 @@
       var from = _recentOffset;
       var to   = from + _RECENT_PAGE - 1;
 
-      // In-session memo: first page only (append loads bypass cache)
+      // In-session memo: first page only (append loads bypass cache).
       if (!append) {
         var _memoHome = _memo.get('home');
         if (_memoHome) {
           productsGrid.innerHTML = '';
           _memoHome.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
           _recentOffset = _memoHome.length;
-          if (_memoHome.length < _RECENT_PAGE) {
-            loadMoreBtn.hidden = true;
-          } else {
-            loadMoreBtn.textContent = 'Load more products';
-            loadMoreBtn.hidden    = false;
-            loadMoreBtn.disabled  = false;
-          }
+          loadMoreBtn.hidden = _memoHome.length < _RECENT_PAGE;
+          if (!loadMoreBtn.hidden) { loadMoreBtn.textContent = 'Load more products'; loadMoreBtn.disabled = false; }
+          return;
+        }
+
+        var _snapshot = readMarketSnapshot();
+        if (_snapshot) {
+          var _cachedItems = weightedShuffle(_snapshot.items.slice());
+          productsGrid.innerHTML = '';
+          _cachedItems.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
+          _recentOffset = _cachedItems.length;
+          loadMoreBtn.hidden = _cachedItems.length < _RECENT_PAGE;
+          if (!loadMoreBtn.hidden) { loadMoreBtn.textContent = 'Load more products'; loadMoreBtn.disabled = false; }
+
+          reconcileMarketSnapshot(_snapshot).then(function (result) {
+            if (!result || !result.changed || seq !== _navSeq) return;
+            productsGrid.innerHTML = '';
+            _memo.set('home', result.items);
+            result.items.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
+            _recentOffset = result.items.length;
+            loadMoreBtn.hidden = result.items.length < _RECENT_PAGE;
+            if (!loadMoreBtn.hidden) { loadMoreBtn.textContent = 'Load more products'; loadMoreBtn.disabled = false; }
+          }).catch(function (e) { if (!IS_PROD) console.warn('[market freshness]', e); });
           return;
         }
       }
 
       var res = await sb
         .from('qs_market_products_v2')
-        .select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names')
+        .select('id, display_name, slug, category, image_url, vendor_count, min_price, storefront_names, created_at')
         .order('created_at', { ascending: false })
         .range(from, to);
 
@@ -1774,6 +1935,7 @@
       if (!append) {
         productsGrid.innerHTML = '';
         _memo.set('home', ordered);
+        try { writeMarketSnapshot(ordered, await fetchMarketFreshness(), Date.now()); } catch (_) {}
       }
       if (append) productsGrid.querySelectorAll('.lm-skel').forEach(function (el) { el.remove(); });
       ordered.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
@@ -1910,6 +2072,10 @@
   var _marketLiveChannel = null;
   var _marketRefreshTimer = null;
   var _lastLifecycleRefresh = 0;
+  // A product-detail route is already doing its own authoritative product/offer
+  // reads. A products-table event must not tear it down and refetch the detail;
+  // the next listing navigation will fetch fresh data naturally.
+  var _marketRefreshDeferred = false;
 
   function invalidateMarketCaches() {
     _memo.clear();
@@ -1922,16 +2088,38 @@
     if (!sb || !navigator.onLine || document.hidden) return;
     clearTimeout(_marketRefreshTimer);
     _marketRefreshTimer = setTimeout(function () {
+      if (getParams().has('product')) {
+        _marketRefreshDeferred = true;
+        return;
+      }
+      _marketRefreshDeferred = false;
+      var params = getParams();
+      if (!params.has('product') && !params.has('q') && !params.has('cat') && params.get('view') !== 'stores') {
+        var snapshot = readMarketSnapshot();
+        if (snapshot) {
+          reconcileMarketSnapshot(snapshot).then(function (result) {
+            if (!result || !result.changed) return;
+            productsGrid.innerHTML = '';
+            _memo.set('home', result.items);
+            result.items.forEach(function (item) { productsGrid.appendChild(renderProductCard(item)); });
+            _recentOffset = result.items.length;
+          }).catch(function () { routeFromURL(); });
+          return;
+        }
+      }
       var restoreTab = _activeTab;
       routeFromURL();
-      if (restoreTab === 'stores') {
-        setTimeout(function () { switchTab('stores'); }, 0);
-      }
+      if (restoreTab === 'stores') setTimeout(function () { switchTab('stores'); }, 0);
     }, 220);
   }
 
+  var _marketInitialPageShowHandled = false;
+
   function wireMarketFreshness() {
     if (!sb || _marketLiveChannel) return;
+    // routeFromURL() has already started the initial load. Suppress initial
+    // lifecycle noise so pageshow/visibility cannot start a duplicate request.
+    _lastLifecycleRefresh = Date.now();
 
     _marketLiveChannel = sb
       .channel('qs-market-products-live-v2')
@@ -1946,6 +2134,10 @@
     });
 
     window.addEventListener('pageshow', function (event) {
+      if (!_marketInitialPageShowHandled) {
+        _marketInitialPageShowHandled = true;
+        if (!event.persisted) return;
+      }
       var now = Date.now();
       if (event.persisted || now - _lastLifecycleRefresh > 5000) {
         _lastLifecycleRefresh = now;

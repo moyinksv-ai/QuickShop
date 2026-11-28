@@ -178,18 +178,120 @@
     };
   }
 
+  function getQueueOwnerId() {
+    try {
+      var app = window.__QS_APP;
+      var user = app && typeof app.getUser === 'function' ? app.getUser() : null;
+      if (user && user.id) return String(user.id);
+    } catch (_) {}
+    try {
+      var lastUserId = localStorage.getItem('qs_last_user_id');
+      if (lastUserId) return String(lastUserId);
+    } catch (_) {}
+    try {
+      var cached = JSON.parse(localStorage.getItem('qs_user_cache') || 'null');
+      if (cached && cached.id) return String(cached.id);
+    } catch (_) {}
+    return null;
+  }
+
+  // Old queue rows have no owner. Claim non-destructive actions only when their
+  // entity is present in this account's local snapshot. Delete actions use a
+  // separate user-scoped RLS ownership query before they may be claimed.
+  function legacyActionMatchesCurrentState(action, localState) {
+    if (!action || !action.item || !localState) return false;
+    var item = action.item;
+    function contains(rows, id) {
+      return Array.isArray(rows) && id != null &&
+        rows.some(function (row) { return row && String(row.id) === String(id); });
+    }
+    switch (action.type) {
+      case 'addProduct':
+      case 'updateProduct':
+        return contains(localState.products, item.id);
+      case 'addStock':
+        return contains(localState.products, item.productId);
+      case 'addSale':
+        return contains(localState.sales, item.id);
+      case 'addNote':
+      case 'updateNote':
+        return contains(localState.notes, item.id);
+      default:
+        return false;
+    }
+  }
+
+  async function claimLegacyDeleteActions(legacyActions, supabase, userId) {
+    var groups = [
+      { type: 'removeProduct', table: 'products' },
+      { type: 'removeSale', table: 'sales' },
+      { type: 'removeNote', table: 'notes' }
+    ];
+    var claimed = [];
+    for (var gi = 0; gi < groups.length; gi++) {
+      var group = groups[gi];
+      var candidates = legacyActions.filter(function (action) {
+        return action && !action.userId && action.type === group.type &&
+          action.item && action.item.id != null;
+      });
+      if (!candidates.length) continue;
+      var ids = Array.from(new Set(candidates.map(function (action) {
+        return String(action.item.id);
+      })));
+      try {
+        // RLS + explicit user_id filter prove ownership without exposing another
+        // vendor's row. Only existing rows owned by this user may be claimed.
+        var ownedResult = await supabase.from(group.table).select('id')
+          .eq('user_id', userId).in('id', ids);
+        if (ownedResult.error) {
+          warn('Legacy ' + group.type + ' ownership check failed:', ownedResult.error);
+          continue;
+        }
+        var ownedIds = new Set((ownedResult.data || []).map(function (row) {
+          return String(row.id);
+        }));
+        for (var ci = 0; ci < candidates.length; ci++) {
+          var candidate = candidates[ci];
+          if (!ownedIds.has(String(candidate.item.id))) continue;
+          try {
+            if (await window.qsdb.claimPendingForUser(candidate.id, userId)) {
+              candidate.userId = userId;
+              claimed.push(candidate);
+            }
+          } catch (claimError) {
+            warn('Could not assign legacy delete action id=' + candidate.id + ':', claimError);
+          }
+        }
+      } catch (ownershipError) {
+        warn('Legacy ' + group.type + ' ownership check threw:', ownershipError);
+      }
+    }
+    return claimed;
+  }
+
   // ── Public API ───────────────────────────────────────────────────────
   var qsdb = {
 
     addPendingChange: async function (action) {
       var err = validateAction(action);
       if (err) { warn('addPendingChange rejected:', err); return null; }
+      // Bind every new offline action to the account that created it. The queue
+      // survives sign-out, but another vendor must never inherit its writes.
+      var storedAction = Object.assign({}, action);
+      var ownerId = getQueueOwnerId();
+      if (ownerId) storedAction.userId = ownerId;
       var db = await getDb();
       return new Promise(function (resolve, reject) {
         var tx = db.transaction([STORE_NAME], 'readwrite');
         var store = tx.objectStore(STORE_NAME);
-        var req = store.add(action);
-        req.onsuccess = function () { resolve(req.result); };
+        var req = store.add(storedAction);
+        req.onsuccess = function () {
+          // If a vendor edits while a push is already running, the active batch
+          // may have taken its snapshot before this row existed. Request one more
+          // pass after that batch settles so the new action is not stranded.
+          if (isSyncing) syncAgainRequested = true;
+          resolve(req.result);
+        };
         req.onerror   = function (ev) {
           console.error('[qsdb] addPendingChange failed:', ev.target.error);
           reject(ev.target.error);
@@ -200,17 +302,39 @@
       });
     },
 
-    getAllPending: async function () {
+    getAllPending: async function (userId) {
       var db = await getDb();
       return new Promise(function (resolve, reject) {
         var tx = db.transaction([STORE_NAME], 'readonly');
         var store = tx.objectStore(STORE_NAME);
         var req = store.getAll();
-        req.onsuccess = function () { resolve(req.result); };
+        req.onsuccess = function () {
+          var rows = req.result || [];
+          resolve(userId ? rows.filter(function (action) { return action && action.userId === userId; }) : rows);
+        };
         req.onerror   = function (ev) {
           console.error('[qsdb] getAllPending failed:', ev.target.error);
           reject(ev.target.error);
         };
+      });
+    },
+
+    claimPendingForUser: async function (id, userId) {
+      if (!userId) return false;
+      var db = await getDb();
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction([STORE_NAME], 'readwrite');
+        var store = tx.objectStore(STORE_NAME);
+        var req = store.get(id);
+        req.onsuccess = function () {
+          var action = req.result;
+          if (!action || action.userId) { resolve(false); return; }
+          action.userId = userId;
+          var put = store.put(action);
+          put.onsuccess = function () { resolve(true); };
+          put.onerror = function (ev) { reject(ev.target.error); };
+        };
+        req.onerror = function (ev) { reject(ev.target.error); };
       });
     },
 
@@ -230,11 +354,97 @@
 
   };
 
-  // ── syncPendingToSupabase (BATCHED) ──────────────────────────────────
-  async function syncPendingToSupabase() {
+  // Coalesce manual and automatic callers onto the same in-flight push. A caller
+  // must never interpret "another sync is running" as a successful upload.
+  var syncInFlightPromise = null;
+  var syncAgainRequested = false;
 
-    if (isSyncing) { log('Sync in progress — skipping.'); return { ok: true, skipped: true, reason: 'already-syncing' }; }
-    if (!navigator.onLine) { log('Offline — skipping sync.'); return { ok: true, skipped: true, reason: 'offline' }; }
+  async function syncPendingToSupabase() {
+    if (syncInFlightPromise) {
+      log('Sync already running — awaiting the active result.');
+      return syncInFlightPromise;
+    }
+    syncInFlightPromise = (async function () {
+      var result;
+      do {
+        syncAgainRequested = false;
+        result = await syncPendingToSupabaseInternal();
+      } while (syncAgainRequested && navigator.onLine);
+      return result;
+    })();
+    try {
+      return await syncInFlightPromise;
+    } finally {
+      syncInFlightPromise = null;
+      syncAgainRequested = false;
+    }
+  }
+
+  // Patch same-origin public storefront snapshots only after the atomic
+  // products + vendor-listings RPC succeeds. localStorage.setItem replaces each
+  // snapshot atomically; no unrelated products or cache entries are rewritten.
+  function patchCatalogSnapshotsForVendor(userId, rows) {
+    if (!userId || !Array.isArray(rows) || !rows.length) return;
+    var prefix = 'qs_catalog_cache_v1:';
+    try {
+      var keys = [];
+      for (var ki = 0; ki < localStorage.length; ki++) {
+        var key = localStorage.key(ki);
+        if (key && key.indexOf(prefix) === 0) keys.push(key);
+      }
+      keys.forEach(function (key) {
+        try {
+          var snapshot = JSON.parse(localStorage.getItem(key) || 'null');
+          if (!snapshot || snapshot.version !== 1 ||
+              String(snapshot.storeId || '') !== String(userId) ||
+              !Array.isArray(snapshot.products) || !Array.isArray(snapshot.meta)) return;
+          var products = snapshot.products.slice();
+          var meta = snapshot.meta.slice();
+          var changed = false;
+          rows.forEach(function (row) {
+            if (!row || !row.id) return;
+            var id = String(row.id);
+            var productIndex = products.findIndex(function (p) { return p && String(p.id) === id; });
+            var metaIndex = meta.findIndex(function (m) { return m && String(m.id) === id; });
+            var inStock = Number(row.qty || 0) > 0;
+            if (!inStock) {
+              if (productIndex !== -1) { products.splice(productIndex, 1); changed = true; }
+              if (metaIndex !== -1) { meta.splice(metaIndex, 1); changed = true; }
+              return;
+            }
+            var product = {
+              id: row.id, user_id: row.user_id, name: row.name, price: row.price,
+              qty: row.qty, category: row.category, image_url: row.image_url,
+              image_url2: row.image_url2, icon: row.icon, description: row.description
+            };
+            if (productIndex === -1) products.push(product);
+            else products[productIndex] = Object.assign({}, products[productIndex], product);
+            var fingerprint = {
+              id: id, updatedAt: row.updated_at || null, qty: Number(row.qty || 0)
+            };
+            if (metaIndex === -1) meta.push(fingerprint);
+            else meta[metaIndex] = fingerprint;
+            changed = true;
+          });
+          if (!changed) return;
+          snapshot.products = products;
+          snapshot.meta = meta;
+          snapshot.savedAt = Date.now();
+          localStorage.setItem(key, JSON.stringify(snapshot));
+        } catch (cacheError) {
+          warn('Could not patch storefront snapshot ' + key + ':', cacheError);
+        }
+      });
+    } catch (e) {
+      warn('Storefront snapshot patch failed:', e);
+    }
+  }
+
+  // ── syncPendingToSupabase (BATCHED) ──────────────────────────────────
+  async function syncPendingToSupabaseInternal() {
+
+    if (isSyncing) { log('Sync in progress — refusing a duplicate push.'); return { ok: false, skipped: true, reason: 'already-syncing' }; }
+    if (!navigator.onLine) { log('Offline — push not completed; changes remain queued.'); return { ok: false, skipped: true, reason: 'offline', failedBatches: ['offline'] }; }
 
     isSyncing = true;
     log('Sync started.');
@@ -246,25 +456,63 @@
     var fatalError = null;
 
     try {
-      var pending = await window.qsdb.getAllPending();
-      // FIXED: early returns inside try never reached finally → isSyncing
-      // stayed true forever, permanently killing the sync queue.
-      // All guard conditions now use early-exit via a local flag so the
-      // outer try/finally always runs and isSyncing is always reset.
-      if (!pending || pending.length === 0) { log('Nothing pending.'); isSyncing = false; return { ok: true, skipped: true, reason: 'nothing-pending' }; }
-      log('Pending actions:', pending.length);
-
       var sb = await waitForSupabaseReady(3000);
       if (!sb || !sb.client) { warn('Supabase not ready — deferred.'); isSyncing = false; return { ok: false, skipped: true, reason: 'not-ready' }; }
-      var supabase = sb.client;
-      // __QS_SUPABASE is frozen so sb.user is always null.
-      // Read the authoritative user from __QS_APP.getUser() instead —
-      // it returns currentUser directly from appss.js memory.
+      // __QS_SUPABASE is frozen so sb.user is always null. Use the authoritative
+      // app identity before reading the queue so actions are scoped to this vendor.
       var user = (window.__QS_APP && typeof window.__QS_APP.getUser === 'function')
         ? window.__QS_APP.getUser()
         : sb.user;
       if (!user || !user.id) { warn('No user — deferred.'); isSyncing = false; return { ok: false, skipped: true, reason: 'no-user' }; }
       var userId = user.id;
+      var supabase = sb.client;
+      var allPending = await window.qsdb.getAllPending();
+      var pending = (allPending || []).filter(function (action) {
+        return action && action.userId === userId;
+      });
+
+      // Safely migrate legacy rows only when their entity is present in the
+      // current account's local snapshot. Never send unowned rows blindly.
+      var legacyPending = (allPending || []).filter(function (action) {
+        return action && !action.userId;
+      });
+      var localState = null;
+      try {
+        localState = window.__QS_APP && typeof window.__QS_APP.getState === 'function'
+          ? window.__QS_APP.getState()
+          : null;
+      } catch (_) {}
+      var claimedLegacy = [];
+      for (var li = 0; li < legacyPending.length; li++) {
+        var legacyAction = legacyPending[li];
+        if (!legacyActionMatchesCurrentState(legacyAction, localState)) continue;
+        try {
+          if (await window.qsdb.claimPendingForUser(legacyAction.id, userId)) {
+            legacyAction.userId = userId;
+            claimedLegacy.push(legacyAction);
+          }
+        } catch (claimError) {
+          warn('Could not assign legacy pending action id=' + legacyAction.id + ':', claimError);
+        }
+      }
+      // Deleted entities are absent from localState. Claim their old queue rows
+      // only after a user-scoped RLS query proves the cloud row belongs to userId.
+      var claimedLegacyDeletes = await claimLegacyDeleteActions(legacyPending, supabase, userId);
+      claimedLegacy = claimedLegacy.concat(claimedLegacyDeletes);
+      pending = pending.concat(claimedLegacy);
+      var unassignedPending = legacyPending.length - claimedLegacy.length;
+      if (!pending.length) {
+        if (unassignedPending > 0) {
+          failedBatches.push('unassigned-pending');
+          isSyncing = false;
+          return { ok: false, skipped: true, reason: 'unassigned-pending',
+            failedBatches: failedBatches, unassignedPending: unassignedPending };
+        }
+        log('Nothing pending for this account. Other vendors\' queued actions are untouched.');
+        isSyncing = false;
+        return { ok: true, skipped: true, reason: 'nothing-pending' };
+      }
+      log('Pending actions for current account:', pending.length, '/ Unassigned legacy:', unassignedPending);
 
       // ── Group by type ──────────────────────────────────────────────
       var productUpsertRows   = []; var productUpsertActIds = [];
@@ -387,8 +635,12 @@
           var r1 = await supabase.rpc('qs_upsert_products_and_listings_v2', { rows: productUpsertRows });
           if (r1.error) { console.error('[qsdb] Product upsert failed:', r1.error); failedBatches.push('products'); }
           else {
+            // The RPC transaction is authoritative for both the product row
+            // and its public vendor listing. Mirror only those confirmed rows
+            // into same-device storefront snapshots before clearing the queue.
+            patchCatalogSnapshotsForVendor(userId, productUpsertRows);
             doneActIds = doneActIds.concat(productUpsertActIds, productSupersededActIds);
-            log('Product + marketplace upsert OK.');
+            log('Product + marketplace upsert OK; storefront snapshots patched.');
           }
         } catch (e) { console.error('[qsdb] Product upsert threw:', e); failedBatches.push('products'); }
       }
@@ -538,7 +790,11 @@
       }
 
       var deferred = pending.length - invalidActIds.length - doneActIds.length;
-      log('Sync done. Done:', doneActIds.length, '/ Total:', pending.length, '/ Deferred:', deferred);
+      if (unassignedPending > 0 && failedBatches.indexOf('unassigned-pending') === -1) {
+        failedBatches.push('unassigned-pending');
+      }
+      log('Sync done. Done:', doneActIds.length, '/ Total:', pending.length, '/ Deferred:', deferred,
+          '/ Unassigned legacy:', unassignedPending);
 
       if (doneActIds.length > 0) document.dispatchEvent(new Event('qs:data:synced'));
 
@@ -556,6 +812,7 @@
       synced: (typeof doneActIds !== 'undefined' && doneActIds) ? doneActIds.length : 0,
       total: (typeof pending !== 'undefined' && pending) ? pending.length : 0,
       failedBatches: failedBatches,
+      unassignedPending: unassignedPending,
       fatalError: fatalError ? (fatalError.message || String(fatalError)) : null
     };
   }
