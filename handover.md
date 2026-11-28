@@ -761,3 +761,10 @@ The later commits above supersede the earlier CI statement. Re-check CI and Verc
 - Preview URL: `https://quickshopper-6fmf9nwtw-moyinks-projects-5a3815db.vercel.app`.
 - This verifies build, source guards, deployment metadata and public page reachability. It does **not** verify authenticated Android vendor workflows or actual image selection; user retest remains mandatory.
 - PR #12 remains open/draft/unmerged. No production deploy, Supabase schema/policy change, or vendor-data mutation has occurred.
+
+
+### Final sync consistency pass (2026-11-28)
+
+- `syncCloudData` now re-checks the current vendor's IndexedDB queue after the cloud pull/reconciliation. If edits arrived during the pull, it flushes them before returning the sync result. This closes the race where a manual Sync Now could await an earlier push, report success, and then show a later background upload failure for an edit queued during the pull.
+- The login recovery path now receives the initial pull result and bulk-requeues local products only when the pull succeeded, the initial pending push did not fail, and the cloud product count is exactly zero. It no longer rewrites the whole local catalog on every login.
+- Manual Sync Now also no longer requeues every local product; it uses the pending queue only.
