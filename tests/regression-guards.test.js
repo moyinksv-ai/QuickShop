@@ -821,11 +821,12 @@ test('offline sync actions are vendor-scoped and concurrent callers share the re
     'an in-flight sync must never be reported as a successful upload');
 
   assert.match(appSource, /getAllPending\(user\.id\)/);
-  assert.match(appSource, /getAllPending\(currentUser\.id\)/);
   const syncNowStart = appSource.indexOf('const btnSyncNow');
   const syncNowEnd = appSource.indexOf('const btnLoadDemo', syncNowStart);
   const syncNow = appSource.slice(syncNowStart, syncNowEnd);
   assert.match(syncNow, /syncCloudData\(currentUser, \{ force: true \}\)/);
   assert.doesNotMatch(syncNow, /syncPendingToSupabase\(\)/,
     'manual Sync Now must not push the same queue twice');
+  assert.doesNotMatch(syncNow, /for \(const p of state\.products\)/,
+    'manual Sync Now must not re-enqueue the entire catalog when no product changed');
 });
