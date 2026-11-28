@@ -43,6 +43,25 @@
     ? '/search.html' + (MARKET_PRODUCT ? '?product=' + encodeURIComponent(MARKET_PRODUCT) : '')
     : '';
 
+  // A marketplace handoff pid is a one-time instruction: open the selected
+  // product on the first visit, but do not replay it after a storefront refresh.
+  // Keep store/from/market_product so the vendor context and marketplace return
+  // destination remain intact. Direct vendor ?pid= links remain persistent.
+  var MARKET_HANDOFF_PID = (_p.get('pid') || '')
+    .replace(/[^a-zA-Z0-9\-]/g, '')
+    .slice(0, 64);
+  if (MARKET_ORIGIN && MARKET_HANDOFF_PID) {
+    try {
+      var _cleanStoreUrl = new URL(window.location.href);
+      _cleanStoreUrl.searchParams.delete('pid');
+      window.history.replaceState(
+        window.history.state,
+        '',
+        _cleanStoreUrl.pathname + _cleanStoreUrl.search + _cleanStoreUrl.hash
+      );
+    } catch (_) {}
+  }
+
   // Validate STORE_ID — must be 3-64 alphanumeric/hyphen chars.
   // Rejects obviously garbage params without hitting the DB.
   var _validStoreId = /^[a-zA-Z0-9\-]{1,64}$/.test(STORE_ID);
@@ -3266,7 +3285,7 @@
     // store-scoped cart before showing details, so the buyer can review it,
     // add more products from this same store, or check out once.
     (function () {
-      var _pidParam = (_p.get('pid') || '').replace(/[^a-zA-Z0-9\-]/g, '').slice(0, 64);
+      var _pidParam = MARKET_HANDOFF_PID;
       if (!_pidParam) return;
       var _target = allProducts.find(function (p) { return p.id === _pidParam; });
       if (_target) {
