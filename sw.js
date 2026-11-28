@@ -65,18 +65,18 @@ function addSameOriginAsset(urls, rawUrl, documentUrl) {
 }
 
 function discoverDocumentAssets(html, documentUrl, urls) {
-  var scriptTags = html.match(/<script\\b[^>]*>/gi) || [];
+  var scriptTags = html.match(/<script\b[^>]*>/gi) || [];
   scriptTags.forEach(function (tag) {
-    var match = tag.match(/\\bsrc\\s*=\\s*(?:"([^"]+)"|'([^']+)'|([^\\s>]+))/i);
+    var match = tag.match(/\bsrc\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i);
     if (match) addSameOriginAsset(urls, match[1] || match[2] || match[3], documentUrl);
   });
 
-  var linkTags = html.match(/<link\\b[^>]*>/gi) || [];
+  var linkTags = html.match(/<link\b[^>]*>/gi) || [];
   linkTags.forEach(function (tag) {
-    var rel = tag.match(/\\brel\\s*=\\s*(?:"([^"]+)"|'([^']+)'|([^\\s>]+))/i);
-    var href = tag.match(/\\bhref\\s*=\\s*(?:"([^"]+)"|'([^']+)'|([^\\s>]+))/i);
+    var rel = tag.match(/\brel\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i);
+    var href = tag.match(/\bhref\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i);
     var relValue = rel && (rel[1] || rel[2] || rel[3]) || '';
-    if (/(^|\\s)stylesheet(\\s|$)/i.test(relValue) && href) {
+    if (/(^|\s)stylesheet(\s|$)/i.test(relValue) && href) {
       addSameOriginAsset(urls, href[1] || href[2] || href[3], documentUrl);
     }
   });
