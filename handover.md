@@ -863,7 +863,7 @@ A direct information_schema check also confirmed that `public_catalog_products.u
 PR #12 client correction:
 - `fetchCatalogProductMeta()` now selects only `id, updated_at, qty` from `public_catalog_products`.
 - `fetchCatalogProductsByIds()` now fetches changed rows from `public_catalog_products`, retaining the 100-ID batch bound and active-stock filtering provided by the view.
-- The changed-row projection now matches the view exactly and no longer requests `created_at`, which is not exposed by the view.
+- The changed-row projection now matches the view exactly and no longer requests `created_at`, which is not exposed by the view. Changed IDs are fetched in complete sequential batches of at most 100 (not truncated after the first 100), and mapped cache rows retain `updated_at` so a Realtime update does not force a redundant changed-row read on the next revisit.
 - Public storefront bootstrap no longer falls back to the protected `products` base table if the public view fails. It returns the view error instead of issuing a predictably unauthorized request.
 - Regression guards now require both freshness paths to use the public view and prohibit `.from('products')` in the standalone storefront client.
 
