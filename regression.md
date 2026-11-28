@@ -645,3 +645,32 @@ The regression suite passed **51/51** on runtime commit `07d8c6f6eab6ea4f6391b9f
 - No full catalogue refetch for one changed product. Keep the bootstrap metadata seed, local removal of products absent from the active public view, bounded changed-row fetch, and persisted cache behavior.
 - Release verification must include a no-change revisit (metadata probe only), one-product update (one changed-row fetch), zero-stock removal, another vendor's storefront isolation, and no anonymous `/rest/v1/products` requests. Confirm IndexedDB/offline vendor sync and atomic cache patch behavior remain unchanged.
 - The live SQL was applied by the user in Supabase Dashboard. A version-controlled migration file and migration-history reconciliation remain outstanding until CLI workflow is available; do not manually fabricate migration history.
+
+
+---
+
+## 2026-11-28 follow-up: offline queue ownership hardening
+
+### Verified production finding
+- 16 Postgres P0001 failures occurred from 13:08:57 to 13:14:42 UTC, across 15 sessions/processes.
+- Every failure was raised by qs_upsert_products_and_listings_v2(jsonb) with Product id belongs to another vendor.
+- The function's ownership guard correctly blocks a conflicting global product ID from being reassigned to the current vendor. Do not weaken this guard or modify existing vendor data to make the error disappear.
+- Available logs do not expose product IDs, request payloads, or authenticated vendor ID; exact queue row/root cause remains unproven.
+
+### Source-level hardening on branch fix/strict-offline-queue-ownership-2026-11-28
+- getQueueOwnerId() now uses only window.__QS_APP.getUser(), the authenticated in-memory app identity.
+- Removed fallback attribution from qs_last_user_id and qs_user_cache. If auth is not ready, the action is left unassigned and remains subject to the existing guarded legacy-claim flow.
+- Added a regression guard that isolates the resolver and asserts that cached localStorage hints cannot assign ownership.
+- Existing queue rows are not rewritten, reassigned, deleted, or silently discarded.
+
+### Required QA / release gates
+1. Run the exact branch-head regression suite and inspect the full diff.
+2. Preview test: authenticated online edit; authenticated offline edit then reconnect; account A sign-out/account B sign-in; ensure A's queued work is never sent as B and B's new work is never stamped with A.
+3. Verify that a missing app identity leaves an unassigned queue row rather than guessing an owner.
+4. Confirm no regressions to atomic product + listing upsert, retry behavior, or IndexedDB persistence.
+5. Do not merge or deploy without explicit approval.
+
+### Still outstanding
+- PWA update propagation remains unresolved; do not force a cache purge or reload.
+- Identify the exact product IDs and vendor for the cross-vendor conflict using a safe diagnostic before attempting to repair existing queued rows.
+- Obtain comparable Supabase Usage measurements before claiming egress savings.
