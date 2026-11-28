@@ -34,11 +34,114 @@ var CACHE_NAME    = 'qs-v2.1.10';
 
 var IMAGE_CACHE   = 'qs-images-v4.0';
 var MARKET_CACHE  = 'qs-market-v2.1';
-/* ── Install ─────────────────────────────────────────────────────────────────
- * Nothing to pre-cache. Skip waiting so this SW activates immediately
- * without waiting for existing tabs to close. */
-self.addEventListener('install', function () {
-  self.skipWaiting();
+/* ── Install: validate and refresh the complete app shell before activation ──
+ * Existing clients may still be running an older qs-init.js that cannot take
+ * part in a page-to-worker update handshake. Therefore the installing worker
+ * owns the first-rollout safety gate: it fetches both navigable app documents,
+ * discovers their static same-origin scripts/styles, adds the admin/storefront
+ * scripts loaded dynamically by qs-init.js, and validates every response.
+ *
+ * No existing cache entry is changed until ALL required network fetches succeed.
+ * If offline or any required asset is unavailable, install rejects and the old
+ * active worker plus its offline cache remain in service. No page is reloaded.
+ */
+var UPDATE_DYNAMIC_ASSETS = [
+  'catalog.js',
+  'indexeddb_sync.js',
+  'share-catalog.js',
+  'appss.js',
+  'canonical.js',
+  'inventory.js'
+];
+
+function addSameOriginAsset(urls, rawUrl, documentUrl) {
+  try {
+    var parsed = new URL(rawUrl, documentUrl);
+    if (parsed.origin !== self.location.origin ||
+        !/^https?:$/.test(parsed.protocol)) return;
+    parsed.hash = '';
+    urls.add(parsed.href);
+  } catch (_) {}
+}
+
+function discoverDocumentAssets(html, documentUrl, urls) {
+  var scriptTags = html.match(/<script\\b[^>]*>/gi) || [];
+  scriptTags.forEach(function (tag) {
+    var match = tag.match(/\\bsrc\\s*=\\s*(?:"([^"]+)"|'([^']+)'|([^\\s>]+))/i);
+    if (match) addSameOriginAsset(urls, match[1] || match[2] || match[3], documentUrl);
+  });
+
+  var linkTags = html.match(/<link\\b[^>]*>/gi) || [];
+  linkTags.forEach(function (tag) {
+    var rel = tag.match(/\\brel\\s*=\\s*(?:"([^"]+)"|'([^']+)'|([^\\s>]+))/i);
+    var href = tag.match(/\\bhref\\s*=\\s*(?:"([^"]+)"|'([^']+)'|([^\\s>]+))/i);
+    var relValue = rel && (rel[1] || rel[2] || rel[3]) || '';
+    if (/(^|\\s)stylesheet(\\s|$)/i.test(relValue) && href) {
+      addSameOriginAsset(urls, href[1] || href[2] || href[3], documentUrl);
+    }
+  });
+}
+
+self.addEventListener('install', function (event) {
+  event.waitUntil((async function () {
+    var origin = self.location.origin;
+    var documentUrls = [new URL('/', origin).href, new URL('/search.html', origin).href];
+    var documents = [];
+
+    for (var i = 0; i < documentUrls.length; i++) {
+      var documentRequest = new Request(documentUrls[i], {
+        method: 'GET',
+        cache: 'reload',
+        credentials: 'same-origin'
+      });
+      var documentResponse = await fetch(documentRequest);
+      if (!documentResponse || !documentResponse.ok || documentResponse.type === 'opaque') {
+        throw new Error('Required app document could not be refreshed: ' + documentUrls[i]);
+      }
+      documents.push({
+        url: documentUrls[i],
+        response: documentResponse,
+        html: await documentResponse.clone().text()
+      });
+    }
+
+    var assetUrls = new Set();
+    documents.forEach(function (documentEntry) {
+      discoverDocumentAssets(documentEntry.html, documentEntry.url, assetUrls);
+    });
+    UPDATE_DYNAMIC_ASSETS.forEach(function (asset) {
+      addSameOriginAsset(assetUrls, asset, origin + '/');
+    });
+
+    var refreshedAssets = [];
+    for (var assetUrl of assetUrls) {
+      var assetRequest = new Request(assetUrl, {
+        method: 'GET',
+        cache: 'reload',
+        credentials: 'same-origin'
+      });
+      var assetResponse = await fetch(assetRequest);
+      if (!assetResponse || !assetResponse.ok || assetResponse.type === 'opaque') {
+        throw new Error('Required app asset could not be refreshed: ' + assetUrl);
+      }
+      refreshedAssets.push({ url: assetUrl, response: assetResponse });
+    }
+
+    // Network validation is complete. Only now touch the existing app-shell
+    // cache; images and marketplace caches are deliberately never opened here.
+    var cache = await caches.open(CACHE_NAME);
+    for (var refreshed of refreshedAssets) {
+      await cache.put(new Request(refreshed.url), refreshed.response.clone());
+    }
+    for (var documentEntry of documents) {
+      await cache.put(new Request(documentEntry.url), documentEntry.response.clone());
+    }
+    // Keep the canonical offline fallback current as well as the root route.
+    var indexDocument = documents[0];
+    await cache.put(new Request(new URL('/index.html', origin).href), indexDocument.response.clone());
+
+    await self.skipWaiting();
+  })());
 });
 
 /* ── Activate ────────────────────────────────────────────────────────────────
@@ -60,58 +163,6 @@ self.addEventListener('activate', function (event) {
   );
 });
 
-
-/* ── Explicit app-shell refresh for safe PWA updates ─────────────────────────
- * The active page asks the newly activated worker to fetch its current same-origin
- * script/style URLs and replace those cache entries before it offers a reload.
- * Keep CACHE_NAME unchanged so the previous offline shell remains available until
- * each replacement succeeds; never purge image or marketplace caches here.
- */
-self.addEventListener('message', function (event) {
-  var data = event.data;
-  if (!data || data.type !== 'QS_REFRESH_APP_SHELL') return;
-
-  var port = event.ports && event.ports[0];
-  var urls = Array.isArray(data.urls) ? data.urls.slice(0, 40) : [];
-  var refreshPromise = (async function () {
-    if (!urls.length) throw new Error('No app-shell assets supplied.');
-    var cache = await caches.open(CACHE_NAME);
-    var failures = 0;
-
-    await Promise.all(urls.map(async function (rawUrl) {
-      try {
-        var url = new URL(rawUrl, self.location.origin);
-        if (url.origin !== self.location.origin || !/^https?:$/.test(url.protocol)) {
-          failures += 1;
-          return;
-        }
-        var request = new Request(url.href, {
-          method: 'GET',
-          cache: 'reload',
-          credentials: 'same-origin'
-        });
-        var response = await fetch(request);
-        if (!response || !response.ok || response.type === 'opaque') {
-          failures += 1;
-          return;
-        }
-        await cache.put(new Request(url.href), response.clone());
-      } catch (_) {
-        failures += 1;
-      }
-    }));
-
-    if (port) port.postMessage({
-      ok: failures === 0,
-      failures: failures,
-      total: urls.length
-    });
-  })().catch(function () {
-    if (port) port.postMessage({ ok: false, failures: urls.length, total: urls.length });
-  });
-
-  event.waitUntil(refreshPromise);
-});
 
 /* ── Fetch ───────────────────────────────────────────────────────────────────*/
 self.addEventListener('fetch', function (event) {
