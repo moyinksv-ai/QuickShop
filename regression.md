@@ -553,10 +553,10 @@ PR #12 remains draft and unmerged until manual preview QA is completed and revie
 
 - New IndexedDB actions carry the creating vendor's `userId`.
 - A sync for vendor A processes only vendor A's queue actions; vendor B's actions remain queued for B.
-- Legacy unowned actions are claimed only when their entity is present in the active vendor's local snapshot. Ambiguous/destructive legacy actions remain queued and are surfaced as incomplete, never silently dropped or sent to another vendor.
+- Legacy unowned non-destructive actions are claimed only when their entity is present in the active vendor's local snapshot. Legacy deletes are claimed only after a user-scoped RLS query confirms ownership. Ambiguous legacy actions remain queued and are surfaced as incomplete, never silently dropped or sent to another vendor.
 - The database error `Product id belongs to another vendor` remains enforced; no client change weakens the SQL ownership guard.
 - Concurrent sync callers await the same in-flight result. An in-flight/duplicate call cannot return a false success.
-- Manual Sync Now performs one push+pull pass, not two pushes. The UI distinguishes push failure, pull failure, and unassigned legacy actions; it must not say Sync complete when any required work failed.
+- Manual Sync Now performs one push+pull pass over the pending queue only; it must not re-enqueue the full catalog or push twice. The UI distinguishes push failure, pull failure, and unassigned legacy actions; it must not say Sync complete when any required work failed.
 
 ### Product image upload/edit
 
