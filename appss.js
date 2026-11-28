@@ -338,6 +338,8 @@ function initApp() {
   let state = { products: [], sales: [], changes: [], notes: [], categories: [], logs: [] };
   let isSyncing = false;
   let isSyncInProgress = false;
+  let syncCloudInFlightPromise = null;
+  let syncCloudInFlightUserId = null;
   let _lastSyncAt = 0; // timestamp of the last completed syncCloudData call
   let isSaveStateSyncing = false;
   let _lsPersistTimer = null;
@@ -989,17 +991,48 @@ function handleTouchEnd() {
     return all;
   }
 
+  // Concurrent callers for the same vendor await one real push+pull result.
+  // A second account must never inherit another vendor's sync result.
   async function syncCloudData(user, options = {}) {
+    const requestedUserId = user && user.id ? String(user.id) : null;
+    if (syncCloudInFlightPromise) {
+      if (syncCloudInFlightUserId === requestedUserId) return syncCloudInFlightPromise;
+      return {
+        ok: false, pullOk: false, skipped: true,
+        reason: 'different-user-sync-in-progress',
+        error: 'Another account sync is still finishing.'
+      };
+    }
+    syncCloudInFlightUserId = requestedUserId;
+    syncCloudInFlightPromise = syncCloudDataInternal(user, options);
+    try {
+      return await syncCloudInFlightPromise;
+    } finally {
+      syncCloudInFlightPromise = null;
+      syncCloudInFlightUserId = null;
+    }
+  }
+
+  async function syncCloudDataInternal(user, options = {}) {
     if (!user || !getClient() || !navigator.onLine) {
-      if (!navigator.onLine) log('Offline, skipping cloud sync.');
-      return { ok: true, skipped: true, reason: !navigator.onLine ? 'offline' : 'not-ready' };
+      const reason = !navigator.onLine ? 'offline' : 'not-ready';
+      if (reason === 'offline') log('Offline, cloud sync not completed; changes remain queued.');
+      return {
+        ok: false, pullOk: false, skipped: true, reason,
+        error: reason === 'offline'
+          ? 'Offline — changes remain queued until the connection returns.'
+          : 'Cloud sync is not ready. Please sign in and try again.'
+      };
     }
     const forceSync = options.force === true;
     const AUTO_SYNC_COOLDOWN_MS = 15000;
     if (!forceSync && Date.now() - _lastSyncAt < AUTO_SYNC_COOLDOWN_MS) {
       return { ok: true, skipped: true, reason: 'recent-sync' };
     }
-    if (isSyncInProgress) return { ok: true, skipped: true, reason: 'already-syncing' };
+    if (isSyncInProgress) {
+      return { ok: false, pullOk: false, skipped: true, reason: 'already-syncing',
+        error: 'A cloud sync is already in progress.' };
+    }
     isSyncInProgress = true;
     showLoading(true, 'Syncing data...');
     // Callers (Sync Now, pull-to-refresh) need the real outcome instead of
