@@ -870,7 +870,7 @@ PR #12 client correction:
 The live database change was applied manually through Dashboard SQL Editor because the user is working from a phone and cannot run the CLI. It does not yet have a corresponding committed Supabase migration file or migration-history entry. Do not fabricate or insert a migration-history row. When CLI access is available, reconcile the exact live DDL into a proper version-controlled migration and verify migration history before future schema deployments. The live SQL is the previously reviewed GRANT SELECT (updated_at) plus CREATE OR REPLACE VIEW definition; do not broaden grants.
 
 Latest client/test commits:
-- `catalog.js`: `636693a09e67590207d39ee3e5a372120e5ac42c`
-- `tests/regression-guards.test.js`: `bf8d6c46ba1fc1f734cc9c479847282244a63751`
+- `catalog.js`: `35b9945cf9c06c4336906b29d117c3e4031cf0d7`
+- `tests/regression-guards.test.js`: `c9c0e671da5ebd6089d8adaa9c77e9b5fc5ce582`
 
 This source-level correction is not yet a release verification. Run CI and deploy a fresh preview for the latest branch head, then verify on Android that a cached storefront with no changes retains its cached payload, a single changed product fetches only that product, a zero-stock product disappears, and the view requests return successfully without any anon request to `/rest/v1/products`. Preserve the vendor IndexedDB/offline path and same-origin atomic cache patching. PR #12 remains open/draft/unmerged; no production deployment is authorized.
