@@ -751,3 +751,13 @@ Required next investigation/design:
 - Image decoding no longer rejects a valid image solely because an Android content provider supplied a generic MIME type. The browser must successfully decode the actual bytes; failure then receives a specific error.
 
 The later commits above supersede the earlier CI statement. Re-check CI and Vercel against the final branch HEAD before asking for another Android test.
+
+
+### Verification snapshot — 2026-11-28 13:43 UTC
+
+- Runtime code commit: `07d8c6f6eab6ea4f6391b9f414685b68bc3b15b6`.
+- GitHub Actions Regression guards run #483: **51 passed, 0 failed**.
+- Vercel preview for that exact runtime commit: `dpl_GAZNP8zjfwTRq1hXVA4KQQxmu7TL`, state `READY`; page fetch returned HTTP 200.
+- Preview URL: `https://quickshopper-6fmf9nwtw-moyinks-projects-5a3815db.vercel.app`.
+- This verifies build, source guards, deployment metadata and public page reachability. It does **not** verify authenticated Android vendor workflows or actual image selection; user retest remains mandatory.
+- PR #12 remains open/draft/unmerged. No production deploy, Supabase schema/policy change, or vendor-data mutation has occurred.
