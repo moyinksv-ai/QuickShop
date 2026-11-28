@@ -7514,7 +7514,12 @@ document.body.classList.remove('mode-app'); // auth resolved (unverified)
     if (currentUser && document.body.classList.contains('mode-app')) {
       const signedOut = await requestSignOut();
       if (!signedOut) {
-        try { history.pushState(mergeVendorHistoryState(_prevViewName || 'home'), '', window.location.href); } catch(_) {}
+        // If Back closed the confirmation modal, its own handler has already
+        // restored the vendor entry. Avoid pushing a duplicate history entry.
+        const currentState = history.state;
+        if (!(currentState && currentState.qsVendorApp && currentState.qsView)) {
+          try { history.pushState(mergeVendorHistoryState(_prevViewName || 'home'), '', window.location.href); } catch(_) {}
+        }
       }
       return;
     }
