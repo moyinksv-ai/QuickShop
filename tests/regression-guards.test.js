@@ -844,6 +844,9 @@ test('PWA updates refresh same-origin app-shell assets before offering a user-co
   assert.match(initSource, /result\.ok === true && result\.total === urls\.length/,
     'do not offer reload until every same-origin script and stylesheet has refreshed');
   assert.match(initSource, /hasOpenVendorEditor\(\)/);
+  assert.match(initSource, /while \(current && current\.nodeType === 1\)/,
+    'editor detection must account for hidden modal/workspace ancestors');
+  assert.match(initSource, /current\.getAttribute\('aria-hidden'\) === 'true'/);
   assert.match(initSource, /getEditingProductId\(\)/);
   assert.match(initSource, /window\.location\.reload\(\)/);
   assert.match(initSource, /confirmUpdate\(/);
