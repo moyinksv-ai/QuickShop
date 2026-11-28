@@ -878,14 +878,34 @@ test('PWA install failure leaves the old app-shell cache untouched and does not 
   const requests = [];
   let skipWaitingCalled = false;
   let cacheOpened = false;
-  const cache = { put: async (request) => { puts.push(request.url); } };
+  let cacheEntries = null;
 
-  async function runInstall(failUrl) {
+  async function runInstall(failUrl, failPutAt) {
     handlers.install = null;
     puts.length = 0;
     requests.length = 0;
     skipWaitingCalled = false;
     cacheOpened = false;
+    let writeCount = 0;
+    let failureInjected = false;
+    const entries = new Map();
+    entries.set(origin + '/styless.css', new Response('old-css', { status: 200 }));
+    const cache = {
+      put: async (request, response) => {
+        writeCount += 1;
+        if (!failureInjected && failPutAt === writeCount) {
+          failureInjected = true;
+          throw new Error('simulated cache write failure');
+        }
+        puts.push(request.url);
+        entries.set(request.url, response.clone());
+      },
+      match: async (request) => {
+        const response = entries.get(request.url);
+        return response ? response.clone() : undefined;
+      },
+      delete: async (request) => entries.delete(request.url)
+    };
     const self = {
       location: { origin },
       addEventListener: (type, handler) => { handlers[type] = handler; },
@@ -915,6 +935,8 @@ test('PWA install failure leaves the old app-shell cache untouched and does not 
     let waitForInstall;
     handlers.install({ waitUntil: (promise) => { waitForInstall = promise; } });
     await waitForInstall;
+    cacheEntries = entries;
+    return entries;
   }
 
   const failedAsset = origin + '/appss.js';
@@ -922,6 +944,13 @@ test('PWA install failure leaves the old app-shell cache untouched and does not 
   assert.equal(cacheOpened, false, 'failed preflight must not even open the existing shell cache');
   assert.equal(puts.length, 0, 'no cached asset may be replaced after a failed network preflight');
   assert.equal(skipWaitingCalled, false, 'failed install must leave the old worker active');
+
+  await assert.rejects(runInstall(null, 2), /simulated cache write failure/);
+  assert.equal(skipWaitingCalled, false, 'a cache write failure must also prevent activation');
+  assert.equal(await cacheEntries.get(origin + '/styless.css').text(), 'old-css',
+    'a failed cache write must restore the previously cached stylesheet');
+  assert.equal(cacheEntries.has(origin + '/qs-init.js'), false,
+    'a failed write for a previously uncached asset must remove the partial new entry');
 
   await runInstall(null);
   assert.equal(skipWaitingCalled, true, 'successful full preflight may activate the new worker');
