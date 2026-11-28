@@ -740,3 +740,14 @@ Required next investigation/design:
 6. Confirm marketplace/storefront snapshots, incremental freshness, and offline cached rendering remain intact.
 
 **Current state:** changes are committed to the PR #12 branch; CI and browser/device validation remain outstanding. No merge or production deployment is authorized.
+
+
+### Additional hardening after the first green run (2026-11-28)
+
+- Manual Sync Now no longer re-enqueues every local product. It pushes only the current vendor's pending queue and then performs its pull. This avoids turning a no-change manual sync into a full-catalog write.
+- Pending queue sync coalesces concurrent callers and requests a follow-up pass if a new action is added while a batch is in progress. An offline push returns `ok: false`; it cannot be reported as a completed upload.
+- Cloud pull/sync calls for the same vendor now await one shared result. A different account cannot inherit that result. Offline/not-ready cloud sync returns `pullOk: false`, so the manual button cannot display success for a skipped operation.
+- Legacy delete actions can be migrated only after an RLS-scoped query confirms that the target row belongs to the currently authenticated vendor. If ownership cannot be proven, the action remains queued and the sync reports incomplete.
+- Image decoding no longer rejects a valid image solely because an Android content provider supplied a generic MIME type. The browser must successfully decode the actual bytes; failure then receives a specific error.
+
+The later commits above supersede the earlier CI statement. Re-check CI and Vercel against the final branch HEAD before asking for another Android test.
