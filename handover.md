@@ -1,7 +1,7 @@
 # QuickShop Engineering Handover
-**Updated:** 2026-11-08  
+**Updated:** 2026-11-28  
 **Repository:** `moyinksv-ai/QuickShop`  
-**Active working branch:** `investigate/supabase-egress-catalogue-2026-11-07` (read-only Supabase egress/catalogue investigation)  
+**Active working branch:** `fix/pwa-safe-update-rollout-2026-11-28` (PR #14 draft; first-rollout PWA update hardening)  
 **Production baseline:** `main`  
 **Release rule:** No merge to `main`, production deployment, schema change, or destructive data operation without explicit user approval.
 
@@ -27,41 +27,13 @@
 
 ## 0. Immediate priorities (in order)
 
-1. **Post-merge production smoke check:** PR #8 is merged and Vercel production deployment `dpl_E3Q1dbczVXkQ9eWic7oonKPXoGas` is READY for merge SHA `e1b25695af50c6ee390eb15f9c4a0a9a1f45f6a9`. Perform a safe production smoke check using read-only paths or an authorized test vendor/account: sign-in/session restoration, Inventory list, Add Product open/close/draft resume/discard, existing product edit, sell/restock, and public storefront/catalogue visibility. Never create or mutate sample records on a paying vendor's account.
-2. **Current engineering workstream: Supabase egress, marketplace and catalogue caching (§3).** Continue the already-created dedicated investigation branch with read-only measurement and root-cause tracing. The Supabase Usage screenshot supplied on 2026-11-08 shows `Cached Egress 6.803 / 5 GB (136%)`, `Egress 0.356 / 5 GB (7%)`, and a ~2.984 GB cached-egress spike on **Nov 1**. The exact per-service breakdown for that spike is not available from the UI shown. Do not claim the marketplace is proven as the sole cause yet. Trace marketplace/catalogue/image request paths and measure them. No cache/schema/Supabase production change is authorized until the cause and safe fix are verified.
-3. Re-fetch current main and relevant source before starting; create one dedicated branch for this egress/caching workstream. Keep it separate from the completed Add Product hotfix.
-4. Preserve rollback: backup branch `backup/main-before-pr8-2026-11-07` points to pre-PR8 SHA `3d68545d507da9b8d1466edda9d8b8d5a565daaa`; Vercel rollback deployment is `dpl_6WmW9mzGsyJcYgMLFGH49nayG87q`. No database rollback is required for PR #8.
-5. Keep the public engineering evidence log updated with verified outcomes only.
+1. **Current release candidate: PR #14.** Branch `fix/pwa-safe-update-rollout-2026-11-28`; latest verified candidate SHA at this handover edit: `9aa8c4af652ddbdafcc3b64a16ffb93f496db652`. It is 20 commits ahead / 0 behind production `main` at `8d247c8c3ec6a911eeacde4042e84d16886bcd92`. Keep PR #14 draft and unmerged until the user completes Android PWA lifecycle QA. Do not merge or deploy production.
+2. **PWA rollout correction:** the first update of existing production installs cannot rely on the new `qs-init.js` message listener because those clients still run old bootstrap code. The candidate worker now validates the root document, `search.html`, all discovered same-origin scripts/styles, and the known dynamically loaded scripts during its install event. It updates the existing app-shell cache only after all network fetches succeed, then calls `skipWaiting()`. If a required fetch fails, install rejects and the previous worker/cache remain active. See the dated PWA strategy entry near the end of this file and the matching release gates in `regression.md`.
+3. **Verification:** latest functional candidate CI run #592 passed 62/62 regression guards on commit `bad001c0ac3d2c6d9dc240838da8ceaf3a8d6e15`. The subsequent `9aa8c4af652ddbdafcc3b64a16ffb93f496db652` commit only corrected the service-worker architecture comment; Vercel preview for that exact SHA is READY. The browser lifecycle itself remains unverified and must be tested on the preview before merge.
+4. **Production baseline:** production remains on PR #12 merge commit `8d247c8c3ec6a911eeacde4042e84d16886bcd92`; no PR #14 code has been merged or deployed to production. Do not modify Supabase schema, cache configuration, or vendor data as part of this PWA task.
+5. **After PWA release gate:** resume the Supabase egress/catalogue investigation from the evidence and constraints in §3. Keep request-volume claims tied to comparable activity windows; do not claim savings from unmatched telemetry samples.
 
-The user has paying vendors. Protect existing vendor data and operational workflows above shipping speed. The user has already manually tested the semantic colour scheme and earlier preview changes, and most recently confirmed the three Add Product feedback checks. Do not ask them to repeat those tests without a specific reason.
-
-### Current release audit — 2026-11-07 (supersedes stale historical WP10 status entries below)
-
-- Repository: `moyinksv-ai/QuickShop`; PR #7: https://github.com/moyinksv-ai/QuickShop/pull/7
-- Production baseline before release: `main` at `5267e1096c8868b4b11584c9d585915f2586b65a`; verified current production Vercel deployment: `dpl_5yaBANt9VTARFQL3vSXe39b2E3Je` (`READY`).
-- Feature branch before this handover update: `design/quickshop-ui-refinement` at `0778641e1fbdd89e5ff64c58b589cac0ee95c653`, 39 commits ahead / 0 behind main. Eight files changed: `appss.js`, `document.md`, `handover.md`, `index.html`, `inventory.js`, `regression.md`, `styless.css`, `tests/regression-guards.test.js`.
-- Exact-HEAD automated checks: GitHub Actions Regression guards succeeded; 38 tests passed, 0 failed. Vercel preview for that SHA was READY: https://quickshopper-9wj5eoao6-moyinks-projects-5a3815db.vercel.app
-- User-confirmed preview acceptance: semantic colour scheme and earlier changes tested; latest Add Product checks passed for create-success feedback, edit-success feedback, and validation feedback. Earlier draft recovery and Back-save confirmation were also reported working.
-- Source/diff audit: no SQL migrations, schema edits, RLS/policy changes, Supabase function changes, product/sales data contract changes, or changes to the marketplace/catalogue query files. Existing product create/edit business logic and inventory stock mutation handlers are retained. Drafts are device-local in localStorage, keyed by authenticated user ID, and are not inserted into the product sync queue until the vendor explicitly saves a product.
-- Inventory modal changes are presentation-state only: mode-specific title/button text, hide the sale total for restock, clear stale modal error. The sell payment-selection disabled state and sell/restock mutation handlers remain unchanged.
-- Add Product changes move the existing shared form into a dedicated full-screen workspace, persist new-product draft fields locally, and show success/validation feedback. The logout ordering now calls `hideAddForm()` before clearing `editingProductId`, preventing an edit form from being treated as a new-product draft.
-- Barcode-result visibility was specifically rechecked: although its inline `display:none` was removed from markup, the existing `#barcodeResult { display:none; }` CSS rule remains, and scanner start/stop handlers explicitly hide/show it. This is not a confirmed regression.
-- No claim is made that every device/browser edge case has been physically exercised. Automated checks and the user's preview checks passed; production smoke checks remain required after deployment.
-- Rollback point: restore production traffic to Vercel deployment `dpl_5yaBANt9VTARFQL3vSXe39b2E3Je`, which serves the exact pre-release `main` SHA above. A Git revert of the eventual merge commit is the source-control recovery path. No database rollback is required for this release.
-- The earlier WP10 status table and older “unresolved” statements later in this handover are historical snapshots and are superseded by this current release audit and the dated verification entries in `regression.md`. Re-check current source and the post-merge deployment before claiming production verification.
-
-
-### Post-merge production release — 2026-11-07
-
-- PR #7 merged successfully: https://github.com/moyinksv-ai/QuickShop/pull/7
-- Merge commit and current `main` SHA at release: `e99d30e5216b3abeeefe8254f1af78d3a83e44e3`.
-- Vercel production deployment for that exact SHA: `dpl_AiyfZjGMGvbKNNFpdWDBuWPPt3tx`; state `READY`; aliases include `quickshopper.vercel.app`.
-- Pre-release rollback deployment remains `dpl_5yaBANt9VTARFQL3vSXe39b2E3Je` (READY, original `main` SHA `5267e1096c8868b4b11584c9d585915f2586b65a`). To restore service quickly, use Vercel production rollback to this deployment. Then separately revert the merge commit in Git if the code is to be removed from `main`.
-- The PR-head regression run #281 completed successfully: 38 tests passed, 0 failed. The handover-only update was separately built as a READY preview before merge.
-- Vercel confirms the production deployment is READY and the production aliases are assigned. A successful deployment is not a substitute for a real authenticated vendor smoke test; post-release device/browser checks should still cover sign-in, inventory list, add/edit product, sell/restock, and storefront/catalogue visibility. Do not make sample changes to paying vendors' real inventory merely to test production; use an authorized test vendor/account or read-only checks.
-- No Supabase migration or data transformation was deployed. Existing vendor records and inventory were not intentionally modified by this release.
-
----
+Protect existing vendor data and operational workflows above shipping speed. Re-fetch the exact branch head, CI result, preview deployment and diff before any release action. Passing source tests or a READY deployment is not a substitute for the required Android lifecycle test.
 
 ## 1. Product, workflow and non-negotiable engineering rules
 
