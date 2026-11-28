@@ -439,8 +439,13 @@ test('landing/auth history restores screens on browser Back and Forward without 
     'Back from auth must restore the landing screen even if history state is missing');
   assert.match(qsInitSource, /event\.stopImmediatePropagation\(\)/,
     'auth/landing history must not be overridden by the vendor app tab popstate handler');
-  assert.match(qsInitSource, /window\.history\.back\(\)/,
-    'the in-app Home button should use the auth history entry rather than leaving stale history');
+  const homeStart = qsInitSource.indexOf("target.closest('#btnBackToLanding')");
+  const homeEnd = qsInitSource.indexOf('// Scroll-reveal', homeStart);
+  const homeHandler = qsInitSource.slice(homeStart, homeEnd);
+  assert.match(homeHandler, /window\.__qs_showLanding\(\)/,
+    'the auth Home button must invoke the canonical landing transition immediately');
+  assert.doesNotMatch(homeHandler, /window\.history\.back\(\)/,
+    'Home must not depend on a prior landing entry after explicit sign-out');
 });
 
 
@@ -803,7 +808,7 @@ test('failed image replacement preserves the existing product image and reports 
   assert.doesNotMatch(imageHandler, /else \{ if \(slot === 'img1'\) clearInvImage\(\)/);
   assert.match(imageHandler, /img2Input\.value = ''/,
     'the second image input must allow selecting the same file again');
-  assert.match(appSource, /This image format could not be opened by the browser/);
+  assert.match(appSource, /The selected image could not be opened/);
   assert.match(appSource, /The selected image could not be read from this device/);
   assert.match(appSource, /Do not trust the picker MIME type alone/,
     'valid Android image bytes must not be rejected only because the provider reports a generic MIME type');
