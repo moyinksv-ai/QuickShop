@@ -178,17 +178,65 @@
     };
   }
 
+  function getQueueOwnerId() {
+    try {
+      var app = window.__QS_APP;
+      var user = app && typeof app.getUser === 'function' ? app.getUser() : null;
+      if (user && user.id) return String(user.id);
+    } catch (_) {}
+    try {
+      var lastUserId = localStorage.getItem('qs_last_user_id');
+      if (lastUserId) return String(lastUserId);
+    } catch (_) {}
+    try {
+      var cached = JSON.parse(localStorage.getItem('qs_user_cache') || 'null');
+      if (cached && cached.id) return String(cached.id);
+    } catch (_) {}
+    return null;
+  }
+
+  // Old queue rows have no owner. Claim only when their entity is still present
+  // in this account's user-scoped local snapshot; destructive actions cannot be
+  // inferred safely and remain quarantined until their original owner returns.
+  function legacyActionMatchesCurrentState(action, localState) {
+    if (!action || !action.item || !localState) return false;
+    var item = action.item;
+    function contains(rows, id) {
+      return Array.isArray(rows) && id != null &&
+        rows.some(function (row) { return row && String(row.id) === String(id); });
+    }
+    switch (action.type) {
+      case 'addProduct':
+      case 'updateProduct':
+        return contains(localState.products, item.id);
+      case 'addStock':
+        return contains(localState.products, item.productId);
+      case 'addSale':
+        return contains(localState.sales, item.id);
+      case 'addNote':
+      case 'updateNote':
+        return contains(localState.notes, item.id);
+      default:
+        return false;
+    }
+  }
+
   // ── Public API ───────────────────────────────────────────────────────
   var qsdb = {
 
     addPendingChange: async function (action) {
       var err = validateAction(action);
       if (err) { warn('addPendingChange rejected:', err); return null; }
+      // Bind every new offline action to the account that created it. The queue
+      // survives sign-out, but another vendor must never inherit its writes.
+      var storedAction = Object.assign({}, action);
+      var ownerId = getQueueOwnerId();
+      if (ownerId) storedAction.userId = ownerId;
       var db = await getDb();
       return new Promise(function (resolve, reject) {
         var tx = db.transaction([STORE_NAME], 'readwrite');
         var store = tx.objectStore(STORE_NAME);
-        var req = store.add(action);
+        var req = store.add(storedAction);
         req.onsuccess = function () { resolve(req.result); };
         req.onerror   = function (ev) {
           console.error('[qsdb] addPendingChange failed:', ev.target.error);
@@ -200,17 +248,39 @@
       });
     },
 
-    getAllPending: async function () {
+    getAllPending: async function (userId) {
       var db = await getDb();
       return new Promise(function (resolve, reject) {
         var tx = db.transaction([STORE_NAME], 'readonly');
         var store = tx.objectStore(STORE_NAME);
         var req = store.getAll();
-        req.onsuccess = function () { resolve(req.result); };
+        req.onsuccess = function () {
+          var rows = req.result || [];
+          resolve(userId ? rows.filter(function (action) { return action && action.userId === userId; }) : rows);
+        };
         req.onerror   = function (ev) {
           console.error('[qsdb] getAllPending failed:', ev.target.error);
           reject(ev.target.error);
         };
+      });
+    },
+
+    claimPendingForUser: async function (id, userId) {
+      if (!userId) return false;
+      var db = await getDb();
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction([STORE_NAME], 'readwrite');
+        var store = tx.objectStore(STORE_NAME);
+        var req = store.get(id);
+        req.onsuccess = function () {
+          var action = req.result;
+          if (!action || action.userId) { resolve(false); return; }
+          action.userId = userId;
+          var put = store.put(action);
+          put.onsuccess = function () { resolve(true); };
+          put.onerror = function (ev) { reject(ev.target.error); };
+        };
+        req.onerror = function (ev) { reject(ev.target.error); };
       });
     },
 
@@ -246,25 +316,59 @@
     var fatalError = null;
 
     try {
-      var pending = await window.qsdb.getAllPending();
-      // FIXED: early returns inside try never reached finally → isSyncing
-      // stayed true forever, permanently killing the sync queue.
-      // All guard conditions now use early-exit via a local flag so the
-      // outer try/finally always runs and isSyncing is always reset.
-      if (!pending || pending.length === 0) { log('Nothing pending.'); isSyncing = false; return { ok: true, skipped: true, reason: 'nothing-pending' }; }
-      log('Pending actions:', pending.length);
-
       var sb = await waitForSupabaseReady(3000);
       if (!sb || !sb.client) { warn('Supabase not ready — deferred.'); isSyncing = false; return { ok: false, skipped: true, reason: 'not-ready' }; }
-      var supabase = sb.client;
-      // __QS_SUPABASE is frozen so sb.user is always null.
-      // Read the authoritative user from __QS_APP.getUser() instead —
-      // it returns currentUser directly from appss.js memory.
+      // __QS_SUPABASE is frozen so sb.user is always null. Use the authoritative
+      // app identity before reading the queue so actions are scoped to this vendor.
       var user = (window.__QS_APP && typeof window.__QS_APP.getUser === 'function')
         ? window.__QS_APP.getUser()
         : sb.user;
       if (!user || !user.id) { warn('No user — deferred.'); isSyncing = false; return { ok: false, skipped: true, reason: 'no-user' }; }
       var userId = user.id;
+      var allPending = await window.qsdb.getAllPending();
+      var pending = (allPending || []).filter(function (action) {
+        return action && action.userId === userId;
+      });
+
+      // Safely migrate legacy rows only when their entity is present in the
+      // current account's local snapshot. Never send unowned rows blindly.
+      var legacyPending = (allPending || []).filter(function (action) {
+        return action && !action.userId;
+      });
+      var localState = null;
+      try {
+        localState = window.__QS_APP && typeof window.__QS_APP.getState === 'function'
+          ? window.__QS_APP.getState()
+          : null;
+      } catch (_) {}
+      var claimedLegacy = [];
+      for (var li = 0; li < legacyPending.length; li++) {
+        var legacyAction = legacyPending[li];
+        if (!legacyActionMatchesCurrentState(legacyAction, localState)) continue;
+        try {
+          if (await window.qsdb.claimPendingForUser(legacyAction.id, userId)) {
+            legacyAction.userId = userId;
+            claimedLegacy.push(legacyAction);
+          }
+        } catch (claimError) {
+          warn('Could not assign legacy pending action id=' + legacyAction.id + ':', claimError);
+        }
+      }
+      pending = pending.concat(claimedLegacy);
+      var unassignedPending = legacyPending.length - claimedLegacy.length;
+      if (!pending.length) {
+        if (unassignedPending > 0) {
+          failedBatches.push('unassigned-pending');
+          isSyncing = false;
+          return { ok: false, skipped: true, reason: 'unassigned-pending',
+            failedBatches: failedBatches, unassignedPending: unassignedPending };
+        }
+        log('Nothing pending for this account. Other vendors\' queued actions are untouched.');
+        isSyncing = false;
+        return { ok: true, skipped: true, reason: 'nothing-pending' };
+      }
+      log('Pending actions for current account:', pending.length, '/ Unassigned legacy:', unassignedPending);
+      var supabase = sb.client;
 
       // ── Group by type ──────────────────────────────────────────────
       var productUpsertRows   = []; var productUpsertActIds = [];
@@ -538,7 +642,11 @@
       }
 
       var deferred = pending.length - invalidActIds.length - doneActIds.length;
-      log('Sync done. Done:', doneActIds.length, '/ Total:', pending.length, '/ Deferred:', deferred);
+      if (unassignedPending > 0 && failedBatches.indexOf('unassigned-pending') === -1) {
+        failedBatches.push('unassigned-pending');
+      }
+      log('Sync done. Done:', doneActIds.length, '/ Total:', pending.length, '/ Deferred:', deferred,
+          '/ Unassigned legacy:', unassignedPending);
 
       if (doneActIds.length > 0) document.dispatchEvent(new Event('qs:data:synced'));
 
@@ -556,6 +664,7 @@
       synced: (typeof doneActIds !== 'undefined' && doneActIds) ? doneActIds.length : 0,
       total: (typeof pending !== 'undefined' && pending) ? pending.length : 0,
       failedBatches: failedBatches,
+      unassignedPending: unassignedPending,
       fatalError: fatalError ? (fatalError.message || String(fatalError)) : null
     };
   }
