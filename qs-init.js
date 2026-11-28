@@ -41,8 +41,6 @@
   /* ── 1. Service-worker registration + safe update propagation ─────────── */
   if ('serviceWorker' in navigator) {
     var hadServiceWorkerController = !!navigator.serviceWorker.controller;
-    var updateRefreshPending = false;
-    var updateRefreshInFlight = false;
     var updateBanner = null;
 
     function isVisibleElement(el) {
@@ -132,54 +130,16 @@
       updateBanner = banner;
     }
 
-    function refreshUpdatedAppShell() {
-      if (!updateRefreshPending || updateRefreshInFlight || !navigator.onLine) return;
-      var controller = navigator.serviceWorker.controller;
-      if (!controller || typeof MessageChannel === 'undefined') return;
-
-      var urls = [];
-      var nodes = document.querySelectorAll('script[src], link[rel="stylesheet"][href]');
-      nodes.forEach(function (node) {
-        var raw = node.src || node.href;
-        if (!raw) return;
-        try {
-          var url = new URL(raw, window.location.href);
-          if (url.origin === window.location.origin && urls.indexOf(url.href) === -1) {
-            urls.push(url.href);
-          }
-        } catch (_) {}
-      });
-      if (!urls.length) return;
-
-      updateRefreshInFlight = true;
-      var channel = new MessageChannel();
-      channel.port1.onmessage = function (event) {
-        updateRefreshInFlight = false;
-        var result = event.data || {};
-        if (result.ok === true && result.total === urls.length) {
-          updateRefreshPending = false;
-          showUpdateBanner();
-        } else {
-          console.warn('[QS] App update assets could not all be refreshed; keeping the current page and offline cache.');
-        }
-      };
-      try {
-        controller.postMessage({ type: 'QS_REFRESH_APP_SHELL', urls: urls }, [channel.port2]);
-      } catch (_) {
-        updateRefreshInFlight = false;
-      }
-    }
-
     navigator.serviceWorker.addEventListener('controllerchange', function () {
-      // The first controller takeover is a fresh install, not an app update.
+      // The worker only activates after its install-time app-shell refresh has
+      // completed. Existing old clients may not have this listener at all, so
+      // correctness never depends on page-side participation in first rollout.
       if (!hadServiceWorkerController) {
         hadServiceWorkerController = true;
         return;
       }
-      updateRefreshPending = true;
-      refreshUpdatedAppShell();
+      showUpdateBanner();
     });
-    window.addEventListener('online', refreshUpdatedAppShell);
 
     window.addEventListener('load', function () {
       navigator.serviceWorker.register('sw.js')
@@ -189,11 +149,10 @@
             if (!installing) return;
             installing.onstatechange = function () {
               if (installing.state === 'installed' && navigator.serviceWorker.controller) {
-                console.log('[QS] New worker installed; waiting for app-shell refresh before offering reload.');
+                console.log('[QS] New worker installed after validating and refreshing the app shell.');
               }
             };
           };
-          if (updateRefreshPending) refreshUpdatedAppShell();
         })
         .catch(function (err) { console.error('[QS] SW registration failed:', err); });
     });
