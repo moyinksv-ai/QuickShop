@@ -805,6 +805,7 @@ test('failed image replacement preserves the existing product image and reports 
     'the second image input must allow selecting the same file again');
   assert.match(appSource, /This image format could not be opened by the browser/);
   assert.match(appSource, /The selected image could not be read from this device/);
+  assert.match(imageHandler, /The image could not be prepared or uploaded/);
 });
 
 test('offline sync actions are vendor-scoped and concurrent callers share the real result', () => {
