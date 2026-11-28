@@ -814,6 +814,9 @@ test('offline sync actions are vendor-scoped and concurrent callers share the re
   assert.match(idbSource, /action\.userId === userId/);
   assert.match(idbSource, /function legacyActionMatchesCurrentState/);
   assert.match(idbSource, /claimPendingForUser: async function \(id, userId\)/);
+  assert.match(idbSource, /async function claimLegacyDeleteActions\(legacyActions, supabase, userId\)/);
+  assert.match(idbSource, /\.eq\('user_id', userId\)\.in\('id', ids\)/,
+    'legacy delete actions may be claimed only after a user-scoped ownership query');
   assert.match(idbSource, /failedBatches\.push\('unassigned-pending'\)/);
   assert.match(idbSource, /var syncInFlightPromise = null/);
   assert.match(idbSource, /return syncInFlightPromise/);
