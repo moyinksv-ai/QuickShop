@@ -585,3 +585,9 @@ PR #12 remains draft and unmerged until manual preview QA is completed and revie
 ### Verification snapshot — 2026-11-28
 
 The regression suite passed **51/51** on runtime commit `07d8c6f6eab6ea4f6391b9f414685b68bc3b15b6`. The exact commit's Vercel preview reached `READY` and returned HTTP 200. Authenticated Android tests remain an explicit release gate; source tests and public page reachability do not replace them.
+
+
+### Final sync consistency regression cases (2026-11-28)
+
+- After the cloud pull/reconciliation, re-read the active vendor's pending queue. If any actions arrived during the pull, flush them before reporting completion.
+- Login recovery may bulk-queue local products only after a successful pull confirms zero cloud products and the initial pending push did not fail. A normal login with a non-empty cloud catalog must not requeue the whole local catalog.
