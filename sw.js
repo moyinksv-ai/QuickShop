@@ -126,18 +126,53 @@ self.addEventListener('install', function (event) {
       refreshedAssets.push({ url: assetUrl, response: assetResponse });
     }
 
-    // Network validation is complete. Only now touch the existing app-shell
-    // cache; images and marketplace caches are deliberately never opened here.
+    // Network validation is complete. Snapshot the prior values before the
+    // first write so a Cache API write/quota failure can roll back every key
+    // touched in this install attempt. Images and marketplace caches are never
+    // opened or purged here.
     var cache = await caches.open(CACHE_NAME);
-    for (var refreshed of refreshedAssets) {
-      await cache.put(new Request(refreshed.url), refreshed.response.clone());
+    var cacheWrites = refreshedAssets.map(function (entry) {
+      return { request: new Request(entry.url), response: entry.response };
+    });
+    documents.forEach(function (documentEntry) {
+      cacheWrites.push({
+        request: new Request(documentEntry.url),
+        response: documentEntry.response
+      });
+    });
+    cacheWrites.push({
+      request: new Request(new URL('/index.html', origin).href),
+      response: documents[0].response
+    });
+
+    var previousEntries = [];
+    for (var writeEntry of cacheWrites) {
+      var previous = await cache.match(writeEntry.request);
+      previousEntries.push(previous ? previous.clone() : null);
     }
-    for (var documentEntry of documents) {
-      await cache.put(new Request(documentEntry.url), documentEntry.response.clone());
+
+    var attemptedWrites = 0;
+    try {
+      for (var writeEntry of cacheWrites) {
+        attemptedWrites += 1;
+        await cache.put(writeEntry.request, writeEntry.response.clone());
+      }
+    } catch (writeError) {
+      // Restore in reverse order. A failed install must not leave a mixed shell
+      // for the still-active previous worker if a cache write itself fails.
+      for (var rollbackIndex = attemptedWrites - 1; rollbackIndex >= 0; rollbackIndex--) {
+        try {
+          if (previousEntries[rollbackIndex]) {
+            await cache.put(cacheWrites[rollbackIndex].request, previousEntries[rollbackIndex].clone());
+          } else {
+            await cache.delete(cacheWrites[rollbackIndex].request);
+          }
+        } catch (rollbackError) {
+          console.error('[QS] App-shell cache rollback was incomplete:', rollbackError);
+        }
+      }
+      throw writeError;
     }
-    // Keep the canonical offline fallback current as well as the root route.
-    var indexDocument = documents[0];
-    await cache.put(new Request(new URL('/index.html', origin).href), indexDocument.response.clone());
 
     await self.skipWaiting();
   })());
